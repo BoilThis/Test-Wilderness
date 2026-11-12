@@ -485,7 +485,8 @@
 
   <!-- Top Bar -->
   <div id="top-bar">
-    <div class="hud-chip" id="location-chip">🌲 Pine Lake Overlook</div>
+    <div class="hud-chip" id="compass-chip">N</div>
+    <div class="hud-chip" id="location-chip">🌲 Southern Highland Overlook</div>
     <div class="hud-chip clickable" id="env-toggle-btn" role="button">⚙️ Environment</div>
   </div>
 
@@ -932,36 +933,74 @@
     const cliffTex = createCliffRockTexture();
     const sandTex = createSandGravelTexture();
 
-    // --- PROCEDURAL ERODED TERRAIN WITH RIVER CANYON & LAKE ---
-    const terrainSize = 280;
-    const terrainSegments = 140;
+    // --- PROCEDURAL ERODED TERRAIN WITH EXPANDED 800m WORLD ---
+    const terrainSize = 800;
+    const terrainSegments = 200;
     const terrainGeo = new THREE.PlaneGeometry(terrainSize, terrainSize, terrainSegments, terrainSegments);
     terrainGeo.rotateX(-Math.PI / 2);
 
     function getTerrainHeight(x, z) {
-      // Lake basin to the north (z < -20)
-      const lakeDist = Math.hypot(x, z + 65);
-      const lakeFactor = Math.max(0, 1 - lakeDist / 50);
+      // Multi-octave base rolling hills
+      let y = Math.sin(x * 0.012) * Math.cos(z * 0.012) * 4.5
+            + Math.sin(x * 0.028 + 0.7) * Math.cos(z * 0.028) * 2.1
+            + Math.sin(x * 0.055) * Math.cos(z * 0.055) * 0.8;
 
-      // River bed flowing toward the lake (-z)
-      const riverCenter = Math.sin(z * 0.06) * 6.0;
-      const distToRiver = Math.abs(x - riverCenter);
-      let riverCarve = 0;
-      if (z > -35 && z < 70 && distToRiver < 10) {
-        riverCarve = (1 - distToRiver / 10) * 3.5;
+      // Eastern Alpine Ridge (x > 60, peaks up to ~50m)
+      if (x > 40) {
+        const alpineDist = Math.max(0, x - 40);
+        const alpine = Math.pow(alpineDist / 180, 1.4) * 48
+                     + Math.sin(z * 0.04) * 6
+                     + Math.sin(x * 0.08) * Math.cos(z * 0.06) * 4;
+        y = Math.max(y, alpine * Math.min(1, alpineDist / 40));
       }
 
-      // Rolling forested ridges
-      const hills = Math.sin(x * 0.035) * Math.cos(z * 0.035) * 5.2
-                  + Math.sin(x * 0.07 + 1.2) * Math.cos(z * 0.07) * 2.2;
+      // Northern Ocean Basin (z < -60, down to -12m)
+      if (z < -40) {
+        const oceanDist = Math.max(0, -z - 40);
+        const oceanDepth = Math.min(12, oceanDist * 0.15);
+        y -= oceanDepth;
+        // Islands
+        const islands = [
+          {x: -90, z: -170, r: 28, h: 8},
+          {x: 110, z: -160, r: 18, h: 5},
+          {x: 10, z: -210, r: 22, h: 6}
+        ];
+        for (const isl of islands) {
+          const d = Math.hypot(x - isl.x, z - isl.z);
+          if (d < isl.r) {
+            const factor = 1 - d / isl.r;
+            y += factor * factor * isl.h;
+          }
+        }
+      }
 
-      let y = hills - riverCarve;
-      if (lakeFactor > 0) y -= lakeFactor * 6.5;
+      // Lighthouse Peninsula (curved headland into the sea)
+      const penCenterX = -5 + Math.sin((z + 70) * 0.04) * 18;
+      if (z < -50 && z > -150 && Math.abs(x - penCenterX) < 22) {
+        const penDist = Math.abs(x - penCenterX);
+        const penFactor = 1 - penDist / 22;
+        y = Math.max(y, penFactor * 4.5 + Math.sin(z * 0.1) * 1.2);
+      }
 
-      // Elevated overlook for player spawn (x=0, z=12)
+      // Western Rolling Meadow (x < -50)
+      if (x < -30) {
+        const meadow = Math.sin(x * 0.02) * Math.cos(z * 0.018) * 3.5
+                     + Math.sin(z * 0.03) * 1.5;
+        y = y * 0.4 + meadow;
+      }
+
+      // Central River Canyon (winding from south to north)
+      const riverCenter = Math.sin(z * 0.045) * 12 + Math.sin(z * 0.02) * 6;
+      const distToRiver = Math.abs(x - riverCenter);
+      if (z > -40 && z < 120 && distToRiver < 14) {
+        const carve = (1 - distToRiver / 14) * 5.5;
+        y -= carve;
+      }
+
+      // Elevated overlook for player spawn (x=0, z=12) - keep familiar start
       const spawnDist = Math.hypot(x, z - 12);
-      if (spawnDist < 12) {
-        y += (1 - spawnDist / 12) * 1.8;
+      if (spawnDist < 15) {
+        y += (1 - spawnDist / 15) * 2.2;
       }
 
       return y;
@@ -1028,13 +1067,129 @@
     terrainMesh.receiveShadow = true;
     scene.add(terrainMesh);
 
+    // --- SENTINEL LIGHTHOUSE PLACEHOLDER (Milestone A landmark) ---
+    const lighthouseGroup = new THREE.Group();
+    const towerGeo = new THREE.CylinderGeometry(1.8, 2.4, 14, 12);
+    const towerMat = new THREE.MeshStandardMaterial({ color: 0x8d8d8d, roughness: 0.75 });
+    const tower = new THREE.Mesh(towerGeo, towerMat);
+    tower.position.y = 7;
+    tower.castShadow = true;
+    lighthouseGroup.add(tower);
+
+    const lanternGeo = new THREE.CylinderGeometry(1.4, 1.4, 2.2, 8);
+    const lanternMat = new THREE.MeshStandardMaterial({ color: 0xfff3cd, emissive: 0xffaa00, emissiveIntensity: 0.8, roughness: 0.3 });
+    const lantern = new THREE.Mesh(lanternGeo, lanternMat);
+    lantern.position.y = 15.2;
+    lighthouseGroup.add(lantern);
+
+    const beacon = new THREE.SpotLight(0xfff3cd, 4, 80, Math.PI / 6, 0.4);
+    beacon.position.set(0, 16, 0);
+    beacon.target.position.set(20, 8, -40);
+    lighthouseGroup.add(beacon);
+    lighthouseGroup.add(beacon.target);
+
+    // Place on the peninsula tip
+    const lightX = 5;
+    const lightZ = -130;
+    lighthouseGroup.position.set(lightX, getTerrainHeight(lightX, lightZ), lightZ);
+    scene.add(lighthouseGroup);
+
+    // --- PROCEDURAL CAVERN GENERATION ---
+    window.caverns = [];
+
+    function createProceduralCavern(x, z, options = {}) {
+      const baseY = getTerrainHeight(x, z);
+      if (baseY < 1.0) return null; // only place on solid ground
+
+      const group = new THREE.Group();
+      const radius = options.radius || (3.5 + Math.random() * 2.0);
+      const hasPool = options.hasPool !== undefined ? options.hasPool : Math.random() > 0.4;
+      const glowColor = options.glowColor || (Math.random() > 0.5 ? 0x00bcd4 : 0x7e57c2);
+
+      const rockMat = new THREE.MeshStandardMaterial({ color: 0x5a6570, roughness: 0.85 });
+
+      // Entrance collar for sealing
+      const collarGeo = new THREE.CylinderGeometry(radius * 0.85, radius * 0.95, 1.3, 14, 1, true);
+      const collar = new THREE.Mesh(collarGeo, rockMat);
+      collar.rotation.x = Math.PI / 2;
+      collar.position.set(0, 1.6, 0.5);
+      group.add(collar);
+
+      // Arch
+      const archGeo = new THREE.TorusGeometry(radius * 0.7, 0.5, 8, 14, Math.PI);
+      const arch = new THREE.Mesh(archGeo, rockMat);
+      arch.rotation.x = Math.PI / 2;
+      arch.position.set(0, 1.8, 0.15);
+      group.add(arch);
+
+      // Floor
+      const floorGeo = new THREE.CircleGeometry(radius, 18);
+      const floorMat = new THREE.MeshStandardMaterial({ color: 0x3d4a52, roughness: 0.9 });
+      const floor = new THREE.Mesh(floorGeo, floorMat);
+      floor.rotation.x = -Math.PI / 2;
+      floor.position.y = -0.3;
+      group.add(floor);
+
+      // Roof
+      const roofGeo = new THREE.SphereGeometry(radius * 1.15, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2);
+      const roof = new THREE.Mesh(roofGeo, rockMat);
+      roof.position.y = 1.4;
+      roof.scale.y = 0.5 + Math.random() * 0.2;
+      group.add(roof);
+
+      // Walls
+      const wallGeo = new THREE.CylinderGeometry(radius * 1.05, radius * 1.05, 2.2, 14, 1, true);
+      const walls = new THREE.Mesh(wallGeo, rockMat);
+      walls.position.y = 0.7;
+      group.add(walls);
+
+      // Optional glowing pool + light
+      if (hasPool) {
+        const poolGeo = new THREE.CircleGeometry(radius * 0.4, 14);
+        const poolMat = new THREE.MeshStandardMaterial({
+          color: glowColor,
+          emissive: glowColor,
+          emissiveIntensity: 0.65,
+          roughness: 0.15,
+          metalness: 0.3
+        });
+        const pool = new THREE.Mesh(poolGeo, poolMat);
+        pool.rotation.x = -Math.PI / 2;
+        pool.position.set((Math.random() - 0.5) * 1.2, -0.2, -radius * 0.3);
+        group.add(pool);
+
+        const light = new THREE.PointLight(glowColor, 2.4, radius * 3);
+        light.position.set(pool.position.x, 1.2, pool.position.z);
+        group.add(light);
+      }
+
+      group.position.set(x, baseY, z);
+      scene.add(group);
+
+      const cavernData = {
+        x, z,
+        radius: radius * 0.95,
+        floorY: baseY - 0.3,
+        ceilingY: baseY + 2.8 + Math.random() * 0.8,
+        name: options.name || "Cavern"
+      };
+      window.caverns.push(cavernData);
+      return cavernData;
+    }
+
+    // Seed a few procedural caverns at interesting locations
+    createProceduralCavern(-25, -15, { name: "Crystal Cavern", hasPool: true, glowColor: 0x00bcd4, radius: 4.8 });
+    createProceduralCavern(40, 25, { name: "Alpine Grotto", hasPool: true, glowColor: 0x7e57c2, radius: 3.8 });
+    createProceduralCavern(-60, 40, { name: "Meadow Cave", hasPool: false, radius: 3.5 });
+    createProceduralCavern(15, -45, { name: "Coastal Hollow", hasPool: true, glowColor: 0x26c6da, radius: 4.2 });
+
     // --- OFFICIAL THREE.JS WATER ENGINE WITH INTERACTIVE RIPPLES & FOAM ---
     let water = null;
     const waterNormals = new THREE.TextureLoader().load(window.WATER_NORMALS_B64, function(texture) {
       texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
     });
 
-    const waterGeo = new THREE.PlaneGeometry(600, 600);
+    const waterGeo = new THREE.PlaneGeometry(1400, 1400);
     water = new THREE.Water(waterGeo, {
       textureWidth: 512,
       textureHeight: 512,
@@ -1072,28 +1227,48 @@
     function getWaterInfo(x, z, time) {
       const terrH = getTerrainHeight(x, z);
       const flowMult = (window.envConfig && window.envConfig.riverSpeed !== undefined) ? window.envConfig.riverSpeed : 1.0;
-      // Lake basin to north (z < -22) or anywhere terrain is submerged under water plane (y = 0.05)
-      if (z < -22 || terrH < 0.05) {
-        const wave = Math.sin(x * 0.4 + time * 1.6) * 0.12;
-        const isLake = (z < -25);
+
+      // Northern Deep Ocean
+      if (z < -70) {
+        const wave = Math.sin(x * 0.3 + time * 1.2) * 0.18;
         return {
           isWater: true,
           surfaceY: 0.05 + wave,
-          current: isLake ? new THREE.Vector2(0, -0.28 * flowMult) : new THREE.Vector2(0, -2.2 * flowMult),
-          bodyName: isLake ? "🌲 Pine Lake" : "🌊 Roaring River"
+          current: new THREE.Vector2(0, -0.4 * flowMult),
+          bodyName: "🌊 Northern Deep Ocean"
         };
       }
-      const riverCenter = Math.sin(z * 0.06) * 6.0;
-      if (Math.abs(x - riverCenter) < 9.5 && z >= -25 && z < 75) {
+
+      // Expanded river canyon
+      const riverCenter = Math.sin(z * 0.045) * 12 + Math.sin(z * 0.02) * 6;
+      if (Math.abs(x - riverCenter) < 12 && z > -50 && z < 100) {
         const wave = Math.sin(x * 0.5 + time * 2.2) * 0.15;
         return {
           isWater: true,
           surfaceY: 0.05 + wave,
-          current: new THREE.Vector2(0, -2.2 * flowMult),
-          bodyName: "🌊 Roaring River"
+          current: new THREE.Vector2(0, -2.0 * flowMult),
+          bodyName: "🌊 Roaring River Canyon"
         };
       }
-      return { isWater: false, surfaceY: -999, current: new THREE.Vector2(0, 0), bodyName: "🌲 Pine Ridge Overlook" };
+
+      // General low terrain water
+      if (terrH < 0.05) {
+        const wave = Math.sin(x * 0.4 + time * 1.6) * 0.12;
+        return {
+          isWater: true,
+          surfaceY: 0.05 + wave,
+          current: new THREE.Vector2(0, -0.3 * flowMult),
+          bodyName: "🌊 Coastal Waters"
+        };
+      }
+
+      // Biome location names when on land
+      let bodyName = "🌲 Southern Highland Overlook";
+      if (x > 60 && getTerrainHeight(x, z) > 20) bodyName = "⛰️ Eastern Alpine Ridge";
+      else if (x < -40) bodyName = "🌼 Western Meadow Basin";
+      else if (z < -40) bodyName = "🌊 Northern Coast";
+
+      return { isWater: false, surfaceY: -999, current: new THREE.Vector2(0, 0), bodyName: bodyName };
     }
 
     const buoyantObjects = [];
@@ -1368,68 +1543,69 @@
       return buoyantObj;
     }
 
-    // --- POPULATE COMPREHENSIVE WILDERNESS FOREST BIOMES ---
+    // --- POPULATE COMPREHENSIVE WILDERNESS FOREST BIOMES (EXPANDED FOR 800m) ---
     function populateWilderness() {
-      // 1. Pines & Conifers along ridgelines and water approaches
+      // 1. Pines & Conifers – southern overlook + alpine + islands
       const pineSpawns = [
-        [5.2, 9.0, 1.3],   // Flanking right
-        [-5.0, 10.0, 1.2], // Flanking left
-        [7.0, 15.0, 1.4],  // Behind player
-        [-7.5, 16.0, 1.25],
-        [-12.0, 2.0, 1.35],
-        [14.0, 0.0, 1.3],
-        [-18.0, -18.0, 1.4],
-        [18.0, -22.0, 1.45],
-        [-24.0, -45.0, 1.3],
-        [22.0, -48.0, 1.35],
-        [-32.0, -68.0, 1.5],
-        [28.0, -70.0, 1.4],
-        [8.5, -12.0, 1.2],
-        [-9.5, -6.0, 1.15]
+        // Original southern cluster
+        [5.2, 9.0, 1.3], [-5.0, 10.0, 1.2], [7.0, 15.0, 1.4], [-7.5, 16.0, 1.25],
+        [-12.0, 2.0, 1.35], [14.0, 0.0, 1.3], [-18.0, -18.0, 1.4], [18.0, -22.0, 1.45],
+        // Alpine ridge pines
+        [90, 20, 1.5], [120, -10, 1.4], [150, 40, 1.6], [80, 60, 1.3], [110, 80, 1.45],
+        [140, -30, 1.35], [100, -50, 1.2],
+        // Island pines
+        [-90, -170, 1.3], [-85, -165, 1.1], [110, -160, 1.2], [10, -210, 1.25],
+        // Peninsula wind-bent pines
+        [0, -100, 1.1], [10, -120, 1.0], [-5, -90, 1.15]
       ];
       pineSpawns.forEach(([x, z, s]) => {
-        spawnEZPine(x, z, s);
+        if (getTerrainHeight(x, z) > 0.5) spawnEZPine(x, z, s);
       });
 
-      // 2. Spreading Giant Oaks (Meadow Clearing)
-      spawnEZOak(-14.0, 14.0, 1.2);
-      spawnEZOak(16.0, 18.0, 1.25);
-      spawnEZOak(-22.0, -6.0, 1.15);
+      // 2. Spreading Oaks – western meadow
+      const oakSpawns = [
+        [-14.0, 14.0, 1.2], [16.0, 18.0, 1.25], [-22.0, -6.0, 1.15],
+        [-60, 30, 1.4], [-80, 10, 1.3], [-50, 50, 1.35], [-90, -10, 1.2],
+        [-70, 70, 1.45], [-100, 40, 1.25], [-45, -20, 1.3]
+      ];
+      oakSpawns.forEach(([x, z, s]) => {
+        if (getTerrainHeight(x, z) > 0.8) spawnEZOak(x, z, s);
+      });
 
-      // 3. Graceful Silver Aspens (Riverbank Corridors)
+      // 3. Silver Aspens – river corridors
       const aspenSpawns = [
-        [-3.5, 5.0, 1.05],  // Riverbank front-left
-        [5.5, 3.5, 1.1],   // Riverbank front-right
-        [-10.0, -10.0, 1.0],
-        [11.0, -14.0, 1.15],
-        [-15.0, -32.0, 1.05]
+        [-3.5, 5.0, 1.05], [5.5, 3.5, 1.1], [-10.0, -10.0, 1.0],
+        [11.0, -14.0, 1.15], [-15.0, -32.0, 1.05],
+        [8, 40, 1.1], [-6, 60, 1.0], [12, 80, 1.15], [-8, 20, 1.05]
       ];
       aspenSpawns.forEach(([x, z, s]) => {
-        spawnEZAspen(x, z, s);
+        if (getTerrainHeight(x, z) > 0.5) spawnEZAspen(x, z, s);
       });
 
-      // 4. Wild Undergrowth Bushes (Bushes 1, 2, and 3)
-      spawnEZBush(3.5, 11.0, 1, 0.9);
-      spawnEZBush(-3.0, 9.5, 2, 0.85);
-      spawnEZBush(1.0, 4.0, 3, 0.8);
-      spawnEZBush(-6.0, 4.5, 1, 0.75);
-      spawnEZBush(7.0, 6.0, 2, 0.9);
+      // 4. Wild Undergrowth Bushes
+      const bushSpawns = [
+        [3.5, 11.0, 1, 0.9], [-3.0, 9.5, 2, 0.85], [1.0, 4.0, 3, 0.8],
+        [-6.0, 4.5, 1, 0.75], [7.0, 6.0, 2, 0.9],
+        [-40, 20, 1, 0.9], [60, 10, 2, 0.8], [-20, -40, 3, 0.85]
+      ];
+      bushSpawns.forEach(([x, z, idx, s]) => {
+        if (getTerrainHeight(x, z) > 0.5) spawnEZBush(x, z, idx, s);
+      });
 
-      // 5. Shoreline Granite Boulders
+      // 5. Shoreline & meadow granite boulders
       const boulders = [
-        [3.0, 7.5, 1.8],   // Beside campfire
-        [-2.5, 6.0, 2.2],  // River edge
-        [4.2, 0.5, 2.5],
-        [-4.5, -5.0, 2.0],
-        [1.5, -15.0, 1.9],
-        [-2.0, -28.0, 2.6]
+        [3.0, 7.5, 1.8], [-2.5, 6.0, 2.2], [4.2, 0.5, 2.5],
+        [-4.5, -5.0, 2.0], [1.5, -15.0, 1.9], [-2.0, -28.0, 2.6],
+        [-50, 25, 2.4], [70, 15, 2.8], [30, -40, 2.2], [-30, -60, 2.0]
       ];
       boulders.forEach(([x, z, r]) => {
-        const rock = createGraniteBoulder(r);
-        rock.position.set(x, getTerrainHeight(x, z) + 0.3, z);
-        rock.userData = { type: 'boulder' };
-        scene.add(rock);
-        interactiveTargets.push(rock);
+        if (getTerrainHeight(x, z) > 0.3) {
+          const rock = createGraniteBoulder(r);
+          rock.position.set(x, getTerrainHeight(x, z) + 0.3, z);
+          rock.userData = { type: 'boulder' };
+          scene.add(rock);
+          interactiveTargets.push(rock);
+        }
       });
 
       // 6. Campfire at player vantage point
@@ -1437,18 +1613,27 @@
       campfire.position.set(2.5, getTerrainHeight(2.5, 9.5) + 0.05, 9.5);
       scene.add(campfire);
 
-      // 7. Initial Floating Timber Flotilla spread along river rapids
+      // 7. Initial Floating Timber Flotilla
       const riverLogs = [
-        [1.2, 26.0],
-        [-0.6, 15.0],
-        [0.8, 4.0],
-        [-1.2, -6.0],
-        [1.4, -16.0],
-        [-0.4, -26.0]
+        [1.2, 26.0], [-0.6, 15.0], [0.8, 4.0],
+        [-1.2, -6.0], [1.4, -16.0], [-0.4, -26.0]
       ];
       riverLogs.forEach(([x, z]) => {
         spawnBuoyantLog(x, 0.08, z, 0, 0, -1.8, true);
       });
+
+      // 8. Minor Points of Interest
+      // Unique rock viewpoint (western meadow)
+      const viewpointRock = createGraniteBoulder(3.2);
+      viewpointRock.position.set(-55, getTerrainHeight(-55, 35) + 0.4, 35);
+      viewpointRock.userData = { type: 'poi', name: 'Meadow Overlook' };
+      scene.add(viewpointRock);
+
+      // Simple stone marker near alpine start
+      const alpineMarker = createGraniteBoulder(2.0);
+      alpineMarker.position.set(65, getTerrainHeight(65, 5) + 0.3, 5);
+      alpineMarker.userData = { type: 'poi', name: 'Alpine Trailhead' };
+      scene.add(alpineMarker);
     }
     populateWilderness();
 
@@ -1511,9 +1696,19 @@
       isGrounded: true,
       isSwimming: false,
       speed: 8.5,
+      sprintSpeed: 16.0,
+      isSprinting: false,
       lastWaterStepTime: 0,
       vitals: { hp: 100, hunger: 85, thirst: 90, temp: 37.0, stamina: 100 },
       inventory: { timber: 2, stone: 4 }
+    };
+
+    // Quality tier foundation (Low / Medium / High)
+    window.qualityTier = 'medium';
+    window.setQualityTier = function(tier) {
+      window.qualityTier = tier;
+      console.log('Quality tier set to:', tier);
+      // Future: adjust shadow map size, foliage density, post-processing
     };
 
     // Virtual Joystick
@@ -2047,6 +2242,13 @@
     let lastTime = performance.now();
     const waterOverlay = document.getElementById('water-overlay');
     const locationChip = document.getElementById('location-chip');
+    const compassChip = document.getElementById('compass-chip');
+
+    function getCardinal(yaw) {
+      const deg = ((-yaw * 180 / Math.PI) % 360 + 360) % 360;
+      const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+      return dirs[Math.round(deg / 45) % 8];
+    }
 
     function animate() {
       requestAnimationFrame(animate);
@@ -2119,6 +2321,7 @@
       player.isSwimming = isSub;
       waterOverlay.classList.toggle('submerged', player.isSwimming);
       locationChip.innerText = wInfo.bodyName;
+      if (compassChip) compassChip.innerText = getCardinal(player.yaw);
 
       // Interactive water stepping ripples
       if (wInfo.isWater && wish.lengthSq() > 0.05 && (timeSec - player.lastWaterStepTime > 0.35)) {
@@ -2127,7 +2330,19 @@
         AudioEngine.playSplash();
       }
 
-      const curSpeed = player.isSwimming ? player.speed * 0.6 : player.speed;
+      // Sprint toggle (Shift key or future HUD button)
+      if (keys['shift'] && player.vitals.stamina > 5 && !player.isSwimming) {
+        player.isSprinting = true;
+        player.vitals.stamina = Math.max(0, player.vitals.stamina - 18 * dt);
+      } else {
+        player.isSprinting = false;
+        if (player.vitals.stamina < 100) {
+          player.vitals.stamina = Math.min(100, player.vitals.stamina + 12 * dt);
+        }
+      }
+
+      const baseSpeed = player.isSprinting ? player.sprintSpeed : player.speed;
+      const curSpeed = player.isSwimming ? baseSpeed * 0.6 : baseSpeed;
       player.vel.x = wish.x * curSpeed;
       player.vel.z = wish.z * curSpeed;
 
@@ -2147,12 +2362,37 @@
       camera.position.z += player.vel.z * dt;
       camera.position.y += player.vel.y * dt;
 
-      // Ground collision
+      // Ground collision (terrain + procedural cavern interiors)
       const eyeH = 1.65;
-      if (camera.position.y < terrY + eyeH) {
-        camera.position.y = terrY + eyeH;
+      let floorY = terrY;
+      let ceilingY = Infinity;
+      let insideCavern = null;
+
+      if (window.caverns && window.caverns.length) {
+        for (const cc of window.caverns) {
+          const dx = camera.position.x - cc.x;
+          const dz = camera.position.z - cc.z;
+          if (dx * dx + dz * dz < cc.radius * cc.radius) {
+            floorY = Math.min(floorY, cc.floorY);
+            ceilingY = Math.min(ceilingY, cc.ceilingY);
+            insideCavern = cc;
+            break;
+          }
+        }
+      }
+
+      if (insideCavern && locationChip) {
+        locationChip.innerText = "💎 " + insideCavern.name;
+      }
+
+      if (camera.position.y < floorY + eyeH) {
+        camera.position.y = floorY + eyeH;
         player.vel.y = 0;
         player.isGrounded = true;
+      } else if (camera.position.y > ceilingY - 0.3) {
+        camera.position.y = ceilingY - 0.3;
+        player.vel.y = Math.min(0, player.vel.y);
+        player.isGrounded = false;
       } else {
         player.isGrounded = false;
       }
