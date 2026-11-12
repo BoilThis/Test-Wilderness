@@ -1049,16 +1049,18 @@
         vec4 cliffCol = texture2D(uCliffTex, vUv * 14.0);
         vec4 sandCol = texture2D(uSandTex, vUv * 24.0);
 
-        // Slope calculation: 1.0 = flat, 0.0 = sheer vertical cliff
+        // Slope calculation
         float slope = clamp(dot(vWorldNormal, vec3(0.0, 1.0, 0.0)), 0.0, 1.0);
-        float cliffFactor = clamp((uCliffThreshold - slope) * 5.0, 0.0, 1.0);
+        float cliffFactor = clamp((uCliffThreshold - slope) * 4.0, 0.0, 1.0);
 
-        // Shoreline sand/gravel near water level (y ~ 0.05)
-        float shoreFactor = clamp((uShoreHeight - vWorldPos.y) * 2.8, 0.0, 1.0);
+        // Elevation-based variation so distant terrain looks different
+        float elev = vWorldPos.y;
+        float highFactor = clamp((elev - 12.0) / 20.0, 0.0, 1.0);
+        float lowFactor = clamp((2.0 - elev) / 4.0, 0.0, 1.0);
 
-        vec4 baseTerrain = mix(grassCol, sandCol, shoreFactor);
-        vec4 finalTerrain = mix(baseTerrain, cliffCol, cliffFactor);
-        diffuseColor *= finalTerrain;
+        vec4 baseTerrain = mix(grassCol, sandCol, max(shoreFactor, lowFactor * 0.6));
+        baseTerrain = mix(baseTerrain, cliffCol, max(cliffFactor, highFactor * 0.7));
+        diffuseColor *= baseTerrain;
         `
       );
     };
@@ -1088,10 +1090,10 @@
     lighthouseGroup.add(beacon);
     lighthouseGroup.add(beacon.target);
 
-    // Place on the peninsula tip
-    const lightX = 5;
-    const lightZ = -130;
-    lighthouseGroup.position.set(lightX, getTerrainHeight(lightX, lightZ), lightZ);
+    // Place lighthouse closer to spawn so it's discoverable (peninsula tip was too far)
+    const lightX = 8;
+    const lightZ = -35;
+    lighthouseGroup.position.set(lightX, getTerrainHeight(lightX, lightZ) + 0.2, lightZ);
     scene.add(lighthouseGroup);
 
     // --- PROCEDURAL CAVERN GENERATION ---
@@ -1177,11 +1179,11 @@
       return cavernData;
     }
 
-    // Seed a few procedural caverns at interesting locations
-    createProceduralCavern(-25, -15, { name: "Crystal Cavern", hasPool: true, glowColor: 0x00bcd4, radius: 4.8 });
-    createProceduralCavern(40, 25, { name: "Alpine Grotto", hasPool: true, glowColor: 0x7e57c2, radius: 3.8 });
-    createProceduralCavern(-60, 40, { name: "Meadow Cave", hasPool: false, radius: 3.5 });
-    createProceduralCavern(15, -45, { name: "Coastal Hollow", hasPool: true, glowColor: 0x26c6da, radius: 4.2 });
+    // Seed caverns closer to the starting overlook so they can be found
+    createProceduralCavern(-12, -8, { name: "Crystal Cavern", hasPool: true, glowColor: 0x00bcd4, radius: 4.5 });
+    createProceduralCavern(18, 6, { name: "Alpine Grotto", hasPool: true, glowColor: 0x7e57c2, radius: 3.6 });
+    createProceduralCavern(-22, 18, { name: "Meadow Cave", hasPool: false, radius: 3.4 });
+    createProceduralCavern(6, -28, { name: "Coastal Hollow", hasPool: true, glowColor: 0x26c6da, radius: 4.0 });
 
     // --- OFFICIAL THREE.JS WATER ENGINE WITH INTERACTIVE RIPPLES & FOAM ---
     let water = null;
@@ -1559,8 +1561,16 @@
         [0, -100, 1.1], [10, -120, 1.0], [-5, -90, 1.15]
       ];
       pineSpawns.forEach(([x, z, s]) => {
-        if (getTerrainHeight(x, z) > 0.5) spawnEZPine(x, z, s);
+        const h = getTerrainHeight(x, z);
+        if (h > -5) spawnEZPine(x, z, s);
       });
+
+      // Extra trees clustered near the starting overlook so the area feels forested
+      const nearSpawnPines = [
+        [4, 6, 1.2], [-4, 7, 1.15], [9, 4, 1.3], [-8, 3, 1.1],
+        [12, 10, 1.25], [-10, 12, 1.2], [3, -4, 1.1], [-6, -2, 1.15]
+      ];
+      nearSpawnPines.forEach(([x, z, s]) => spawnEZPine(x, z, s));
 
       // 2. Spreading Oaks – western meadow
       const oakSpawns = [
@@ -1569,7 +1579,7 @@
         [-70, 70, 1.45], [-100, 40, 1.25], [-45, -20, 1.3]
       ];
       oakSpawns.forEach(([x, z, s]) => {
-        if (getTerrainHeight(x, z) > 0.8) spawnEZOak(x, z, s);
+        if (getTerrainHeight(x, z) > -2) spawnEZOak(x, z, s);
       });
 
       // 3. Silver Aspens – river corridors
@@ -1579,7 +1589,7 @@
         [8, 40, 1.1], [-6, 60, 1.0], [12, 80, 1.15], [-8, 20, 1.05]
       ];
       aspenSpawns.forEach(([x, z, s]) => {
-        if (getTerrainHeight(x, z) > 0.5) spawnEZAspen(x, z, s);
+        if (getTerrainHeight(x, z) > -2) spawnEZAspen(x, z, s);
       });
 
       // 4. Wild Undergrowth Bushes
