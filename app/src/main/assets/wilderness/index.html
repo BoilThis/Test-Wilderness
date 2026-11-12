@@ -1,0 +1,2326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Sylvan Wilderness Survival</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #061109;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #fff;
+    }
+    #canvas-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    /* Underwater Caustic Murk Overlay */
+    #water-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 5;
+      background: radial-gradient(circle at center, rgba(14, 85, 95, 0.45) 0%, rgba(5, 35, 45, 0.88) 100%);
+      opacity: 0;
+      transition: opacity 0.4s ease;
+    }
+    #water-overlay.submerged {
+      opacity: 1;
+      animation: causticShift 4s infinite alternate ease-in-out;
+    }
+    @keyframes causticShift {
+      0% { filter: contrast(1.1) brightness(0.95); }
+      100% { filter: contrast(1.25) brightness(1.1); }
+    }
+
+    /* Reticle */
+    #reticle {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 8px;
+      height: 8px;
+      border: 2px solid rgba(255, 255, 255, 0.9);
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 15;
+      transition: all 0.15s ease;
+    }
+    #reticle.active {
+      width: 32px;
+      height: 32px;
+      border-color: #26A69A;
+      background: rgba(38, 166, 154, 0.35);
+      box-shadow: 0 0 14px rgba(38, 166, 154, 0.8);
+    }
+    #interaction-prompt {
+      position: absolute;
+      top: calc(50% + 24px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(10, 24, 16, 0.92);
+      backdrop-filter: blur(12px);
+      padding: 7px 18px;
+      border-radius: 20px;
+      border: 1.5px solid rgba(128, 203, 196, 0.6);
+      font-size: 13px;
+      font-weight: 700;
+      color: #E0F2F1;
+      pointer-events: none;
+      display: none;
+      white-space: nowrap;
+      z-index: 15;
+      box-shadow: 0 4px 18px rgba(0,0,0,0.6);
+    }
+
+    /* Top HUD Bar */
+    #top-bar {
+      position: absolute;
+      top: 58px;
+      left: 16px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      z-index: 30;
+      pointer-events: auto;
+      max-width: calc(100% - 130px);
+    }
+    .hud-chip {
+      background: rgba(10, 24, 16, 0.92);
+      backdrop-filter: blur(12px);
+      border: 1.5px solid rgba(255, 255, 255, 0.22);
+      padding: 8px 16px;
+      border-radius: 22px;
+      font-size: 13px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+      cursor: pointer;
+      pointer-events: auto;
+    }
+    .hud-chip.clickable {
+      border-color: #26A69A;
+      color: #80CBC4;
+    }
+    .hud-chip.clickable:active {
+      background: rgba(38, 166, 154, 0.5);
+      transform: scale(0.96);
+    }
+
+    /* Bottom Survival Vitals HUD */
+    #vitals-container {
+      position: absolute;
+      bottom: calc(env(safe-area-inset-bottom, 16px) + 12px);
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 8px;
+      z-index: 25;
+      pointer-events: none;
+    }
+    .vital-meter {
+      background: rgba(10, 22, 15, 0.92);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 20px;
+      padding: 6px 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+    }
+    .vital-meter .icon { font-size: 13px; }
+    .vital-meter .bar-wrap {
+      width: 36px;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.18);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .vital-meter .bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.3s ease;
+    }
+    .bar-hp { background: #EF5350; }
+    .bar-hunger { background: #FFA726; }
+    .bar-thirst { background: #29B6F6; }
+    .bar-temp { background: linear-gradient(90deg, #4DD0E1, #FF7043); }
+    .bar-stamina { background: #FFEE58; }
+
+    /* Joystick Area */
+    #joystick-zone {
+      position: absolute;
+      bottom: calc(env(safe-area-inset-bottom, 16px) + 72px);
+      left: 24px;
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.12);
+      border: 2px solid rgba(255, 255, 255, 0.28);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      pointer-events: auto;
+      z-index: 20;
+    }
+    #joystick-knob {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.6);
+      box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+      transform: translate(0px, 0px);
+      pointer-events: none;
+    }
+
+    /* Look Area (Right Side of Screen) */
+    #look-touch-zone {
+      position: absolute;
+      top: 110px;
+      right: 0;
+      bottom: 0;
+      left: 50%;
+      z-index: 10;
+      pointer-events: auto;
+    }
+
+    /* Action Buttons (Right side) */
+    #action-buttons {
+      position: absolute;
+      bottom: calc(env(safe-area-inset-bottom, 16px) + 70px);
+      right: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      z-index: 25;
+      pointer-events: auto;
+    }
+    .action-btn {
+      width: 58px;
+      height: 58px;
+      border-radius: 50%;
+      background: rgba(12, 28, 18, 0.94);
+      border: 1.5px solid rgba(255, 255, 255, 0.25);
+      backdrop-filter: blur(10px);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: #fff;
+      font-size: 18px;
+      font-weight: 700;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+      cursor: pointer;
+      pointer-events: auto;
+      transition: transform 0.1s, background 0.2s;
+    }
+    .action-btn:active {
+      transform: scale(0.92);
+      background: rgba(38, 166, 154, 0.85);
+      border-color: #80CBC4;
+    }
+    .action-btn span {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-top: 1px;
+    }
+
+    /* Environment Drawer Modal with 4 Engine Sections */
+    #env-modal {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      max-height: 84vh;
+      display: flex;
+      flex-direction: column;
+      background: rgba(8, 20, 14, 0.97);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border-top: 2px solid #26A69A;
+      border-radius: 26px 26px 0 0;
+      padding: 16px 20px calc(env(safe-area-inset-bottom, 20px) + 16px);
+      z-index: 50;
+      transform: translateY(105%);
+      transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 -12px 48px rgba(0,0,0,0.85);
+      pointer-events: auto;
+    }
+    #env-modal.open {
+      transform: translateY(0);
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      flex-shrink: 0;
+    }
+    .modal-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #80CBC4;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .close-btn {
+      background: rgba(255, 255, 255, 0.12);
+      border: none;
+      color: #fff;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    /* 4-Tab Navigation */
+    .modal-tabs {
+      display: flex;
+      gap: 5px;
+      margin-bottom: 14px;
+      background: rgba(0, 0, 0, 0.45);
+      padding: 4px;
+      border-radius: 14px;
+      border: 1px solid rgba(38, 166, 154, 0.3);
+      flex-shrink: 0;
+    }
+    .modal-tab {
+      flex: 1;
+      padding: 8px 2px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #80CBC4;
+      background: transparent;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      transition: all 0.2s ease;
+      text-align: center;
+      white-space: nowrap;
+    }
+    .modal-tab.active {
+      background: #26A69A;
+      color: #04140D;
+      box-shadow: 0 2px 8px rgba(38, 166, 154, 0.4);
+    }
+    .modal-scroll {
+      overflow-y: auto;
+      max-height: calc(84vh - 125px);
+      padding-right: 4px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .tab-pane {
+      display: none;
+    }
+    .tab-pane.active {
+      display: block;
+      animation: tabFade 0.2s ease;
+    }
+    @keyframes tabFade {
+      from { opacity: 0; transform: translateY(3px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .control-row {
+      margin-bottom: 12px;
+    }
+    .control-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      font-weight: 600;
+      color: #B2DFDB;
+      margin-bottom: 5px;
+    }
+    .control-label span.badge {
+      background: rgba(38, 166, 154, 0.2);
+      border: 1px solid rgba(38, 166, 154, 0.4);
+      padding: 1px 6px;
+      border-radius: 6px;
+      color: #80CBC4;
+      font-size: 11px;
+    }
+    .control-slider {
+      width: 100%;
+      -webkit-appearance: none;
+      height: 6px;
+      border-radius: 3px;
+      background: rgba(255, 255, 255, 0.2);
+      outline: none;
+    }
+    .control-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #26A69A;
+      box-shadow: 0 0 10px rgba(38,166,154,0.8);
+      cursor: pointer;
+    }
+    .pill-group {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .pill-btn {
+      flex: 1;
+      min-width: 65px;
+      padding: 8px 6px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 12px;
+      color: #E0F2F1;
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-align: center;
+    }
+    .pill-btn.active {
+      background: #26A69A;
+      border-color: #80CBC4;
+      color: #04140D;
+      font-weight: 700;
+      box-shadow: 0 2px 6px rgba(38,166,154,0.35);
+    }
+    .sub-action-btn {
+      width: 100%;
+      padding: 10px 14px;
+      background: rgba(38, 166, 154, 0.25);
+      border: 1.5px solid #26A69A;
+      border-radius: 14px;
+      color: #E0F2F1;
+      font-size: 12.5px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.15s ease;
+      margin-top: 6px;
+    }
+    .sub-action-btn:active {
+      transform: scale(0.98);
+      background: rgba(38, 166, 154, 0.45);
+    }
+    .section-desc {
+      font-size: 11.5px;
+      color: #80CBC4;
+      opacity: 0.9;
+      margin-bottom: 12px;
+      line-height: 1.4;
+      background: rgba(0, 0, 0, 0.25);
+      padding: 8px 10px;
+      border-radius: 10px;
+      border-left: 3px solid #26A69A;
+    }
+
+    /* Toast Notification */
+    #toast {
+      position: absolute;
+      top: 110px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-20px);
+      background: rgba(12, 32, 22, 0.95);
+      border: 1.5px solid #26A69A;
+      color: #E0F2F1;
+      padding: 10px 20px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 700;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.6);
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.25s ease;
+      z-index: 60;
+      white-space: nowrap;
+    }
+    #toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+  <div id="canvas-container"></div>
+  <div id="water-overlay"></div>
+
+  <!-- Reticle -->
+  <div id="reticle"></div>
+  <div id="interaction-prompt">Chop Boreal Pine [Tap Strike]</div>
+
+  <!-- Top Bar -->
+  <div id="top-bar">
+    <div class="hud-chip" id="location-chip">🌲 Pine Lake Overlook</div>
+    <div class="hud-chip clickable" id="env-toggle-btn" role="button">⚙️ Environment</div>
+  </div>
+
+  <!-- Bottom Survival Vitals -->
+  <div id="vitals-container">
+    <div class="vital-meter" title="Health">
+      <span class="icon">❤️</span>
+      <div class="bar-wrap"><div class="bar-fill bar-hp" id="hp-bar" style="width: 100%;"></div></div>
+    </div>
+    <div class="vital-meter" title="Hunger">
+      <span class="icon">🍖</span>
+      <div class="bar-wrap"><div class="bar-fill bar-hunger" id="hunger-bar" style="width: 85%;"></div></div>
+    </div>
+    <div class="vital-meter" title="Hydration">
+      <span class="icon">💧</span>
+      <div class="bar-wrap"><div class="bar-fill bar-thirst" id="thirst-bar" style="width: 90%;"></div></div>
+    </div>
+    <div class="vital-meter" title="Warmth">
+      <span class="icon">🌡️</span>
+      <div class="bar-wrap"><div class="bar-fill bar-temp" id="temp-bar" style="width: 80%;"></div></div>
+    </div>
+    <div class="vital-meter" title="Stamina">
+      <span class="icon">⚡</span>
+      <div class="bar-wrap"><div class="bar-fill bar-stamina" id="stamina-bar" style="width: 100%;"></div></div>
+    </div>
+  </div>
+
+  <!-- Touch Joystick & Look Zones -->
+  <div id="joystick-zone">
+    <div id="joystick-knob"></div>
+  </div>
+  <div id="look-touch-zone"></div>
+
+  <!-- Action Buttons -->
+  <div id="action-buttons">
+    <button class="action-btn" id="btn-strike">
+      🪓<span>Strike</span>
+    </button>
+    <button class="action-btn" id="btn-toss-log" title="Launch Log into River">
+      🪵<span>Float Log</span>
+    </button>
+    <button class="action-btn" id="btn-campfire" title="Light Campfire">
+      🔥<span>Campfire</span>
+    </button>
+    <button class="action-btn" id="btn-jump">
+      ⬆️<span>Jump</span>
+    </button>
+  </div>
+
+  <!-- Environment & Wilderness Engine Controls Modal (4 Dedicated Sections) -->
+  <div id="env-modal">
+    <div class="modal-header">
+      <div class="modal-title">⚙️ Wilderness Engine Configuration</div>
+      <button class="close-btn" id="close-modal-btn">✕</button>
+    </div>
+
+    <!-- 4 Section Tab Selector -->
+    <div class="modal-tabs">
+      <button class="modal-tab active" data-tab="tab-water">🌊 Water</button>
+      <button class="modal-tab" data-tab="tab-terrain">⛰️ Terrain</button>
+      <button class="modal-tab" data-tab="tab-trees">🌲 Foliage</button>
+      <button class="modal-tab" data-tab="tab-sky">☀️ Sky</button>
+    </div>
+
+    <div class="modal-scroll">
+      <!-- 1. WATER ENGINE CONFIGURATION -->
+      <div class="tab-pane active" id="tab-water">
+        <div class="section-desc">
+          Hydrodynamic Three.js Water engine with interactive wave displacement, shore foam, and physical buoyancy.
+        </div>
+        <div class="control-row">
+          <div class="control-label"><span>Wave Amplitude & Distortion</span><span class="badge" id="wave-val">3.7x</span></div>
+          <input type="range" class="control-slider" id="slider-wave" min="1.0" max="8.0" step="0.2" value="3.7">
+        </div>
+        <div class="control-row">
+          <div class="control-label"><span>Surface Foam & Rapids Turbulence</span><span class="badge" id="foam-val">0.85</span></div>
+          <input type="range" class="control-slider" id="slider-foam" min="0.0" max="2.0" step="0.1" value="0.85">
+        </div>
+        <div class="control-row">
+          <div class="control-label"><span>River Rapids Current Flow Speed</span><span class="badge" id="flow-val">1.0x</span></div>
+          <input type="range" class="control-slider" id="slider-flow" min="0.2" max="3.5" step="0.1" value="1.0">
+        </div>
+        <div class="control-row">
+          <div class="control-label"><span>Interactive Rain Ripples</span><span class="badge" id="rain-val">0.0</span></div>
+          <input type="range" class="control-slider" id="slider-rain" min="0.0" max="2.0" step="0.1" value="0.0">
+        </div>
+        <div class="control-row" style="margin-top: 10px;">
+          <button class="sub-action-btn" id="btn-panel-toss">
+            🪵 Toss Timber Log into Rapids (Arc Throw)
+          </button>
+          <button class="sub-action-btn" id="btn-panel-reset-logs" style="background: rgba(0, 150, 136, 0.2); border-color: #4DB6AC;">
+            🌊 Reset 6 Floating River Logs Flotilla
+          </button>
+        </div>
+      </div>
+
+      <!-- 2. TERRAIN CONFIGURATION -->
+      <div class="tab-pane" id="tab-terrain">
+        <div class="section-desc">
+          Slope-aware multi-texture procedural terrain blending pine moss, sheer granite rock faces, and gravel beaches.
+        </div>
+        <div class="control-row">
+          <div class="control-label"><span>Cliff Rock Slope Sharpness</span><span class="badge" id="cliff-val">0.74</span></div>
+          <input type="range" class="control-slider" id="slider-cliff" min="0.40" max="0.90" step="0.02" value="0.74">
+        </div>
+        <div class="control-row">
+          <div class="control-label"><span>Shoreline Sand & Pebble Reach</span><span class="badge" id="shore-val">0.45m</span></div>
+          <input type="range" class="control-slider" id="slider-shore" min="0.10" max="1.60" step="0.05" value="0.45">
+        </div>
+        <div class="control-row">
+          <div class="control-label"><span>Terrain Surface Roughness</span><span class="badge" id="roughness-val">0.88</span></div>
+          <input type="range" class="control-slider" id="slider-roughness" min="0.40" max="1.00" step="0.04" value="0.88">
+        </div>
+        <div class="control-row">
+          <div class="control-label"><span>3D Ground Flora & Details</span></div>
+          <div class="pill-group">
+            <button class="pill-btn active" id="btn-toggle-flowers">🌼 Flowers</button>
+            <button class="pill-btn active" id="btn-toggle-grass">🌿 Grass</button>
+            <button class="pill-btn active" id="btn-toggle-rocks">🪨 Boulders</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. TREE & FOLIAGE CONFIGURATION -->
+      <div class="tab-pane" id="tab-trees">
+        <div class="section-desc">
+          Authentic @dgreenheck/ez-tree procedural trees with 3D branch structures, PBR bark, needle cards, and wind shaders.
+        </div>
+        <div class="control-row">
+          <div class="control-label"><span>Wind Sway Speed & Gust Intensity</span><span class="badge" id="wind-val">1.0x</span></div>
+          <input type="range" class="control-slider" id="slider-wind" min="0.0" max="3.0" step="0.1" value="1.0">
+        </div>
+        <div class="control-row">
+          <div class="control-label"><span>Biome Species Visibility</span></div>
+          <div class="pill-group">
+            <button class="pill-btn active" id="btn-filter-pine">🌲 Pines</button>
+            <button class="pill-btn active" id="btn-filter-oak">🌳 Oaks</button>
+            <button class="pill-btn active" id="btn-filter-aspen">🍂 Aspens</button>
+            <button class="pill-btn active" id="btn-filter-bush">🌿 Bushes</button>
+          </div>
+        </div>
+        <div class="control-row">
+          <div class="control-label"><span>Seasonal Foliage Palette</span></div>
+          <div class="pill-group">
+            <button class="pill-btn active" data-season="summer">🍃 Summer</button>
+            <button class="pill-btn" data-season="autumn">🍁 Autumn</button>
+            <button class="pill-btn" data-season="frost">❄️ Frost</button>
+          </div>
+        </div>
+        <div class="control-row" style="margin-top: 10px;">
+          <button class="sub-action-btn" id="btn-regen-trees">
+            🌱 Re-seed Procedural Tree Variations
+          </button>
+        </div>
+      </div>
+
+      <!-- 4. SKY & ATMOSPHERE CONFIGURATION -->
+      <div class="tab-pane" id="tab-sky">
+        <div class="section-desc">
+          Day/Night solar cycle with Rayleigh atmospheric scattering, dynamic sun flare, and volumetric mountain fog.
+        </div>
+        <div class="control-row">
+          <div class="control-label"><span>Time of Day (Solar Cycle)</span><span class="badge" id="time-val">12:00</span></div>
+          <input type="range" class="control-slider" id="slider-time" min="0" max="24" step="0.1" value="12">
+        </div>
+        <div class="control-row">
+          <div class="control-label"><span>Atmospheric Weather Presets</span></div>
+          <div class="pill-group">
+            <button class="pill-btn active" data-weather="clear">Clear Noon</button>
+            <button class="pill-btn" data-weather="sunset">Golden Sunset</button>
+            <button class="pill-btn" data-weather="storm">Rainstorm</button>
+            <button class="pill-btn" data-weather="night">Night</button>
+          </div>
+        </div>
+        <div class="control-row">
+          <div class="control-label"><span>Volumetric Fog & Mountain Mist</span><span class="badge" id="fog-val">0.0055</span></div>
+          <input type="range" class="control-slider" id="slider-fog" min="0.001" max="0.025" step="0.001" value="0.0055">
+        </div>
+        <div class="control-row">
+          <div class="control-label"><span>Sunlight & Specular Intensity</span><span class="badge" id="sun-int-val">1.75x</span></div>
+          <input type="range" class="control-slider" id="slider-sun-int" min="0.2" max="3.0" step="0.1" value="1.75">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast">Timber harvested & added to inventory!</div>
+
+  <!-- Libraries: Three.js r128, GLTFLoader, Official Three.js Water, Inlined Normal Map, Official @dgreenheck/ez-tree -->
+  <script src="js/three.min.js"></script>
+  <script src="js/GLTFLoader.js"></script>
+  <script src="js/Water.js"></script>
+  <script src="js/waternormals.js"></script>
+  <script src="js/ez-tree.umd.js"></script>
+  <script>
+    // --- GLOBAL SETTINGS MODAL CONTROLLER ---
+    window.toggleEnvModal = function(targetTab) {
+      console.log("toggleEnvModal called, targetTab:", targetTab);
+      const modal = document.getElementById('env-modal');
+      if (modal) {
+        modal.classList.toggle('open');
+        if (targetTab && typeof switchConfigTab === 'function') {
+          switchConfigTab(targetTab);
+        }
+      }
+    };
+    window.openSettings = function(targetTab) {
+      const modal = document.getElementById('env-modal');
+      if (modal) {
+        modal.classList.add('open');
+        if (targetTab && typeof switchConfigTab === 'function') {
+          switchConfigTab(targetTab);
+        }
+      }
+    };
+
+    // --- SYNTHETIC AUDIO ENGINE ---
+    const AudioEngine = {
+      ctx: null,
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (AudioContext) this.ctx = new AudioContext();
+        }
+      },
+      playChop() {
+        if (!this.ctx) this.init();
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(140, now);
+        osc.frequency.exponentialRampToValueAtTime(35, now + 0.12);
+        gain.gain.setValueAtTime(0.7, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.12);
+        if (window.AndroidBridge && window.AndroidBridge.triggerHaptic) {
+          window.AndroidBridge.triggerHaptic(40);
+        }
+      },
+      playSplash() {
+        if (!this.ctx) this.init();
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const bufferSize = this.ctx.sampleRate * 0.25;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (this.ctx.sampleRate * 0.08));
+        }
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(750, now);
+        filter.frequency.linearRampToValueAtTime(200, now + 0.22);
+        noise.connect(filter);
+        filter.connect(this.ctx.destination);
+        noise.start(now);
+        if (window.AndroidBridge && window.AndroidBridge.triggerHaptic) {
+          window.AndroidBridge.triggerHaptic(30);
+        }
+      },
+      playFire() {
+        if (!this.ctx) this.init();
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(80, now);
+        gain.gain.setValueAtTime(0.25, now);
+        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.4);
+      }
+    };
+
+    // --- GAME ENGINE SETUP ---
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x82b2cb, 0.007);
+
+    const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
+    // Scenic player overlook facing north towards river flowing into the lake
+    camera.position.set(0, 3.8, 12);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
+    container.appendChild(renderer.domElement);
+
+    // --- ATMOSPHERIC SKY DOME WITH REALISTIC HORIZON SCATTERING ---
+    const skyGeo = new THREE.SphereGeometry(450, 32, 20);
+    const skyMat = new THREE.ShaderMaterial({
+      uniforms: {
+        topColor: { value: new THREE.Color(0x1a5276) },
+        horizonColor: { value: new THREE.Color(0xaed6f1) },
+        sunColor: { value: new THREE.Color(0xfff3cd) },
+        sunPosition: { value: new THREE.Vector3(45, 75, -50).normalize() }
+      },
+      vertexShader: `
+        varying vec3 vWorldPosition;
+        void main() {
+          vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+          vWorldPosition = worldPosition.xyz;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 topColor;
+        uniform vec3 horizonColor;
+        uniform vec3 sunColor;
+        uniform vec3 sunPosition;
+        varying vec3 vWorldPosition;
+
+        void main() {
+          vec3 dir = normalize(vWorldPosition);
+          float h = clamp(dir.y * 1.5 + 0.08, 0.0, 1.0);
+          vec3 sky = mix(horizonColor, topColor, pow(h, 0.6));
+
+          float sunDot = clamp(dot(dir, sunPosition), 0.0, 1.0);
+          float sunDisc = pow(sunDot, 600.0) * 2.5;
+          float sunGlow = pow(sunDot, 12.0) * 0.45;
+          sky += (sunColor * sunDisc) + (sunColor * sunGlow);
+
+          gl_FragColor = vec4(sky, 1.0);
+        }
+      `,
+      side: THREE.BackSide
+    });
+    const skyDome = new THREE.Mesh(skyGeo, skyMat);
+    scene.add(skyDome);
+
+    // --- LIGHTING ---
+    const hemiLight = new THREE.HemisphereLight(0xe8f4f8, 0x1f3418, 0.95);
+    scene.add(hemiLight);
+
+    const sunLight = new THREE.DirectionalLight(0xfffae8, 1.75);
+    sunLight.position.set(45, 75, -50);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.width = 1024;
+    sunLight.shadow.mapSize.height = 1024;
+    sunLight.shadow.camera.near = 0.5;
+    sunLight.shadow.camera.far = 280;
+    const d = 50;
+    sunLight.shadow.camera.left = -d;
+    sunLight.shadow.camera.right = d;
+    sunLight.shadow.camera.top = d;
+    sunLight.shadow.camera.bottom = -d;
+    scene.add(sunLight);
+
+    const fireLight = new THREE.PointLight(0xff6d00, 2.8, 20);
+    fireLight.position.set(2.5, 1.6, 9.5);
+    fireLight.castShadow = true;
+    scene.add(fireLight);
+
+    // --- PROCEDURAL HIGH-RESOLUTION TEXTURES ---
+    // 1. Forest Moss & Grass
+    function createForestGroundTexture() {
+      const c = document.createElement('canvas');
+      c.width = 512;
+      c.height = 512;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#2d4d23';
+      ctx.fillRect(0, 0, 512, 512);
+
+      const tones = ['#1f3b17', '#28501e', '#346626', '#437c32', '#1a2e13', '#3d3020'];
+      for (let i = 0; i < 28000; i++) {
+        ctx.fillStyle = tones[Math.floor(Math.random() * tones.length)];
+        ctx.fillRect(Math.random() * 512, Math.random() * 512, 2, 2.5);
+      }
+      for (let i = 0; i < 150; i++) {
+        const cx = Math.random() * 512;
+        const cy = Math.random() * 512;
+        const rad = 10 + Math.random() * 26;
+        ctx.fillStyle = Math.random() > 0.4 ? 'rgba(25, 48, 18, 0.45)' : 'rgba(55, 42, 26, 0.4)';
+        ctx.beginPath();
+        ctx.arc(cx, cy, rad, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      const tex = new THREE.CanvasTexture(c);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      return tex;
+    }
+
+    // 2. Granite Cliff Rock Texture
+    function createCliffRockTexture() {
+      const c = document.createElement('canvas');
+      c.width = 512;
+      c.height = 512;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#454e54';
+      ctx.fillRect(0, 0, 512, 512);
+
+      const rockTones = ['#363c42', '#525b63', '#2c3136', '#646f78', '#3e454b'];
+      for (let y = 0; y < 512; y += 3) {
+        ctx.fillStyle = rockTones[Math.floor(Math.random() * rockTones.length)];
+        ctx.fillRect(0, y, 512, 2 + Math.random() * 3);
+      }
+      for (let i = 0; i < 6000; i++) {
+        ctx.fillStyle = Math.random() > 0.5 ? 'rgba(20,24,28,0.25)' : 'rgba(120,135,145,0.2)';
+        ctx.fillRect(Math.random() * 512, Math.random() * 512, 3, 10 + Math.random() * 25);
+      }
+      const tex = new THREE.CanvasTexture(c);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      return tex;
+    }
+
+    // 3. Shoreline Sand & Gravel
+    function createSandGravelTexture() {
+      const c = document.createElement('canvas');
+      c.width = 512;
+      c.height = 512;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#615443';
+      ctx.fillRect(0, 0, 512, 512);
+
+      const sandTones = ['#756754', '#524536', '#877762', '#453a2d', '#99876f'];
+      for (let i = 0; i < 35000; i++) {
+        ctx.fillStyle = sandTones[Math.floor(Math.random() * sandTones.length)];
+        ctx.fillRect(Math.random() * 512, Math.random() * 512, 2, 2);
+      }
+      const tex = new THREE.CanvasTexture(c);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      return tex;
+    }
+
+    const groundTex = createForestGroundTexture();
+    const cliffTex = createCliffRockTexture();
+    const sandTex = createSandGravelTexture();
+
+    // --- PROCEDURAL ERODED TERRAIN WITH RIVER CANYON & LAKE ---
+    const terrainSize = 280;
+    const terrainSegments = 140;
+    const terrainGeo = new THREE.PlaneGeometry(terrainSize, terrainSize, terrainSegments, terrainSegments);
+    terrainGeo.rotateX(-Math.PI / 2);
+
+    function getTerrainHeight(x, z) {
+      // Lake basin to the north (z < -20)
+      const lakeDist = Math.hypot(x, z + 65);
+      const lakeFactor = Math.max(0, 1 - lakeDist / 50);
+
+      // River bed flowing toward the lake (-z)
+      const riverCenter = Math.sin(z * 0.06) * 6.0;
+      const distToRiver = Math.abs(x - riverCenter);
+      let riverCarve = 0;
+      if (z > -35 && z < 70 && distToRiver < 10) {
+        riverCarve = (1 - distToRiver / 10) * 3.5;
+      }
+
+      // Rolling forested ridges
+      const hills = Math.sin(x * 0.035) * Math.cos(z * 0.035) * 5.2
+                  + Math.sin(x * 0.07 + 1.2) * Math.cos(z * 0.07) * 2.2;
+
+      let y = hills - riverCarve;
+      if (lakeFactor > 0) y -= lakeFactor * 6.5;
+
+      // Elevated overlook for player spawn (x=0, z=12)
+      const spawnDist = Math.hypot(x, z - 12);
+      if (spawnDist < 12) {
+        y += (1 - spawnDist / 12) * 1.8;
+      }
+
+      return y;
+    }
+
+    const posAttr = terrainGeo.attributes.position;
+    for (let i = 0; i < posAttr.count; i++) {
+      const px = posAttr.getX(i);
+      const pz = posAttr.getZ(i);
+      posAttr.setY(i, getTerrainHeight(px, pz));
+    }
+    terrainGeo.computeVertexNormals();
+
+    // SLOPE-AWARE MULTI-TEXTURE TERRAIN MATERIAL
+    const terrainMat = new THREE.MeshStandardMaterial({
+      map: groundTex,
+      roughness: 0.88,
+      metalness: 0.05
+    });
+
+    // Terrain Shader Dynamic Uniforms
+    window.terrainUniforms = {
+      uCliffThreshold: { value: 0.74 },
+      uShoreHeight: { value: 0.45 }
+    };
+
+    terrainMat.onBeforeCompile = function (shader) {
+      shader.uniforms.uCliffTex = { value: cliffTex };
+      shader.uniforms.uSandTex = { value: sandTex };
+      shader.uniforms.uCliffThreshold = window.terrainUniforms.uCliffThreshold;
+      shader.uniforms.uShoreHeight = window.terrainUniforms.uShoreHeight;
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <common>',
+        '#include <common>\nvarying vec3 vWorldNormal;\nvarying vec3 vWorldPos;\n'
+      ).replace(
+        '#include <begin_vertex>',
+        '#include <begin_vertex>\nvWorldNormal = normalize(mat3(modelMatrix) * normal);\nvWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;\n'
+      );
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <common>',
+        '#include <common>\nuniform sampler2D uCliffTex;\nuniform sampler2D uSandTex;\nuniform float uCliffThreshold;\nuniform float uShoreHeight;\nvarying vec3 vWorldNormal;\nvarying vec3 vWorldPos;\n'
+      ).replace(
+        '#include <map_fragment>',
+        `
+        vec4 grassCol = texture2D(map, vUv * 20.0);
+        vec4 cliffCol = texture2D(uCliffTex, vUv * 14.0);
+        vec4 sandCol = texture2D(uSandTex, vUv * 24.0);
+
+        // Slope calculation: 1.0 = flat, 0.0 = sheer vertical cliff
+        float slope = clamp(dot(vWorldNormal, vec3(0.0, 1.0, 0.0)), 0.0, 1.0);
+        float cliffFactor = clamp((uCliffThreshold - slope) * 5.0, 0.0, 1.0);
+
+        // Shoreline sand/gravel near water level (y ~ 0.05)
+        float shoreFactor = clamp((uShoreHeight - vWorldPos.y) * 2.8, 0.0, 1.0);
+
+        vec4 baseTerrain = mix(grassCol, sandCol, shoreFactor);
+        vec4 finalTerrain = mix(baseTerrain, cliffCol, cliffFactor);
+        diffuseColor *= finalTerrain;
+        `
+      );
+    };
+
+    const terrainMesh = new THREE.Mesh(terrainGeo, terrainMat);
+    terrainMesh.receiveShadow = true;
+    scene.add(terrainMesh);
+
+    // --- OFFICIAL THREE.JS WATER ENGINE WITH INTERACTIVE RIPPLES & FOAM ---
+    let water = null;
+    const waterNormals = new THREE.TextureLoader().load(window.WATER_NORMALS_B64, function(texture) {
+      texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    });
+
+    const waterGeo = new THREE.PlaneGeometry(600, 600);
+    water = new THREE.Water(waterGeo, {
+      textureWidth: 512,
+      textureHeight: 512,
+      waterNormals: waterNormals,
+      sunDirection: sunLight.position.clone().normalize(),
+      sunColor: 0xfffae8,
+      waterColor: 0x082e38, // Deep mountain river turquoise/navy tone
+      distortionScale: 3.7,
+      fog: scene.fog !== undefined
+    });
+    water.rotation.x = -Math.PI / 2;
+    water.position.y = 0.05; // Watershed sea level
+    scene.add(water);
+
+    // Global Environment & Physics Configuration
+    window.envConfig = {
+      riverSpeed: 1.0,
+      windSpeed: 1.0,
+      foliageSeason: 'summer'
+    };
+
+    // Dynamic Ripple Queue (up to 8 expanding impact ripples)
+    const activeRipples = [];
+    function addWaterRipple(x, z, intensity = 1.0) {
+      if (activeRipples.length >= 8) activeRipples.shift();
+      activeRipples.push({
+        x: x,
+        z: z,
+        radius: 0.1,
+        intensity: intensity
+      });
+    }
+
+    // Hydrology query for player, swimming, and buoyant objects
+    function getWaterInfo(x, z, time) {
+      const terrH = getTerrainHeight(x, z);
+      const flowMult = (window.envConfig && window.envConfig.riverSpeed !== undefined) ? window.envConfig.riverSpeed : 1.0;
+      // Lake basin to north (z < -22) or anywhere terrain is submerged under water plane (y = 0.05)
+      if (z < -22 || terrH < 0.05) {
+        const wave = Math.sin(x * 0.4 + time * 1.6) * 0.12;
+        const isLake = (z < -25);
+        return {
+          isWater: true,
+          surfaceY: 0.05 + wave,
+          current: isLake ? new THREE.Vector2(0, -0.28 * flowMult) : new THREE.Vector2(0, -2.2 * flowMult),
+          bodyName: isLake ? "🌲 Pine Lake" : "🌊 Roaring River"
+        };
+      }
+      const riverCenter = Math.sin(z * 0.06) * 6.0;
+      if (Math.abs(x - riverCenter) < 9.5 && z >= -25 && z < 75) {
+        const wave = Math.sin(x * 0.5 + time * 2.2) * 0.15;
+        return {
+          isWater: true,
+          surfaceY: 0.05 + wave,
+          current: new THREE.Vector2(0, -2.2 * flowMult),
+          bodyName: "🌊 Roaring River"
+        };
+      }
+      return { isWater: false, surfaceY: -999, current: new THREE.Vector2(0, 0), bodyName: "🌲 Pine Ridge Overlook" };
+    }
+
+    const buoyantObjects = [];
+    const interactiveTargets = [];
+    const activeEZTrees = [];
+
+    // --- OFFICIAL @dgreenheck/ez-tree PROCEDURAL INTEGRATION (FULL BIOME DIVERSITY) ---
+    const ezTreeModule = window['@dgreenheck/ez-tree'];
+    console.log("EZ-Tree Module loaded:", !!ezTreeModule);
+
+    // 1. EZ-Tree Pine / Conifer
+    function spawnEZPine(x, z, scale = 1.0) {
+      if (ezTreeModule && ezTreeModule.Tree) {
+        try {
+          const tree = new ezTreeModule.Tree();
+          const presetName = scale > 1.15 ? 'Pine Large' : (scale > 0.85 ? 'Pine Medium' : 'Pine Small');
+          tree.loadPreset(presetName);
+          tree.scale.set(scale, scale, scale);
+          const y = getTerrainHeight(x, z);
+          tree.position.set(x, y, z);
+          tree.rotation.y = Math.random() * Math.PI * 2;
+          tree.castShadow = true;
+          tree.receiveShadow = true;
+          tree.userData = { type: 'tree', id: 'pine', health: 4 };
+          scene.add(tree);
+          interactiveTargets.push(tree);
+          activeEZTrees.push(tree);
+          return tree;
+        } catch (e) {
+          console.warn("EZ-Tree pine error:", e);
+        }
+      }
+      return null;
+    }
+
+    // 2. EZ-Tree Spreading Oak (Forest Meadow Giant)
+    function spawnEZOak(x, z, scale = 1.0) {
+      if (ezTreeModule && ezTreeModule.Tree) {
+        try {
+          const tree = new ezTreeModule.Tree();
+          const presetName = scale > 1.1 ? 'Oak Large' : 'Oak Medium';
+          tree.loadPreset(presetName);
+          tree.scale.set(scale, scale, scale);
+          const y = getTerrainHeight(x, z);
+          tree.position.set(x, y, z);
+          tree.rotation.y = Math.random() * Math.PI * 2;
+          tree.castShadow = true;
+          tree.receiveShadow = true;
+          tree.userData = { type: 'tree', id: 'oak', health: 5 };
+          scene.add(tree);
+          interactiveTargets.push(tree);
+          activeEZTrees.push(tree);
+          return tree;
+        } catch (e) {
+          console.warn("EZ-Tree oak error:", e);
+        }
+      }
+      return null;
+    }
+
+    // 3. EZ-Tree Silver Aspen / Birch
+    function spawnEZAspen(x, z, scale = 1.0) {
+      if (ezTreeModule && ezTreeModule.Tree) {
+        try {
+          const tree = new ezTreeModule.Tree();
+          const presetName = scale > 1.0 ? 'Aspen Large' : 'Aspen Medium';
+          tree.loadPreset(presetName);
+          tree.scale.set(scale, scale, scale);
+          const y = getTerrainHeight(x, z);
+          tree.position.set(x, y, z);
+          tree.rotation.y = Math.random() * Math.PI * 2;
+          tree.castShadow = true;
+          tree.receiveShadow = true;
+          tree.userData = { type: 'tree', id: 'aspen', health: 3 };
+          scene.add(tree);
+          interactiveTargets.push(tree);
+          activeEZTrees.push(tree);
+          return tree;
+        } catch (e) {
+          console.warn("EZ-Tree aspen error:", e);
+        }
+      }
+      return null;
+    }
+
+    // 4. EZ-Tree Wild Undergrowth Bush (Bushes 1-3)
+    function spawnEZBush(x, z, bushIndex = 1, scale = 0.85) {
+      if (ezTreeModule && ezTreeModule.Tree) {
+        try {
+          const bush = new ezTreeModule.Tree();
+          bush.loadPreset(`Bush ${bushIndex}`);
+          bush.scale.set(scale, scale, scale);
+          const y = getTerrainHeight(x, z);
+          bush.position.set(x, y, z);
+          bush.castShadow = true;
+          scene.add(bush);
+          activeEZTrees.push(bush);
+          return bush;
+        } catch (e) {
+          console.warn("EZ-Tree bush error:", e);
+        }
+      }
+      return null;
+    }
+
+    // 5. Granite Boulders
+    function createGraniteBoulder(radius = 1.8) {
+      const geo = new THREE.DodecahedronGeometry(radius, 2);
+      const p = geo.attributes.position;
+      for (let i = 0; i < p.count; i++) {
+        const x = p.getX(i);
+        const y = p.getY(i);
+        const z = p.getZ(i);
+        const noise = 1.0 + Math.sin(x * 3.2) * Math.cos(y * 3.2) * 0.22;
+        p.setXYZ(i, x * noise * 1.25, y * noise * 0.82, z * noise);
+      }
+      geo.computeVertexNormals();
+      const rock = new THREE.Mesh(
+        geo,
+        new THREE.MeshStandardMaterial({ color: 0x4e5d68, roughness: 0.88, metalness: 0.05 })
+      );
+      rock.castShadow = true;
+      rock.receiveShadow = true;
+      return rock;
+    }
+
+    // Procedural Bark & Rings Textures for Logs
+    let woodBarkTex = null;
+    let woodRingsTex = null;
+    function getWoodTextures() {
+      if (!woodBarkTex) {
+        const c1 = document.createElement('canvas');
+        c1.width = 256; c1.height = 256;
+        const ctx1 = c1.getContext('2d');
+        ctx1.fillStyle = '#4a321f';
+        ctx1.fillRect(0, 0, 256, 256);
+        for (let i = 0; i < 400; i++) {
+          ctx1.fillStyle = Math.random() > 0.5 ? '#331f13' : '#5e3e26';
+          ctx1.fillRect(0, Math.random() * 256, 256, 1 + Math.random() * 3);
+        }
+        woodBarkTex = new THREE.CanvasTexture(c1);
+
+        const c2 = document.createElement('canvas');
+        c2.width = 128; c2.height = 128;
+        const ctx2 = c2.getContext('2d');
+        ctx2.fillStyle = '#bfa175';
+        ctx2.fillRect(0, 0, 128, 128);
+        ctx2.strokeStyle = '#7a5530';
+        for (let r = 6; r < 60; r += 4) {
+          ctx2.lineWidth = 1 + Math.random() * 0.8;
+          ctx2.beginPath();
+          ctx2.arc(64, 64, r, 0, Math.PI * 2);
+          ctx2.stroke();
+        }
+        woodRingsTex = new THREE.CanvasTexture(c2);
+      }
+      return { woodBarkTex, woodRingsTex };
+    }
+
+    // 6. Timber Log (Buoyant with Realistic End-Rings & Bark)
+    function createTimberLog() {
+      const { woodBarkTex, woodRingsTex } = getWoodTextures();
+      const geo = new THREE.CylinderGeometry(0.24, 0.24, 3.2, 14);
+      geo.rotateZ(Math.PI / 2);
+      const barkMat = new THREE.MeshStandardMaterial({
+        map: woodBarkTex,
+        roughness: 0.85,
+        color: 0x5a3e28
+      });
+      const ringsMat = new THREE.MeshStandardMaterial({
+        map: woodRingsTex,
+        roughness: 0.75,
+        color: 0xd2b48c
+      });
+      const log = new THREE.Mesh(geo, [barkMat, ringsMat, ringsMat]);
+      log.castShadow = true;
+      log.receiveShadow = true;
+      return log;
+    }
+
+    // 7. Campfire Pit with Embers & Flame Glow
+    function createCampfire() {
+      const group = new THREE.Group();
+      const stoneMat = new THREE.MeshStandardMaterial({ color: 0x3d4952, roughness: 0.88 });
+      for (let i = 0; i < 10; i++) {
+        const ang = (i / 10) * Math.PI * 2;
+        const s = new THREE.Mesh(new THREE.DodecahedronGeometry(0.26, 1), stoneMat);
+        s.position.set(Math.cos(ang) * 0.95, 0.1, Math.sin(ang) * 0.95);
+        s.castShadow = true;
+        group.add(s);
+      }
+      const logMat = new THREE.MeshStandardMaterial({ color: 0x1f140d, roughness: 0.95 });
+      [0.4, 1.9, 3.5].forEach(ang => {
+        const cl = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 1.3, 8), logMat);
+        cl.rotation.y = ang;
+        cl.rotation.z = Math.PI / 2;
+        cl.position.y = 0.14;
+        group.add(cl);
+      });
+      const emberMat = new THREE.MeshStandardMaterial({
+        color: 0xff5722,
+        emissive: 0xff3d00,
+        emissiveIntensity: 1.8,
+        roughness: 0.4
+      });
+      const embers = new THREE.Mesh(new THREE.DodecahedronGeometry(0.42, 1), emberMat);
+      embers.position.y = 0.1;
+      group.add(embers);
+      return group;
+    }
+
+    // 8. First-Person Animated Crafted Stone Axe
+    let fpAxeMesh = null;
+    function setupFirstPersonAxe() {
+      fpAxeMesh = new THREE.Group();
+      const haft = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.032, 0.028, 0.88, 8),
+        new THREE.MeshStandardMaterial({ color: 0x5D4037, roughness: 0.75 })
+      );
+      haft.position.y = 0.44;
+      fpAxeMesh.add(haft);
+
+      const head = new THREE.Mesh(
+        new THREE.BoxGeometry(0.12, 0.28, 0.36),
+        new THREE.MeshStandardMaterial({ color: 0x2b3338, roughness: 0.45, metalness: 0.3 })
+      );
+      head.position.set(0.05, 0.75, 0.0);
+      fpAxeMesh.add(head);
+
+      const twine = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.048, 0.048, 0.16, 8),
+        new THREE.MeshStandardMaterial({ color: 0x795548, roughness: 0.85 })
+      );
+      twine.position.y = 0.75;
+      fpAxeMesh.add(twine);
+
+      const arm = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.07, 0.09, 0.48, 8),
+        new THREE.MeshStandardMaterial({ color: 0xbe7d59, roughness: 0.65 })
+      );
+      arm.position.set(0.0, 0.16, 0.0);
+      fpAxeMesh.add(arm);
+
+      fpAxeMesh.scale.set(0.9, 0.9, 0.9);
+      fpAxeMesh.position.set(0.38, -0.4, -0.65);
+      fpAxeMesh.rotation.set(0.1, -0.25, 0.15);
+      camera.add(fpAxeMesh);
+      scene.add(camera);
+    }
+    setupFirstPersonAxe();
+
+    // 9. Spawn Buoyant Logs in Current with Real Physical Parameters
+    function spawnBuoyantLog(x, y, z, vx = 0, vy = 0, vz = 0, isFlotilla = false) {
+      const log = createTimberLog();
+      const terrY = getTerrainHeight(x, z);
+      const spawnY = (y !== undefined) ? y : Math.max(0.08, terrY + 0.25);
+      log.position.set(x, spawnY, z);
+      log.rotation.set(Math.random() * 0.4, Math.random() * Math.PI, Math.random() * 0.4);
+      scene.add(log);
+      const buoyantObj = {
+        mesh: log,
+        velocity: new THREE.Vector3(vx, vy, vz),
+        rotSpeed: new THREE.Vector3((Math.random() - 0.5) * 2.5, (Math.random() - 0.5) * 2.0, (Math.random() - 0.5) * 2.5),
+        hasSplashed: false,
+        isFlotilla: isFlotilla,
+        wakeTimer: Math.random() * 1.0
+      };
+      buoyantObjects.push(buoyantObj);
+      if (Math.abs(vy) > 1.0 || spawnY <= 0.15) {
+        addWaterRipple(x, z, 1.4);
+      }
+      return buoyantObj;
+    }
+
+    // --- POPULATE COMPREHENSIVE WILDERNESS FOREST BIOMES ---
+    function populateWilderness() {
+      // 1. Pines & Conifers along ridgelines and water approaches
+      const pineSpawns = [
+        [5.2, 9.0, 1.3],   // Flanking right
+        [-5.0, 10.0, 1.2], // Flanking left
+        [7.0, 15.0, 1.4],  // Behind player
+        [-7.5, 16.0, 1.25],
+        [-12.0, 2.0, 1.35],
+        [14.0, 0.0, 1.3],
+        [-18.0, -18.0, 1.4],
+        [18.0, -22.0, 1.45],
+        [-24.0, -45.0, 1.3],
+        [22.0, -48.0, 1.35],
+        [-32.0, -68.0, 1.5],
+        [28.0, -70.0, 1.4],
+        [8.5, -12.0, 1.2],
+        [-9.5, -6.0, 1.15]
+      ];
+      pineSpawns.forEach(([x, z, s]) => {
+        spawnEZPine(x, z, s);
+      });
+
+      // 2. Spreading Giant Oaks (Meadow Clearing)
+      spawnEZOak(-14.0, 14.0, 1.2);
+      spawnEZOak(16.0, 18.0, 1.25);
+      spawnEZOak(-22.0, -6.0, 1.15);
+
+      // 3. Graceful Silver Aspens (Riverbank Corridors)
+      const aspenSpawns = [
+        [-3.5, 5.0, 1.05],  // Riverbank front-left
+        [5.5, 3.5, 1.1],   // Riverbank front-right
+        [-10.0, -10.0, 1.0],
+        [11.0, -14.0, 1.15],
+        [-15.0, -32.0, 1.05]
+      ];
+      aspenSpawns.forEach(([x, z, s]) => {
+        spawnEZAspen(x, z, s);
+      });
+
+      // 4. Wild Undergrowth Bushes (Bushes 1, 2, and 3)
+      spawnEZBush(3.5, 11.0, 1, 0.9);
+      spawnEZBush(-3.0, 9.5, 2, 0.85);
+      spawnEZBush(1.0, 4.0, 3, 0.8);
+      spawnEZBush(-6.0, 4.5, 1, 0.75);
+      spawnEZBush(7.0, 6.0, 2, 0.9);
+
+      // 5. Shoreline Granite Boulders
+      const boulders = [
+        [3.0, 7.5, 1.8],   // Beside campfire
+        [-2.5, 6.0, 2.2],  // River edge
+        [4.2, 0.5, 2.5],
+        [-4.5, -5.0, 2.0],
+        [1.5, -15.0, 1.9],
+        [-2.0, -28.0, 2.6]
+      ];
+      boulders.forEach(([x, z, r]) => {
+        const rock = createGraniteBoulder(r);
+        rock.position.set(x, getTerrainHeight(x, z) + 0.3, z);
+        rock.userData = { type: 'boulder' };
+        scene.add(rock);
+        interactiveTargets.push(rock);
+      });
+
+      // 6. Campfire at player vantage point
+      const campfire = createCampfire();
+      campfire.position.set(2.5, getTerrainHeight(2.5, 9.5) + 0.05, 9.5);
+      scene.add(campfire);
+
+      // 7. Initial Floating Timber Flotilla spread along river rapids
+      const riverLogs = [
+        [1.2, 26.0],
+        [-0.6, 15.0],
+        [0.8, 4.0],
+        [-1.2, -6.0],
+        [1.4, -16.0],
+        [-0.4, -26.0]
+      ];
+      riverLogs.forEach(([x, z]) => {
+        spawnBuoyantLog(x, 0.08, z, 0, 0, -1.8, true);
+      });
+    }
+    populateWilderness();
+
+    // --- CURATED 3D GLTF MODEL SCATTERING (FLOWERS, GRASS, ROCKS) ---
+    window.floraItems = {
+      flowers: [],
+      grass: [],
+      rocks: []
+    };
+    const gltfLoader = new THREE.GLTFLoader();
+    function scatterModel(url, coords, scale = 1.0, category = 'flowers') {
+      gltfLoader.load(url, gltf => {
+        const template = gltf.scene;
+        coords.forEach(([x, z, s]) => {
+          const clone = template.clone();
+          const finalS = scale * (s || 1.0);
+          clone.scale.set(finalS, finalS, finalS);
+          const y = getTerrainHeight(x, z);
+          clone.position.set(x, y, z);
+          clone.rotation.y = Math.random() * Math.PI * 2;
+          scene.add(clone);
+          if (window.floraItems[category]) {
+            window.floraItems[category].push(clone);
+          }
+        });
+      }, undefined, err => {
+        console.log("GLTF model load fallback for:", url);
+      });
+    }
+
+    // Scatter wildflowers and 3D grass across meadows
+    scatterModel('models/flower_blue.glb', [
+      [1.5, 10.5, 1.0], [0.8, 11.2, 0.9], [-1.2, 11.8, 1.1],
+      [4.0, 8.5, 1.0], [-2.0, 7.5, 0.85]
+    ], 1.2, 'flowers');
+
+    scatterModel('models/flower_yellow.glb', [
+      [2.8, 12.0, 1.0], [-1.5, 10.2, 0.95], [3.2, 9.5, 1.05],
+      [-3.2, 8.2, 0.9]
+    ], 1.2, 'flowers');
+
+    scatterModel('models/grass.glb', [
+      [0.0, 10.0, 1.4], [1.2, 8.5, 1.5], [-1.8, 8.8, 1.3],
+      [2.2, 6.5, 1.6], [-0.5, 5.5, 1.5]
+    ], 1.3, 'grass');
+
+    scatterModel('models/rock1.glb', [
+      [-5.5, 2.0, 1.2], [6.5, -2.0, 1.3], [-8.0, -14.0, 1.5]
+    ], 1.2, 'rocks');
+
+    scatterModel('models/rock2.glb', [
+      [5.0, 1.0, 1.1], [-4.0, -8.0, 1.2]
+    ], 1.2, 'rocks');
+
+    // --- FIRST-PERSON PLAYER & TOUCH CONTROLS ---
+    const player = {
+      yaw: 0,
+      pitch: 0,
+      vel: new THREE.Vector3(),
+      isGrounded: true,
+      isSwimming: false,
+      speed: 8.5,
+      lastWaterStepTime: 0,
+      vitals: { hp: 100, hunger: 85, thirst: 90, temp: 37.0, stamina: 100 },
+      inventory: { timber: 2, stone: 4 }
+    };
+
+    // Virtual Joystick
+    let joyTouchId = null;
+    let joyStart = { x: 0, y: 0 };
+    let joyMove = { x: 0, y: 0 };
+    const joyZone = document.getElementById('joystick-zone');
+    const joyKnob = document.getElementById('joystick-knob');
+
+    joyZone.addEventListener('touchstart', e => {
+      e.stopPropagation();
+      AudioEngine.init();
+      const t = e.changedTouches[0];
+      joyTouchId = t.identifier;
+      joyStart = { x: t.clientX, y: t.clientY };
+      joyMove = { x: 0, y: 0 };
+    }, { passive: false });
+
+    joyZone.addEventListener('touchmove', e => {
+      e.stopPropagation();
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        if (t.identifier === joyTouchId) {
+          const dx = t.clientX - joyStart.x;
+          const dy = t.clientY - joyStart.y;
+          const dist = Math.hypot(dx, dy);
+          const maxDist = 45;
+          const angle = Math.atan2(dy, dx);
+          const clamped = Math.min(dist, maxDist);
+          joyMove.x = (Math.cos(angle) * clamped) / maxDist;
+          joyMove.y = (Math.sin(angle) * clamped) / maxDist;
+          joyKnob.style.transform = `translate(${Math.cos(angle)*clamped}px, ${Math.sin(angle)*clamped}px)`;
+        }
+      }
+    }, { passive: false });
+
+    function resetJoy() {
+      joyTouchId = null;
+      joyMove = { x: 0, y: 0 };
+      joyKnob.style.transform = 'translate(0px, 0px)';
+    }
+    joyZone.addEventListener('touchend', resetJoy);
+    joyZone.addEventListener('touchcancel', resetJoy);
+
+    // Look Area (Right Side of Screen)
+    let lookTouchId = null;
+    let lookLast = { x: 0, y: 0 };
+    const lookZone = document.getElementById('look-touch-zone');
+
+    lookZone.addEventListener('touchstart', e => {
+      AudioEngine.init();
+      const t = e.changedTouches[0];
+      lookTouchId = t.identifier;
+      lookLast = { x: t.clientX, y: t.clientY };
+    }, { passive: false });
+
+    lookZone.addEventListener('touchmove', e => {
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        if (t.identifier === lookTouchId) {
+          const dx = t.clientX - lookLast.x;
+          const dy = t.clientY - lookLast.y;
+          lookLast = { x: t.clientX, y: t.clientY };
+          player.yaw -= dx * 0.005;
+          player.pitch -= dy * 0.004;
+          player.pitch = Math.max(-1.3, Math.min(1.3, player.pitch));
+        }
+      }
+    }, { passive: false });
+
+    lookZone.addEventListener('touchend', () => { lookTouchId = null; });
+    lookZone.addEventListener('touchcancel', () => { lookTouchId = null; });
+
+    // Keyboard fallback
+    const keys = {};
+    window.addEventListener('keydown', e => { keys[e.key.toLowerCase()] = true; AudioEngine.init(); });
+    window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+    // --- ACTIONS & INTERACTION ---
+    const raycaster = new THREE.Raycaster();
+    const promptEl = document.getElementById('interaction-prompt');
+    const reticleEl = document.getElementById('reticle');
+    const toastEl = document.getElementById('toast');
+    let targetedObject = null;
+
+    function showToast(msg) {
+      toastEl.innerText = msg;
+      toastEl.classList.add('show');
+      setTimeout(() => toastEl.classList.remove('show'), 2400);
+    }
+
+    let isSwinging = false;
+    let swingProgress = 0;
+
+    function triggerSwing() {
+      if (isSwinging) return;
+      isSwinging = true;
+      swingProgress = 0;
+      AudioEngine.playChop();
+
+      if (targetedObject && targetedObject.userData.type === 'tree') {
+        targetedObject.userData.health--;
+        targetedObject.rotation.z += 0.06;
+        setTimeout(() => targetedObject.rotation.z -= 0.06, 120);
+
+        if (targetedObject.userData.health <= 0) {
+          scene.remove(targetedObject);
+          const idx = interactiveTargets.indexOf(targetedObject);
+          if (idx !== -1) interactiveTargets.splice(idx, 1);
+          player.inventory.timber += 3;
+          showToast("🪵 Tree felled! +3 Timber Logs");
+          spawnBuoyantLog(targetedObject.position.x, targetedObject.position.z);
+        } else {
+          showToast(`🪓 Chopping... (${targetedObject.userData.health} hits left)`);
+        }
+      } else {
+        const w = getWaterInfo(camera.position.x, camera.position.z, performance.now() * 0.001);
+        if (w.isWater) {
+          player.vitals.thirst = Math.min(100, player.vitals.thirst + 25);
+          AudioEngine.playSplash();
+          addWaterRipple(camera.position.x, camera.position.z, 1.8);
+          showToast("💧 Scooped mountain water! +25 Hydration");
+        }
+      }
+    }
+
+    function addTapListener(el, callback) {
+      if (!el) return;
+      el.addEventListener('click', e => { e.stopPropagation(); callback(e); });
+      el.addEventListener('touchend', e => { e.stopPropagation(); e.preventDefault(); callback(e); });
+    }
+
+    addTapListener(document.getElementById('btn-strike'), triggerSwing);
+
+    addTapListener(document.getElementById('btn-jump'), () => {
+      if (player.isGrounded || player.isSwimming) {
+        player.vel.y = player.isSwimming ? 4.5 : 6.2;
+        player.isGrounded = false;
+        AudioEngine.playSplash();
+        if (player.isSwimming) {
+          addWaterRipple(camera.position.x, camera.position.z, 1.6);
+        }
+      }
+    });
+
+    addTapListener(document.getElementById('btn-toss-log'), () => {
+      // Hurl log forward along player's gaze with physical arc
+      const fwd = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(player.pitch, player.yaw, 0));
+      const spawnPos = camera.position.clone().add(fwd.clone().multiplyScalar(1.5));
+      const throwSpeed = 16.0;
+      const obj = spawnBuoyantLog(
+        spawnPos.x,
+        spawnPos.y - 0.2,
+        spawnPos.z,
+        fwd.x * throwSpeed,
+        fwd.y * throwSpeed + 4.5,
+        fwd.z * throwSpeed,
+        false
+      );
+      obj.rotSpeed.set((Math.random() - 0.5) * 5.0, (Math.random() - 0.5) * 4.0, (Math.random() - 0.5) * 5.0);
+      AudioEngine.playSplash();
+      showToast("🪵 Timber log launched! Watch it splash & float down rapids!");
+    });
+
+    addTapListener(document.getElementById('btn-campfire'), () => {
+      AudioEngine.playFire();
+      fireLight.intensity = (fireLight.intensity > 0.5) ? 0.0 : 2.8;
+      showToast(fireLight.intensity > 0.5 ? "🔥 Campfire stoked! Radiating warmth." : "💨 Campfire embers extinguished.");
+    });
+
+    // --- 4-SECTION CONFIGURATION PANEL TAB CONTROLLER ---
+    const envToggleBtn = document.getElementById('env-toggle-btn');
+    const closeEnvBtn = document.getElementById('close-modal-btn');
+    addTapListener(envToggleBtn, () => window.toggleEnvModal());
+    addTapListener(closeEnvBtn, () => window.toggleEnvModal());
+
+    const tabButtons = document.querySelectorAll('.modal-tab');
+    const tabPanes = document.querySelectorAll('.tab-pane');
+
+    function switchConfigTab(targetTabId) {
+      tabButtons.forEach(btn => {
+        if (btn.dataset.tab === targetTabId) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+      tabPanes.forEach(pane => {
+        if (pane.id === targetTabId) {
+          pane.classList.add('active');
+        } else {
+          pane.classList.remove('active');
+        }
+      });
+    }
+
+    tabButtons.forEach(btn => {
+      addTapListener(btn, () => switchConfigTab(btn.dataset.tab));
+    });
+
+    // 1. WATER ENGINE CONFIGURATION
+    const sliderWave = document.getElementById('slider-wave');
+    const waveVal = document.getElementById('wave-val');
+    sliderWave.addEventListener('input', e => {
+      const val = parseFloat(e.target.value);
+      if (water && water.material && water.material.uniforms['distortionScale']) {
+        water.material.uniforms['distortionScale'].value = val;
+      }
+      waveVal.innerText = `${val.toFixed(1)}x`;
+    });
+
+    const sliderFoam = document.getElementById('slider-foam');
+    const foamVal = document.getElementById('foam-val');
+    sliderFoam.addEventListener('input', e => {
+      const val = parseFloat(e.target.value);
+      if (water && water.material && water.material.uniforms['uFoamIntensity']) {
+        water.material.uniforms['uFoamIntensity'].value = val;
+      }
+      foamVal.innerText = `${val.toFixed(2)}`;
+    });
+
+    const sliderFlow = document.getElementById('slider-flow');
+    const flowVal = document.getElementById('flow-val');
+    sliderFlow.addEventListener('input', e => {
+      const val = parseFloat(e.target.value);
+      window.envConfig.riverSpeed = val;
+      flowVal.innerText = `${val.toFixed(1)}x`;
+    });
+
+    const sliderRain = document.getElementById('slider-rain');
+    const rainVal = document.getElementById('rain-val');
+    sliderRain.addEventListener('input', e => {
+      const val = parseFloat(e.target.value);
+      if (water && water.material && water.material.uniforms['uRainIntensity']) {
+        water.material.uniforms['uRainIntensity'].value = val;
+      }
+      rainVal.innerText = `${val.toFixed(1)}`;
+    });
+
+    addTapListener(document.getElementById('btn-panel-toss'), () => {
+      const fwd = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(player.pitch, player.yaw, 0));
+      const spawnPos = camera.position.clone().add(fwd.clone().multiplyScalar(1.5));
+      const throwSpeed = 16.0;
+      const obj = spawnBuoyantLog(
+        spawnPos.x,
+        spawnPos.y - 0.2,
+        spawnPos.z,
+        fwd.x * throwSpeed,
+        fwd.y * throwSpeed + 4.5,
+        fwd.z * throwSpeed,
+        false
+      );
+      obj.rotSpeed.set((Math.random() - 0.5) * 5.0, (Math.random() - 0.5) * 4.0, (Math.random() - 0.5) * 5.0);
+      AudioEngine.playSplash();
+      showToast("🪵 Timber log hurled forward!");
+    });
+
+    addTapListener(document.getElementById('btn-panel-reset-logs'), () => {
+      // Clear current logs
+      for (let i = buoyantObjects.length - 1; i >= 0; i--) {
+        scene.remove(buoyantObjects[i].mesh);
+      }
+      buoyantObjects.length = 0;
+      const riverLogs = [
+        [1.2, 26.0],
+        [-0.6, 15.0],
+        [0.8, 4.0],
+        [-1.2, -6.0],
+        [1.4, -16.0],
+        [-0.4, -26.0]
+      ];
+      riverLogs.forEach(([x, z]) => {
+        spawnBuoyantLog(x, 0.08, z, 0, 0, -1.8, true);
+      });
+      AudioEngine.playSplash();
+      showToast("🌊 6 logs deployed down roaring rapids!");
+    });
+
+    // 2. TERRAIN CONFIGURATION
+    const sliderCliff = document.getElementById('slider-cliff');
+    const cliffVal = document.getElementById('cliff-val');
+    sliderCliff.addEventListener('input', e => {
+      const val = parseFloat(e.target.value);
+      if (window.terrainUniforms && window.terrainUniforms.uCliffThreshold) {
+        window.terrainUniforms.uCliffThreshold.value = val;
+      }
+      cliffVal.innerText = `${val.toFixed(2)}`;
+    });
+
+    const sliderShore = document.getElementById('slider-shore');
+    const shoreVal = document.getElementById('shore-val');
+    sliderShore.addEventListener('input', e => {
+      const val = parseFloat(e.target.value);
+      if (window.terrainUniforms && window.terrainUniforms.uShoreHeight) {
+        window.terrainUniforms.uShoreHeight.value = val;
+      }
+      shoreVal.innerText = `${val.toFixed(2)}m`;
+    });
+
+    const sliderRoughness = document.getElementById('slider-roughness');
+    const roughnessVal = document.getElementById('roughness-val');
+    sliderRoughness.addEventListener('input', e => {
+      const val = parseFloat(e.target.value);
+      terrainMat.roughness = val;
+      roughnessVal.innerText = `${val.toFixed(2)}`;
+    });
+
+    function toggleFloraVisibility(category, btn) {
+      btn.classList.toggle('active');
+      const isVisible = btn.classList.contains('active');
+      if (window.floraItems && window.floraItems[category]) {
+        window.floraItems[category].forEach(item => {
+          item.visible = isVisible;
+        });
+      }
+    }
+    const btnToggleFlowers = document.getElementById('btn-toggle-flowers');
+    const btnToggleGrass = document.getElementById('btn-toggle-grass');
+    const btnToggleRocks = document.getElementById('btn-toggle-rocks');
+    addTapListener(btnToggleFlowers, () => toggleFloraVisibility('flowers', btnToggleFlowers));
+    addTapListener(btnToggleGrass, () => toggleFloraVisibility('grass', btnToggleGrass));
+    addTapListener(btnToggleRocks, () => toggleFloraVisibility('rocks', btnToggleRocks));
+
+    // 3. TREE & FOLIAGE CONFIGURATION
+    const sliderWind = document.getElementById('slider-wind');
+    const windVal = document.getElementById('wind-val');
+    sliderWind.addEventListener('input', e => {
+      const val = parseFloat(e.target.value);
+      window.envConfig.windSpeed = val;
+      windVal.innerText = `${val.toFixed(1)}x`;
+    });
+
+    function toggleTreeSpecies(speciesId, btn) {
+      btn.classList.toggle('active');
+      const isVis = btn.classList.contains('active');
+      activeEZTrees.forEach(t => {
+        if (t.userData && t.userData.id === speciesId) {
+          t.visible = isVis;
+        }
+      });
+    }
+    const btnFilterPine = document.getElementById('btn-filter-pine');
+    const btnFilterOak = document.getElementById('btn-filter-oak');
+    const btnFilterAspen = document.getElementById('btn-filter-aspen');
+    const btnFilterBush = document.getElementById('btn-filter-bush');
+    addTapListener(btnFilterPine, () => toggleTreeSpecies('pine', btnFilterPine));
+    addTapListener(btnFilterOak, () => toggleTreeSpecies('oak', btnFilterOak));
+    addTapListener(btnFilterAspen, () => toggleTreeSpecies('aspen', btnFilterAspen));
+    addTapListener(btnFilterBush, () => toggleTreeSpecies('bush', btnFilterBush));
+
+    function setFoliageSeason(season) {
+      window.envConfig.foliageSeason = season;
+      document.querySelectorAll('.pill-btn[data-season]').forEach(b => {
+        if (b.dataset.season === season) b.classList.add('active');
+        else b.classList.remove('active');
+      });
+      activeEZTrees.forEach(t => {
+        t.traverse(child => {
+          if (child.isMesh && child.material) {
+            const m = child.material;
+            if (season === 'summer') {
+              if (t.userData.id === 'oak' || t.userData.id === 'aspen' || t.userData.id === 'bush') {
+                m.color.setHex(0x5c8a38);
+              } else {
+                m.color.setHex(0x2d5a36);
+              }
+            } else if (season === 'autumn') {
+              if (t.userData.id === 'aspen') {
+                m.color.setHex(0xe6a817); // golden aspen
+              } else if (t.userData.id === 'oak') {
+                m.color.setHex(0xb84b18); // rustic orange
+              } else if (t.userData.id === 'bush') {
+                m.color.setHex(0xc2781e);
+              } else {
+                m.color.setHex(0x28472f); // evergreen pine
+              }
+            } else if (season === 'frost') {
+              m.color.setHex(0x8fae9b);
+            }
+          }
+        });
+      });
+      showToast(`🍂 Foliage updated to ${season.toUpperCase()} palette`);
+    }
+
+    document.querySelectorAll('.pill-btn[data-season]').forEach(btn => {
+      addTapListener(btn, () => setFoliageSeason(btn.dataset.season));
+    });
+
+    addTapListener(document.getElementById('btn-regen-trees'), () => {
+      activeEZTrees.forEach(t => {
+        t.rotation.y = Math.random() * Math.PI * 2;
+        const scaleVariation = 0.9 + Math.random() * 0.25;
+        t.scale.set(scaleVariation, scaleVariation, scaleVariation);
+      });
+      showToast("🌱 Procedural trees re-seeded with fresh variations!");
+    });
+
+    // 4. SKY & ATMOSPHERE CONFIGURATION
+    const sliderTime = document.getElementById('slider-time');
+    const timeVal = document.getElementById('time-val');
+    sliderTime.addEventListener('input', e => {
+      const val = parseFloat(e.target.value);
+      timeVal.innerText = `${Math.floor(val)}:${Math.floor((val%1)*60).toString().padStart(2, '0')}`;
+      updateSun(val);
+    });
+
+    const sliderFog = document.getElementById('slider-fog');
+    const fogVal = document.getElementById('fog-val');
+    sliderFog.addEventListener('input', e => {
+      const val = parseFloat(e.target.value);
+      scene.fog.density = val;
+      fogVal.innerText = `${val.toFixed(4)}`;
+    });
+
+    const sliderSunInt = document.getElementById('slider-sun-int');
+    const sunIntVal = document.getElementById('sun-int-val');
+    sliderSunInt.addEventListener('input', e => {
+      const val = parseFloat(e.target.value);
+      sunLight.intensity = val;
+      sunIntVal.innerText = `${val.toFixed(2)}x`;
+    });
+
+    document.querySelectorAll('.pill-btn[data-weather]').forEach(btn => {
+      addTapListener(btn, () => {
+        document.querySelectorAll('.pill-btn[data-weather]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const w = btn.dataset.weather;
+        if (w === 'clear') {
+          updateSun(12);
+          sliderTime.value = 12;
+          timeVal.innerText = "12:00";
+          skyMat.uniforms.topColor.value.setHex(0x1a5276);
+          skyMat.uniforms.horizonColor.value.setHex(0xaed6f1);
+          scene.fog.color.setHex(0x82b2cb);
+          scene.fog.density = 0.0055;
+          sliderFog.value = 0.0055;
+          fogVal.innerText = "0.0055";
+          if (water) {
+            water.material.uniforms['distortionScale'].value = 3.7;
+            sliderWave.value = 3.7;
+            waveVal.innerText = "3.7x";
+            water.material.uniforms['uRainIntensity'].value = 0.0;
+            sliderRain.value = 0.0;
+            rainVal.innerText = "0.0";
+            water.material.uniforms['uFoamIntensity'].value = 0.85;
+            sliderFoam.value = 0.85;
+            foamVal.innerText = "0.85";
+          }
+        } else if (w === 'sunset') {
+          updateSun(18.5);
+          sliderTime.value = 18.5;
+          timeVal.innerText = "18:30";
+          skyMat.uniforms.topColor.value.setHex(0x5e1c32);
+          skyMat.uniforms.horizonColor.value.setHex(0xff7e47);
+          scene.fog.color.setHex(0xd46a43);
+          scene.fog.density = 0.0065;
+          sliderFog.value = 0.0065;
+          fogVal.innerText = "0.0065";
+          if (water) {
+            water.material.uniforms['distortionScale'].value = 3.2;
+            sliderWave.value = 3.2;
+            waveVal.innerText = "3.2x";
+            water.material.uniforms['uRainIntensity'].value = 0.0;
+            sliderRain.value = 0.0;
+            rainVal.innerText = "0.0";
+            water.material.uniforms['uFoamIntensity'].value = 0.55;
+            sliderFoam.value = 0.55;
+            foamVal.innerText = "0.55";
+          }
+        } else if (w === 'storm') {
+          updateSun(14);
+          sliderTime.value = 14;
+          timeVal.innerText = "14:00";
+          skyMat.uniforms.topColor.value.setHex(0x1a2530);
+          skyMat.uniforms.horizonColor.value.setHex(0x3e4e5e);
+          scene.fog.color.setHex(0x354452);
+          scene.fog.density = 0.015;
+          sliderFog.value = 0.015;
+          fogVal.innerText = "0.0150";
+          if (water) {
+            water.material.uniforms['distortionScale'].value = 6.5;
+            sliderWave.value = 6.5;
+            waveVal.innerText = "6.5x";
+            water.material.uniforms['uRainIntensity'].value = 1.0;
+            sliderRain.value = 1.0;
+            rainVal.innerText = "1.0";
+            water.material.uniforms['uFoamIntensity'].value = 1.4;
+            sliderFoam.value = 1.4;
+            foamVal.innerText = "1.40";
+          }
+        } else if (w === 'night') {
+          updateSun(23);
+          sliderTime.value = 23;
+          timeVal.innerText = "23:00";
+          skyMat.uniforms.topColor.value.setHex(0x050b12);
+          skyMat.uniforms.horizonColor.value.setHex(0x0c1826);
+          scene.fog.color.setHex(0x0a121d);
+          scene.fog.density = 0.008;
+          sliderFog.value = 0.008;
+          fogVal.innerText = "0.0080";
+          if (water) {
+            water.material.uniforms['distortionScale'].value = 2.5;
+            sliderWave.value = 2.5;
+            waveVal.innerText = "2.5x";
+            water.material.uniforms['uRainIntensity'].value = 0.0;
+            sliderRain.value = 0.0;
+            rainVal.innerText = "0.0";
+            water.material.uniforms['uFoamIntensity'].value = 0.3;
+            sliderFoam.value = 0.3;
+            foamVal.innerText = "0.30";
+          }
+        }
+      });
+    });
+
+    function updateSun(hour) {
+      const angle = ((hour - 6) / 12) * Math.PI;
+      const y = Math.sin(angle) * 75;
+      const x = Math.cos(angle) * 65;
+      sunLight.position.set(x, Math.max(-10, y), -50);
+      sunLight.intensity = Math.max(0.05, Math.sin(angle) * 1.75);
+      hemiLight.intensity = Math.max(0.15, Math.sin(angle) * 0.95);
+      skyMat.uniforms.sunPosition.value.copy(sunLight.position).normalize();
+      if (water && water.material && water.material.uniforms['sunDirection']) {
+        water.material.uniforms['sunDirection'].value.copy(sunLight.position).normalize();
+      }
+    }
+
+    // --- MAIN GAME LOOP ---
+    let lastTime = performance.now();
+    const waterOverlay = document.getElementById('water-overlay');
+    const locationChip = document.getElementById('location-chip');
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const now = performance.now();
+      const dt = Math.min(0.08, (now - lastTime) / 1000);
+      lastTime = now;
+      const timeSec = now * 0.001;
+
+      // Update Active Expanding Splash Ripples
+      for (let i = activeRipples.length - 1; i >= 0; i--) {
+        const r = activeRipples[i];
+        r.radius += dt * 4.2;
+        r.intensity *= (1.0 - dt * 1.6);
+        if (r.intensity <= 0.02) {
+          activeRipples.splice(i, 1);
+        }
+      }
+
+      // Pack active ripples into Water Shader uniform
+      if (water && water.material && water.material.uniforms['uRipples']) {
+        const rippleUniforms = water.material.uniforms['uRipples'].value;
+        for (let j = 0; j < 8; j++) {
+          if (j < activeRipples.length) {
+            const rip = activeRipples[j];
+            rippleUniforms[j].set(rip.x, rip.z, rip.radius, rip.intensity);
+          } else {
+            rippleUniforms[j].set(0, 0, 0, 0);
+          }
+        }
+      }
+
+      // Animate Official Three.js Water Shader
+      if (water && water.material && water.material.uniforms['time']) {
+        const flowSpeed = (window.envConfig && window.envConfig.riverSpeed !== undefined) ? window.envConfig.riverSpeed : 1.0;
+        water.material.uniforms['time'].value += dt * 0.75 * flowSpeed;
+      }
+
+      // Animate EZ-Tree procedural wind leaf shaders across all species
+      const windMult = (window.envConfig && window.envConfig.windSpeed !== undefined) ? window.envConfig.windSpeed : 1.0;
+      activeEZTrees.forEach(t => {
+        if (t && t.update) {
+          t.update(timeSec * windMult);
+        }
+      });
+
+      // Camera Rotation
+      camera.rotation.order = 'YXZ';
+      camera.rotation.y = player.yaw;
+      camera.rotation.x = player.pitch;
+
+      // Movement Vector
+      let moveX = joyMove.x;
+      let moveZ = joyMove.y;
+      if (keys['w'] || keys['arrowup']) moveZ = -1;
+      if (keys['s'] || keys['arrowdown']) moveZ = 1;
+      if (keys['a'] || keys['arrowleft']) moveX = -1;
+      if (keys['d'] || keys['arrowright']) moveX = 1;
+
+      const fwd = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(0, player.yaw, 0));
+      const rgt = new THREE.Vector3(1, 0, 0).applyEuler(new THREE.Euler(0, player.yaw, 0));
+      const wish = new THREE.Vector3().addScaledVector(fwd, -moveZ).addScaledVector(rgt, moveX);
+      if (wish.lengthSq() > 0) wish.normalize();
+
+      // Hydrology & Buoyancy
+      const wInfo = getWaterInfo(camera.position.x, camera.position.z, timeSec);
+      const terrY = getTerrainHeight(camera.position.x, camera.position.z);
+      const isSub = wInfo.isWater && (camera.position.y - 1.65 < wInfo.surfaceY);
+
+      player.isSwimming = isSub;
+      waterOverlay.classList.toggle('submerged', player.isSwimming);
+      locationChip.innerText = wInfo.bodyName;
+
+      // Interactive water stepping ripples
+      if (wInfo.isWater && wish.lengthSq() > 0.05 && (timeSec - player.lastWaterStepTime > 0.35)) {
+        player.lastWaterStepTime = timeSec;
+        addWaterRipple(camera.position.x, camera.position.z, player.isSwimming ? 0.9 : 0.6);
+        AudioEngine.playSplash();
+      }
+
+      const curSpeed = player.isSwimming ? player.speed * 0.6 : player.speed;
+      player.vel.x = wish.x * curSpeed;
+      player.vel.z = wish.z * curSpeed;
+
+      if (player.isSwimming) {
+        const depth = wInfo.surfaceY - (camera.position.y - 1.45);
+        if (depth > 0) {
+          player.vel.y += depth * 15.0 * dt;
+          player.vel.y *= 0.86;
+        }
+        player.vel.x += wInfo.current.x * 2.2;
+        player.vel.z += wInfo.current.y * 2.2;
+      } else {
+        player.vel.y -= 18.0 * dt;
+      }
+
+      camera.position.x += player.vel.x * dt;
+      camera.position.z += player.vel.z * dt;
+      camera.position.y += player.vel.y * dt;
+
+      // Ground collision
+      const eyeH = 1.65;
+      if (camera.position.y < terrY + eyeH) {
+        camera.position.y = terrY + eyeH;
+        player.vel.y = 0;
+        player.isGrounded = true;
+      } else {
+        player.isGrounded = false;
+      }
+
+      // Update Buoyant Timber Logs with hydrodynamic Archimedes physics
+      for (let i = buoyantObjects.length - 1; i >= 0; i--) {
+        const obj = buoyantObjects[i];
+        const p = obj.mesh.position;
+        const w = getWaterInfo(p.x, p.z, timeSec);
+        const terrH = getTerrainHeight(p.x, p.z);
+        const waterH = w.surfaceY;
+        const logRadius = 0.24;
+
+        // Immersion depth relative to water plane
+        const depth = waterH - (p.y - logRadius);
+        if (w.isWater && depth > 0) {
+          // Hydrodynamic Immersion (0.0 to 1.0)
+          const subm = Math.min(1.0, depth / (logRadius * 2.0));
+
+          // Archimedes Buoyant Upward Acceleration + Fluid Damping
+          const buoyantAccel = (waterH - p.y + 0.12) * 26.0;
+          obj.velocity.y += (buoyantAccel - obj.velocity.y * 5.5) * dt;
+
+          // River current force with viscosity drag
+          const flowSpeed = (window.envConfig && window.envConfig.riverSpeed !== undefined) ? window.envConfig.riverSpeed : 1.0;
+          const targetVx = w.current.x * flowSpeed;
+          const targetVz = w.current.y * flowSpeed;
+          obj.velocity.x += (targetVx - obj.velocity.x) * (3.2 * subm) * dt;
+          obj.velocity.z += (targetVz - obj.velocity.z) * (3.2 * subm) * dt;
+
+          // Wave tilt / pitch & roll: align object with moving surface normal
+          const wavePitch = Math.sin(p.z * 0.45 + timeSec * 2.4) * 0.22;
+          const waveRoll = Math.cos(p.x * 0.55 + timeSec * 2.6) * 0.18;
+          obj.mesh.rotation.x += (wavePitch - obj.mesh.rotation.x) * 4.5 * dt;
+          obj.mesh.rotation.z += (waveRoll - obj.mesh.rotation.z) * 4.5 * dt;
+          obj.mesh.rotation.y += 0.25 * flowSpeed * dt;
+
+          // Plunge Splash & Foam Ripple
+          if (!obj.hasSplashed && obj.velocity.y < -1.8) {
+            addWaterRipple(p.x, p.z, Math.min(2.0, Math.abs(obj.velocity.y) * 0.35));
+            AudioEngine.playSplash();
+            obj.hasSplashed = true;
+          }
+          if (p.y > waterH + 0.45) {
+            obj.hasSplashed = false;
+          }
+
+          // Periodic gentle wake ripple while drifting through rapids
+          obj.wakeTimer = (obj.wakeTimer || 0) + dt;
+          if (obj.wakeTimer > 1.2 && (Math.abs(obj.velocity.x) > 0.4 || Math.abs(obj.velocity.z) > 0.4)) {
+            obj.wakeTimer = 0;
+            addWaterRipple(p.x, p.z, 0.42);
+          }
+
+          // Riverbed collision prevention (prevent log sinking beneath terrain under river)
+          if (p.y < terrH + logRadius) {
+            p.y = terrH + logRadius;
+            if (obj.velocity.y < 0) obj.velocity.y = 0;
+          }
+
+          // Flotilla recycling: when log passes downstream into the lake (z < -36), recycle it upstream
+          if (obj.isFlotilla && p.z < -36) {
+            const respawnZ = 32.0 + Math.random() * 8.0;
+            const riverX = Math.sin(respawnZ * 0.06) * 6.0 + (Math.random() - 0.5) * 2.2;
+            p.set(riverX, 0.08, respawnZ);
+            obj.velocity.set(0, 0, -1.8 * flowSpeed);
+            obj.hasSplashed = false;
+          }
+        } else {
+          // In air or on dry land: ballistic gravity and terrain collisions
+          obj.velocity.y -= 18.0 * dt;
+          obj.velocity.x *= (1.0 - 0.2 * dt);
+          obj.velocity.z *= (1.0 - 0.2 * dt);
+
+          if (obj.rotSpeed) {
+            obj.mesh.rotation.x += obj.rotSpeed.x * dt;
+            obj.mesh.rotation.y += obj.rotSpeed.y * dt;
+            obj.mesh.rotation.z += obj.rotSpeed.z * dt;
+          }
+
+          // Ground collision
+          if (p.y < terrH + logRadius) {
+            p.y = terrH + logRadius;
+            obj.velocity.y = Math.max(0, -obj.velocity.y * 0.25);
+            obj.velocity.x *= 0.65;
+            obj.velocity.z *= 0.65;
+            if (obj.rotSpeed) {
+              obj.rotSpeed.multiplyScalar(0.7);
+            }
+          }
+        }
+
+        // Apply position displacement
+        p.addScaledVector(obj.velocity, dt);
+
+        // Despawn excessive player-tossed logs if more than 25
+        if (!obj.isFlotilla && (p.z < -80 || p.lengthSq() > 25000)) {
+          scene.remove(obj.mesh);
+          buoyantObjects.splice(i, 1);
+        }
+      }
+
+      // Weapon Sway & Strike Animation
+      if (fpAxeMesh) {
+        const moveMag = wish.length();
+        const bobX = Math.sin(now * 0.007) * 0.025 * moveMag;
+        const bobY = Math.abs(Math.cos(now * 0.007)) * 0.03 * moveMag;
+
+        if (isSwinging) {
+          swingProgress += dt * 6.5;
+          const swingAngle = Math.sin(swingProgress * Math.PI) * 0.85;
+          fpAxeMesh.position.set(0.38 - swingAngle * 0.15, -0.4 + swingAngle * 0.1, -0.65 - swingAngle * 0.25);
+          fpAxeMesh.rotation.set(0.1 + swingAngle * 0.95, -0.25 - swingAngle * 0.45, 0.15);
+          if (swingProgress >= 1.0) isSwinging = false;
+        } else {
+          fpAxeMesh.position.set(0.38 + bobX, -0.4 + bobY, -0.65);
+          fpAxeMesh.rotation.set(0.1, -0.25, 0.15);
+        }
+      }
+
+      // Raycasting for interactive target
+      raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+      const intersects = raycaster.intersectObjects(interactiveTargets, true);
+      if (intersects.length > 0 && intersects[0].distance < 6.5) {
+        let root = intersects[0].object;
+        while (root.parent && root.parent !== scene && !root.userData.type) {
+          root = root.parent;
+        }
+        targetedObject = root;
+        reticleEl.classList.add('active');
+        promptEl.style.display = 'block';
+        if (root.userData.type === 'tree') {
+          const typeName = root.userData.id === 'oak' ? 'Giant Oak' : (root.userData.id === 'aspen' ? 'Silver Aspen' : 'Boreal Pine');
+          promptEl.innerText = `Chop ${typeName} [Tap Strike]`;
+        } else {
+          promptEl.innerText = 'Mine Granite Boulder [Tap Strike]';
+        }
+      } else {
+        targetedObject = null;
+        reticleEl.classList.remove('active');
+        promptEl.style.display = 'none';
+      }
+
+      // Survival Vitals
+      player.vitals.hunger = Math.max(0, player.vitals.hunger - dt * 0.08);
+      player.vitals.thirst = Math.max(0, player.vitals.thirst - dt * 0.14);
+      if (player.isSwimming) {
+        player.vitals.temp = Math.max(34.0, player.vitals.temp - dt * 0.12);
+      } else if (camera.position.distanceTo(fireLight.position) < 8.0 && fireLight.intensity > 0.5) {
+        player.vitals.temp = Math.min(37.5, player.vitals.temp + dt * 0.22);
+      }
+
+      document.getElementById('hp-bar').style.width = `${player.vitals.hp}%`;
+      document.getElementById('hunger-bar').style.width = `${player.vitals.hunger}%`;
+      document.getElementById('thirst-bar').style.width = `${player.vitals.thirst}%`;
+      document.getElementById('temp-bar').style.width = `${((player.vitals.temp - 32) / 8) * 100}%`;
+      document.getElementById('stamina-bar').style.width = `${player.vitals.stamina}%`;
+
+      renderer.render(scene, camera);
+    }
+
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>

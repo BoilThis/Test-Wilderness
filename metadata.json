@@ -1,0 +1,6 @@
+{
+  "name": "Sylvan",
+  "description": "First-person wilderness survival game and visual engine with flowing rivers, lakes, ponds, dynamic buoyancy, and curated 3D assets.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
