@@ -242,6 +242,12 @@
       background: rgba(38, 166, 154, 0.85);
       border-color: #80CBC4;
     }
+    .action-btn.active {
+      background: rgba(255, 179, 0, 0.9);
+      border-color: #FFEE58;
+      box-shadow: 0 0 14px rgba(255, 238, 88, 0.6);
+      color: #111;
+    }
     .action-btn span {
       font-size: 9px;
       font-weight: 700;
@@ -301,6 +307,24 @@
       display: flex;
       align-items: center;
       justify-content: center;
+    }
+    /* Quality Tier Preset Bar */
+    .quality-bar {
+      margin-bottom: 12px;
+      padding: 9px 12px;
+      background: rgba(0, 0, 0, 0.5);
+      border-radius: 14px;
+      border: 1px solid rgba(38, 166, 154, 0.35);
+      flex-shrink: 0;
+    }
+    .quality-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      font-size: 11.5px;
+      font-weight: 700;
+      color: #80CBC4;
     }
     /* 4-Tab Navigation */
     .modal-tabs {
@@ -531,6 +555,9 @@
     <button class="action-btn" id="btn-campfire" title="Light Campfire">
       🔥<span>Campfire</span>
     </button>
+    <button class="action-btn" id="btn-sprint" title="Toggle Sprint">
+      ⚡<span>Sprint</span>
+    </button>
     <button class="action-btn" id="btn-jump">
       ⬆️<span>Jump</span>
     </button>
@@ -541,6 +568,19 @@
     <div class="modal-header">
       <div class="modal-title">⚙️ Wilderness Engine Configuration</div>
       <button class="close-btn" id="close-modal-btn">✕</button>
+    </div>
+
+    <!-- Global Quality Tier Selector (Low / Balanced / Cinematic) -->
+    <div class="quality-bar">
+      <div class="quality-header">
+        <span>⚡ Graphics Performance Preset</span>
+        <span class="badge" id="quality-val">Balanced (60 FPS)</span>
+      </div>
+      <div class="pill-group" id="quality-pill-group">
+        <button class="pill-btn" data-quality="low">⚡ Performance</button>
+        <button class="pill-btn active" data-quality="medium">⚖️ Balanced</button>
+        <button class="pill-btn" data-quality="high">💎 Cinematic</button>
+      </div>
     </div>
 
     <!-- 4 Section Tab Selector -->
@@ -669,6 +709,16 @@
           <div class="control-label"><span>Sunlight & Specular Intensity</span><span class="badge" id="sun-int-val">1.75x</span></div>
           <input type="range" class="control-slider" id="slider-sun-int" min="0.2" max="3.0" step="0.1" value="1.75">
         </div>
+        <div class="control-row">
+          <div class="control-label"><span>Camera Field of View (Base FOV)</span><span class="badge" id="fov-val">75°</span></div>
+          <input type="range" class="control-slider" id="slider-fov" min="55" max="95" step="1" value="75">
+        </div>
+        <div class="control-row">
+          <div class="control-label"><span>First-Person Motion & Stride Bob</span></div>
+          <div class="pill-group">
+            <button class="pill-btn active" id="btn-toggle-bob">👟 Head Bob ON</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -769,17 +819,69 @@
         gain.connect(this.ctx.destination);
         osc.start(now);
         osc.stop(now + 0.4);
+      },
+      playCaveDrip() {
+        if (!this.ctx) this.init();
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1450, now);
+        osc.frequency.exponentialRampToValueAtTime(680, now + 0.09);
+        gain.gain.setValueAtTime(0.18, now);
+        gain.gain.exponentialRampToValueAtTime(0.005, now + 0.18);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.18);
+      },
+      playWindGust() {
+        if (!this.ctx) this.init();
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const bufferSize = Math.floor(this.ctx.sampleRate * 0.7);
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = (Math.random() * 2 - 1) * Math.sin((i / bufferSize) * Math.PI);
+        }
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(280, now);
+        filter.frequency.linearRampToValueAtTime(460, now + 0.35);
+        filter.frequency.linearRampToValueAtTime(220, now + 0.7);
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0.07, now);
+        gain.gain.exponentialRampToValueAtTime(0.005, now + 0.7);
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.ctx.destination);
+        noise.start(now);
       }
     };
 
     // --- GAME ENGINE SETUP ---
     const container = document.getElementById('canvas-container');
     const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x82b2cb, 0.007);
+    scene.fog = new THREE.FogExp2(0x82b2cb, 0.0035);
 
-    const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 1000);
+    // Hor+ Adaptive Field of View Calculation (prevents telephoto magnification on tall portrait screens)
+    function getAdaptiveFOV(baseFov, aspect) {
+      if (aspect >= 1.25) return baseFov;
+      const targetHRad = (baseFov * Math.PI) / 180.0;
+      const vRad = 2.0 * Math.atan(Math.tan(targetHRad / 2.0) / Math.max(0.42, aspect));
+      const vDeg = (vRad * 180.0) / Math.PI;
+      return Math.min(96.0, Math.max(baseFov, vDeg));
+    }
+
+    const initialAspect = window.innerWidth / window.innerHeight;
+    const initialFov = getAdaptiveFOV(75, initialAspect);
+    const camera = new THREE.PerspectiveCamera(initialFov, initialAspect, 0.15, 1000);
     // Scenic player overlook facing north towards river flowing into the lake
-    camera.position.set(0, 3.8, 12);
+    camera.position.set(0, 10.65, 12);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -836,19 +938,21 @@
     const hemiLight = new THREE.HemisphereLight(0xe8f4f8, 0x1f3418, 0.95);
     scene.add(hemiLight);
 
-    const sunLight = new THREE.DirectionalLight(0xfffae8, 1.75);
+    const sunLight = new THREE.DirectionalLight(0xfffae8, 1.85);
     sunLight.position.set(45, 75, -50);
     sunLight.castShadow = true;
-    sunLight.shadow.mapSize.width = 1024;
-    sunLight.shadow.mapSize.height = 1024;
-    sunLight.shadow.camera.near = 0.5;
-    sunLight.shadow.camera.far = 280;
-    const d = 50;
+    sunLight.shadow.mapSize.width = 2048;
+    sunLight.shadow.mapSize.height = 2048;
+    sunLight.shadow.camera.near = 1.0;
+    sunLight.shadow.camera.far = 320;
+    sunLight.shadow.bias = -0.0003;
+    const d = 75;
     sunLight.shadow.camera.left = -d;
     sunLight.shadow.camera.right = d;
     sunLight.shadow.camera.top = d;
     sunLight.shadow.camera.bottom = -d;
     scene.add(sunLight);
+    scene.add(sunLight.target);
 
     const fireLight = new THREE.PointLight(0xff6d00, 2.8, 20);
     fireLight.position.set(2.5, 1.6, 9.5);
@@ -856,86 +960,250 @@
     scene.add(fireLight);
 
     // --- PROCEDURAL HIGH-RESOLUTION TEXTURES ---
-    // 1. Forest Moss & Grass
-    function createForestGroundTexture() {
+    // --- PROCEDURAL HIGH-RESOLUTION PBR TEXTURES & NORMAL MAPS ---
+    function createNormalMapFromCanvas(srcCanvas, strength = 2.0) {
+      const w = srcCanvas.width;
+      const h = srcCanvas.height;
+      const srcCtx = srcCanvas.getContext('2d');
+      const srcData = srcCtx.getImageData(0, 0, w, h).data;
+
+      const normCanvas = document.createElement('canvas');
+      normCanvas.width = w;
+      normCanvas.height = h;
+      const normCtx = normCanvas.getContext('2d');
+      const normImg = normCtx.createImageData(w, h);
+      const normData = normImg.data;
+
+      function getLum(x, y) {
+        const px = ((x + w) % w);
+        const py = ((y + h) % h);
+        const idx = (py * w + px) * 4;
+        return (srcData[idx] * 0.299 + srcData[idx + 1] * 0.587 + srcData[idx + 2] * 0.114) / 255.0;
+      }
+
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const l = getLum(x - 1, y);
+          const r = getLum(x + 1, y);
+          const u = getLum(x, y - 1);
+          const d = getLum(x, y + 1);
+
+          const dx = (l - r) * strength;
+          const dy = (u - d) * strength;
+          const dz = 1.0;
+          const len = Math.hypot(dx, dy, dz);
+
+          const nx = (dx / len) * 0.5 + 0.5;
+          const ny = (dy / len) * 0.5 + 0.5;
+          const nz = (dz / len) * 0.5 + 0.5;
+
+          const idx = (y * w + x) * 4;
+          normData[idx] = Math.round(nx * 255);
+          normData[idx + 1] = Math.round(ny * 255);
+          normData[idx + 2] = Math.round(nz * 255);
+          normData[idx + 3] = 255;
+        }
+      }
+      normCtx.putImageData(normImg, 0, 0);
+      const tex = new THREE.CanvasTexture(normCanvas);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      return tex;
+    }
+
+    // 1. Procedural Forest Loam & Moss Texture (512x512 with Organic Multi-Frequency Grain)
+    function createForestGroundCanvas() {
       const c = document.createElement('canvas');
       c.width = 512;
       c.height = 512;
       const ctx = c.getContext('2d');
-      ctx.fillStyle = '#2d4d23';
+
+      // Base soil tone (rich dark humus)
+      ctx.fillStyle = '#22301c';
       ctx.fillRect(0, 0, 512, 512);
 
-      const tones = ['#1f3b17', '#28501e', '#346626', '#437c32', '#1a2e13', '#3d3020'];
-      for (let i = 0; i < 28000; i++) {
-        ctx.fillStyle = tones[Math.floor(Math.random() * tones.length)];
-        ctx.fillRect(Math.random() * 512, Math.random() * 512, 2, 2.5);
-      }
-      for (let i = 0; i < 150; i++) {
+      // Layer 1: Multi-toned organic moss cushions
+      const mossTones = ['#2c451d', '#355423', '#41662c', '#4d7a34', '#283d1b', '#1a2914'];
+      for (let i = 0; i < 400; i++) {
         const cx = Math.random() * 512;
         const cy = Math.random() * 512;
-        const rad = 10 + Math.random() * 26;
-        ctx.fillStyle = Math.random() > 0.4 ? 'rgba(25, 48, 18, 0.45)' : 'rgba(55, 42, 26, 0.4)';
+        const rad = 8 + Math.random() * 22;
+        ctx.fillStyle = mossTones[Math.floor(Math.random() * mossTones.length)];
         ctx.beginPath();
         ctx.arc(cx, cy, rad, 0, Math.PI * 2);
         ctx.fill();
       }
-      const tex = new THREE.CanvasTexture(c);
-      tex.wrapS = THREE.RepeatWrapping;
-      tex.wrapT = THREE.RepeatWrapping;
-      return tex;
-    }
 
-    // 2. Granite Cliff Rock Texture
-    function createCliffRockTexture() {
-      const c = document.createElement('canvas');
-      c.width = 512;
-      c.height = 512;
-      const ctx = c.getContext('2d');
-      ctx.fillStyle = '#454e54';
-      ctx.fillRect(0, 0, 512, 512);
-
-      const rockTones = ['#363c42', '#525b63', '#2c3136', '#646f78', '#3e454b'];
-      for (let y = 0; y < 512; y += 3) {
-        ctx.fillStyle = rockTones[Math.floor(Math.random() * rockTones.length)];
-        ctx.fillRect(0, y, 512, 2 + Math.random() * 3);
-      }
-      for (let i = 0; i < 6000; i++) {
-        ctx.fillStyle = Math.random() > 0.5 ? 'rgba(20,24,28,0.25)' : 'rgba(120,135,145,0.2)';
-        ctx.fillRect(Math.random() * 512, Math.random() * 512, 3, 10 + Math.random() * 25);
-      }
-      const tex = new THREE.CanvasTexture(c);
-      tex.wrapS = THREE.RepeatWrapping;
-      tex.wrapT = THREE.RepeatWrapping;
-      return tex;
-    }
-
-    // 3. Shoreline Sand & Gravel
-    function createSandGravelTexture() {
-      const c = document.createElement('canvas');
-      c.width = 512;
-      c.height = 512;
-      const ctx = c.getContext('2d');
-      ctx.fillStyle = '#615443';
-      ctx.fillRect(0, 0, 512, 512);
-
-      const sandTones = ['#756754', '#524536', '#877762', '#453a2d', '#99876f'];
+      // Layer 2: Fine soil grains & dark damp loam crevices
+      const soilTones = ['#1a1f16', '#261e14', '#151c12', '#362a1c'];
       for (let i = 0; i < 35000; i++) {
-        ctx.fillStyle = sandTones[Math.floor(Math.random() * sandTones.length)];
-        ctx.fillRect(Math.random() * 512, Math.random() * 512, 2, 2);
+        ctx.fillStyle = soilTones[Math.floor(Math.random() * soilTones.length)];
+        ctx.fillRect(Math.random() * 512, Math.random() * 512, 1.5, 1.5);
       }
+
+      // Layer 3: Scattered pine needles & twigs (fine angled mulch)
+      const needleTones = ['#5e3c1e', '#734b26', '#482e16', '#855930', '#3b2512'];
+      ctx.lineWidth = 1.2;
+      for (let i = 0; i < 2200; i++) {
+        const x = Math.random() * 512;
+        const y = Math.random() * 512;
+        const len = 4 + Math.random() * 10;
+        const ang = Math.random() * Math.PI * 2;
+        ctx.strokeStyle = needleTones[Math.floor(Math.random() * needleTones.length)];
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + Math.cos(ang) * len, y + Math.sin(ang) * len);
+        ctx.stroke();
+      }
+
+      // Layer 4: Micro pebbles and quartz flecks
+      for (let i = 0; i < 400; i++) {
+        ctx.fillStyle = Math.random() > 0.5 ? '#7a8576' : '#525c4f';
+        ctx.beginPath();
+        ctx.arc(Math.random() * 512, Math.random() * 512, 1.2 + Math.random() * 2.0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
       const tex = new THREE.CanvasTexture(c);
       tex.wrapS = THREE.RepeatWrapping;
       tex.wrapT = THREE.RepeatWrapping;
-      return tex;
+      return { canvas: c, tex: tex };
     }
 
-    const groundTex = createForestGroundTexture();
-    const cliffTex = createCliffRockTexture();
-    const sandTex = createSandGravelTexture();
+    // 2. Procedural Stratified Granite & Metamorphic Rock Texture (512x512)
+    function createCliffRockCanvas() {
+      const c = document.createElement('canvas');
+      c.width = 512;
+      c.height = 512;
+      const ctx = c.getContext('2d');
+
+      // Base weathered granite bedrock
+      ctx.fillStyle = '#3e464c';
+      ctx.fillRect(0, 0, 512, 512);
+
+      // Layer 1: Geological horizontal rock strata banding
+      const strataTones = ['#32393e', '#495259', '#2a2f34', '#556068', '#384046', '#5d6972'];
+      let y = 0;
+      while (y < 512) {
+        const bandH = 3 + Math.floor(Math.random() * 12);
+        ctx.fillStyle = strataTones[Math.floor(Math.random() * strataTones.length)];
+        ctx.fillRect(0, y, 512, bandH);
+        y += bandH;
+      }
+
+      // Layer 2: Fractured joint lines & deep dark shadow cracks
+      ctx.strokeStyle = '#181d21';
+      for (let i = 0; i < 180; i++) {
+        ctx.lineWidth = 1.0 + Math.random() * 2.0;
+        let cx = Math.random() * 512;
+        let cy = Math.random() * 512;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        for (let s = 0; s < 4; s++) {
+          cx += (Math.random() - 0.5) * 45;
+          cy += (Math.random() - 0.2) * 20;
+          ctx.lineTo(cx, cy);
+        }
+        ctx.stroke();
+      }
+
+      // Layer 3: Quartz mineral veins (white/grey crystalline streaks)
+      ctx.strokeStyle = 'rgba(215, 226, 235, 0.65)';
+      for (let i = 0; i < 35; i++) {
+        ctx.lineWidth = 0.8 + Math.random() * 1.6;
+        let cx = Math.random() * 512;
+        let cy = Math.random() * 512;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        for (let s = 0; s < 5; s++) {
+          cx += (Math.random() - 0.5) * 60;
+          cy += (Math.random() - 0.5) * 25;
+          ctx.lineTo(cx, cy);
+        }
+        ctx.stroke();
+      }
+
+      // Layer 4: Lichen deposits (mountain lichen clings to rock)
+      const lichenTones = ['rgba(102, 122, 92, 0.45)', 'rgba(128, 148, 114, 0.4)', 'rgba(84, 99, 75, 0.5)'];
+      for (let i = 0; i < 120; i++) {
+        const lx = Math.random() * 512;
+        const ly = Math.random() * 512;
+        const lr = 6 + Math.random() * 16;
+        ctx.fillStyle = lichenTones[Math.floor(Math.random() * lichenTones.length)];
+        ctx.beginPath();
+        ctx.arc(lx, ly, lr, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Layer 5: High-frequency rock grain noise
+      for (let i = 0; i < 28000; i++) {
+        ctx.fillStyle = Math.random() > 0.5 ? 'rgba(20, 24, 28, 0.22)' : 'rgba(160, 175, 188, 0.18)';
+        ctx.fillRect(Math.random() * 512, Math.random() * 512, 1.5, 2.5);
+      }
+
+      const tex = new THREE.CanvasTexture(c);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      return { canvas: c, tex: tex };
+    }
+
+    // 3. Procedural Weathered River Gravel & Shoreline Silt (512x512)
+    function createSandGravelCanvas() {
+      const c = document.createElement('canvas');
+      c.width = 512;
+      c.height = 512;
+      const ctx = c.getContext('2d');
+
+      // Base damp riverbed silt
+      ctx.fillStyle = '#504434';
+      ctx.fillRect(0, 0, 512, 512);
+
+      // Layer 1: Sand tone gradients
+      const sandTones = ['#5e503f', '#44382a', '#6a5c49', '#3b3124', '#756653'];
+      for (let i = 0; i < 30000; i++) {
+        ctx.fillStyle = sandTones[Math.floor(Math.random() * sandTones.length)];
+        ctx.fillRect(Math.random() * 512, Math.random() * 512, 1.8, 1.8);
+      }
+
+      // Layer 2: Rounded river pebbles with drop shadows
+      const pebbleTones = ['#7c7467', '#5a544a', '#8a8275', '#484238', '#9e9587', '#3d372e'];
+      for (let i = 0; i < 700; i++) {
+        const px = Math.random() * 512;
+        const py = Math.random() * 512;
+        const pr = 2.5 + Math.random() * 6.5;
+        // Shadow
+        ctx.fillStyle = 'rgba(20, 16, 12, 0.4)';
+        ctx.beginPath();
+        ctx.ellipse(px + 1.2, py + 1.2, pr, pr * 0.75, Math.random() * Math.PI, 0, Math.PI * 2);
+        ctx.fill();
+        // Pebble body
+        ctx.fillStyle = pebbleTones[Math.floor(Math.random() * pebbleTones.length)];
+        ctx.beginPath();
+        ctx.ellipse(px, py, pr, pr * 0.75, Math.random() * Math.PI, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      const tex = new THREE.CanvasTexture(c);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      return { canvas: c, tex: tex };
+    }
+
+    const groundObj = createForestGroundCanvas();
+    const groundTex = groundObj.tex;
+    const groundNormTex = createNormalMapFromCanvas(groundObj.canvas, 2.6);
+
+    const cliffObj = createCliffRockCanvas();
+    const cliffTex = cliffObj.tex;
+    const cliffNormTex = createNormalMapFromCanvas(cliffObj.canvas, 3.6);
+
+    const sandObj = createSandGravelCanvas();
+    const sandTex = sandObj.tex;
+    const sandNormTex = createNormalMapFromCanvas(sandObj.canvas, 2.2);
 
     // --- PROCEDURAL ERODED TERRAIN WITH EXPANDED 800m WORLD ---
     const terrainSize = 800;
-    const terrainSegments = 200;
+    const terrainSegments = 240;
     const terrainGeo = new THREE.PlaneGeometry(terrainSize, terrainSize, terrainSegments, terrainSegments);
     terrainGeo.rotateX(-Math.PI / 2);
 
@@ -943,17 +1211,27 @@
       // Base elevation so the southern highlands stay above water
       let y = 3.5;
 
-      // Multi-octave rolling hills
+      // Multi-octave rolling hills with natural geological undulations
       y += Math.sin(x * 0.012) * Math.cos(z * 0.012) * 4.5
          + Math.sin(x * 0.028 + 0.7) * Math.cos(z * 0.028) * 2.1
          + Math.sin(x * 0.055) * Math.cos(z * 0.055) * 0.8;
 
-      // Eastern Alpine Ridge
+      // Organic soil & terrace variation to break mathematical sine uniformity
+      const microErosion = Math.sin(x * 0.075 + Math.cos(z * 0.065)) * 0.55
+                         + Math.sin(z * 0.115 - Math.cos(x * 0.095)) * 0.30;
+      y += microErosion;
+
+      // Eastern Alpine Ridge (Ridged multi-octave fractal mountain modeling)
       if (x > 40) {
         const alpineDist = Math.max(0, x - 40);
-        const alpine = Math.pow(alpineDist / 180, 1.4) * 48
-                     + Math.sin(z * 0.04) * 6
-                     + Math.sin(x * 0.08) * Math.cos(z * 0.06) * 4;
+        // Razorback ridges and geological rock gullies
+        const ridge1 = (1.0 - Math.abs(Math.sin(x * 0.045 + z * 0.032))) * 7.5;
+        const ridge2 = (1.0 - Math.abs(Math.sin(x * 0.092 - z * 0.065))) * 3.8;
+        const cragNoise = Math.sin(x * 0.14) * Math.cos(z * 0.12) * 2.2;
+
+        const alpine = Math.pow(alpineDist / 180, 1.35) * 48
+                     + ridge1 + ridge2 + cragNoise
+                     + Math.sin(z * 0.04) * 6;
         y = Math.max(y, alpine * Math.min(1, alpineDist / 40));
       }
 
@@ -1005,7 +1283,7 @@
     // SLOPE-AWARE MULTI-TEXTURE TERRAIN MATERIAL
     const terrainMat = new THREE.MeshStandardMaterial({
       map: groundTex,
-      roughness: 0.88,
+      roughness: 0.85,
       metalness: 0.05
     });
 
@@ -1018,37 +1296,111 @@
     terrainMat.onBeforeCompile = function (shader) {
       shader.uniforms.uCliffTex = { value: cliffTex };
       shader.uniforms.uSandTex = { value: sandTex };
+      shader.uniforms.uCliffNorm = { value: cliffNormTex };
+      shader.uniforms.uGroundNorm = { value: groundNormTex };
+      shader.uniforms.uSandNorm = { value: sandNormTex };
       shader.uniforms.uCliffThreshold = window.terrainUniforms.uCliffThreshold;
       shader.uniforms.uShoreHeight = window.terrainUniforms.uShoreHeight;
       shader.vertexShader = shader.vertexShader.replace(
         '#include <common>',
-        '#include <common>\nvarying vec3 vWorldNormal;\nvarying vec3 vWorldPos;\n'
+        `#include <common>
+        varying vec3 vWorldNormal;
+        varying vec3 vWorldPos;
+        `
       ).replace(
         '#include <begin_vertex>',
-        '#include <begin_vertex>\nvWorldNormal = normalize(mat3(modelMatrix) * normal);\nvWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;\n'
+        `#include <begin_vertex>
+        vWorldNormal = normalize(mat3(modelMatrix) * normal);
+        vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+        `
       );
       shader.fragmentShader = shader.fragmentShader.replace(
         '#include <common>',
-        '#include <common>\nuniform sampler2D uCliffTex;\nuniform sampler2D uSandTex;\nuniform float uCliffThreshold;\nuniform float uShoreHeight;\nvarying vec3 vWorldNormal;\nvarying vec3 vWorldPos;\n'
+        `#include <common>
+        uniform sampler2D uCliffTex;
+        uniform sampler2D uSandTex;
+        uniform sampler2D uCliffNorm;
+        uniform sampler2D uGroundNorm;
+        uniform sampler2D uSandNorm;
+        uniform float uCliffThreshold;
+        uniform float uShoreHeight;
+        varying vec3 vWorldNormal;
+        varying vec3 vWorldPos;
+        `
       ).replace(
         '#include <map_fragment>',
         `
-        vec4 grassCol = texture2D(map, vUv * 20.0);
-        vec4 cliffCol = texture2D(uCliffTex, vUv * 14.0);
-        vec4 sandCol = texture2D(uSandTex, vUv * 24.0);
+        // 1. Dual-Frequency Coordinates (World Space - Zero Stretching across 800m)
+        vec2 macroUV = vWorldPos.xz * 0.038;
+        vec2 microUV = vWorldPos.xz * 0.62;
 
-        // Slope calculation
+        // 2. Triplanar Side Coordinates for Vertical Cliffs
+        vec2 sideUV_X = vec2(vWorldPos.z, vWorldPos.y) * 0.085;
+        vec2 sideUV_Z = vec2(vWorldPos.x, vWorldPos.y) * 0.085;
+        vec2 sideMicro_X = vec2(vWorldPos.z, vWorldPos.y) * 0.42;
+        vec2 sideMicro_Z = vec2(vWorldPos.x, vWorldPos.y) * 0.42;
+
+        // 3. Triplanar Blending Weights
+        vec3 blendWeights = pow(abs(vWorldNormal), vec3(4.0));
+        blendWeights /= max(0.0001, (blendWeights.x + blendWeights.y + blendWeights.z));
+
+        // 4. Ground Loam & Forest Moss (Dual-Frequency blend: broad soil tones + razor sharp pine needles & pebbles)
+        vec4 gMacro = texture2D(map, macroUV);
+        vec4 gMicro = texture2D(map, microUV);
+        vec4 grassCol = gMacro * 0.45 + gMicro * 0.65;
+
+        // 5. Shoreline River Gravel & Sand (Dual-Frequency)
+        vec4 sMacro = texture2D(uSandTex, macroUV * 1.3);
+        vec4 sMicro = texture2D(uSandTex, microUV * 1.5);
+        vec4 sandCol = sMacro * 0.45 + sMicro * 0.65;
+
+        // 6. Triplanar Metamorphic Granite Cliff Rock (Projected from X, Y, Z - ZERO vertical smearing on walls)
+        vec4 cX = texture2D(uCliffTex, sideUV_X) * 0.55 + texture2D(uCliffTex, sideMicro_X) * 0.55;
+        vec4 cZ = texture2D(uCliffTex, sideUV_Z) * 0.55 + texture2D(uCliffTex, sideMicro_Z) * 0.55;
+        vec4 cY = texture2D(uCliffTex, macroUV * 1.1) * 0.55 + texture2D(uCliffTex, microUV * 0.8) * 0.55;
+        vec4 cliffCol = cX * blendWeights.x + cY * blendWeights.y + cZ * blendWeights.z;
+
+        // 7. Slope & Elevation Calculations
         float slope = clamp(dot(vWorldNormal, vec3(0.0, 1.0, 0.0)), 0.0, 1.0);
-        float cliffFactor = clamp((uCliffThreshold - slope) * 4.0, 0.0, 1.0);
+        float cliffFactor = clamp((uCliffThreshold - slope) * 4.5, 0.0, 1.0);
+        float shoreFactor = clamp((uShoreHeight - vWorldPos.y) * 3.2, 0.0, 1.0);
 
-        // Elevation-based variation so distant terrain looks different
         float elev = vWorldPos.y;
-        float highFactor = clamp((elev - 12.0) / 20.0, 0.0, 1.0);
-        float lowFactor = clamp((2.0 - elev) / 4.0, 0.0, 1.0);
+        float highFactor = clamp((elev - 14.0) / 22.0, 0.0, 1.0);
+        float lowFactor = clamp((1.8 - elev) / 3.5, 0.0, 1.0);
 
-        vec4 baseTerrain = mix(grassCol, sandCol, max(shoreFactor, lowFactor * 0.6));
-        baseTerrain = mix(baseTerrain, cliffCol, max(cliffFactor, highFactor * 0.7));
+        // High Alpine Peak Frost & Rime
+        float snowFactor = clamp((elev - 36.0) / 10.0, 0.0, 1.0) * clamp(slope * 1.6, 0.0, 1.0);
+        vec3 snowCol = vec3(0.92, 0.95, 0.99);
+
+        // Blend Terrain Layers
+        vec4 baseTerrain = mix(grassCol, sandCol, max(shoreFactor, lowFactor * 0.55));
+        baseTerrain = mix(baseTerrain, cliffCol, max(cliffFactor, highFactor * 0.75));
+        baseTerrain.rgb = mix(baseTerrain.rgb, snowCol, snowFactor * 0.85);
+
         diffuseColor *= baseTerrain;
+        `
+      ).replace(
+        '#include <roughnessmap_fragment>',
+        `
+        #include <roughnessmap_fragment>
+        float tRough = mix(0.85, 0.65, max(cliffFactor, highFactor * 0.75));
+        tRough = mix(tRough, 0.18, shoreFactor * 0.9);
+        tRough = mix(tRough, 0.42, snowFactor * 0.85);
+        roughnessFactor = tRough;
+        `
+      ).replace(
+        '#include <normal_fragment_begin>',
+        `
+        #include <normal_fragment_begin>
+        vec3 gNorm = texture2D(uGroundNorm, microUV).xyz * 2.0 - 1.0;
+        vec3 cNormX = texture2D(uCliffNorm, sideMicro_X).xyz * 2.0 - 1.0;
+        vec3 cNormZ = texture2D(uCliffNorm, sideMicro_Z).xyz * 2.0 - 1.0;
+        vec3 cNormY = texture2D(uCliffNorm, microUV).xyz * 2.0 - 1.0;
+        vec3 cNorm = cNormX * blendWeights.x + cNormY * blendWeights.y + cNormZ * blendWeights.z;
+
+        vec3 perturbN = mix(gNorm, cNorm, max(cliffFactor, highFactor * 0.75));
+        normal = normalize(normal + perturbN * 0.52);
         `
       );
     };
@@ -1057,23 +1409,23 @@
     terrainMesh.receiveShadow = true;
     scene.add(terrainMesh);
 
-    // --- SENTINEL LIGHTHOUSE PLACEHOLDER (Milestone A landmark) ---
+    // --- SENTINEL LIGHTHOUSE (Grand Ocean Landmark) ---
     const lighthouseGroup = new THREE.Group();
-    const towerGeo = new THREE.CylinderGeometry(1.8, 2.4, 14, 12);
-    const towerMat = new THREE.MeshStandardMaterial({ color: 0x8d8d8d, roughness: 0.75 });
+    const towerGeo = new THREE.CylinderGeometry(2.2, 3.2, 22, 14);
+    const towerMat = new THREE.MeshStandardMaterial({ color: 0x9e9e9e, roughness: 0.75 });
     const tower = new THREE.Mesh(towerGeo, towerMat);
-    tower.position.y = 7;
+    tower.position.y = 11;
     tower.castShadow = true;
     lighthouseGroup.add(tower);
 
-    const lanternGeo = new THREE.CylinderGeometry(1.4, 1.4, 2.2, 8);
-    const lanternMat = new THREE.MeshStandardMaterial({ color: 0xfff3cd, emissive: 0xffaa00, emissiveIntensity: 0.8, roughness: 0.3 });
+    const lanternGeo = new THREE.CylinderGeometry(1.8, 1.8, 2.8, 10);
+    const lanternMat = new THREE.MeshStandardMaterial({ color: 0xfff3cd, emissive: 0xffaa00, emissiveIntensity: 0.85, roughness: 0.3 });
     const lantern = new THREE.Mesh(lanternGeo, lanternMat);
-    lantern.position.y = 15.2;
+    lantern.position.y = 23.4;
     lighthouseGroup.add(lantern);
 
-    const beacon = new THREE.SpotLight(0xfff3cd, 4, 80, Math.PI / 6, 0.4);
-    beacon.position.set(0, 16, 0);
+    const beacon = new THREE.SpotLight(0xfff3cd, 4.5, 120, Math.PI / 5, 0.35);
+    beacon.position.set(0, 24.2, 0);
     beacon.target.position.set(20, 8, -40);
     lighthouseGroup.add(beacon);
     lighthouseGroup.add(beacon.target);
@@ -1092,64 +1444,68 @@
       if (baseY < 1.0) return null; // only place on solid ground
 
       const group = new THREE.Group();
-      const radius = options.radius || (3.5 + Math.random() * 2.0);
+      const radius = options.radius || (6.0 + Math.random() * 2.5);
       const hasPool = options.hasPool !== undefined ? options.hasPool : Math.random() > 0.4;
       const glowColor = options.glowColor || (Math.random() > 0.5 ? 0x00bcd4 : 0x7e57c2);
 
-      const rockMat = new THREE.MeshStandardMaterial({ color: 0x5a6570, roughness: 0.85 });
+      const rockMat = new THREE.MeshStandardMaterial({
+        color: 0x5a6570,
+        roughness: 0.85,
+        side: THREE.DoubleSide
+      });
 
-      // Entrance collar for sealing
-      const collarGeo = new THREE.CylinderGeometry(radius * 0.85, radius * 0.95, 1.3, 14, 1, true);
+      // Entrance collar for sealing with comfortable standing clearance
+      const collarGeo = new THREE.CylinderGeometry(radius * 0.85, radius * 0.95, 2.4, 16, 1, true);
       const collar = new THREE.Mesh(collarGeo, rockMat);
       collar.rotation.x = Math.PI / 2;
-      collar.position.set(0, 1.6, 0.5);
+      collar.position.set(0, 2.8, 0.6);
       group.add(collar);
 
-      // Arch
-      const archGeo = new THREE.TorusGeometry(radius * 0.7, 0.5, 8, 14, Math.PI);
+      // Grand Entrance Arch
+      const archGeo = new THREE.TorusGeometry(radius * 0.72, 0.75, 10, 18, Math.PI);
       const arch = new THREE.Mesh(archGeo, rockMat);
       arch.rotation.x = Math.PI / 2;
-      arch.position.set(0, 1.8, 0.15);
+      arch.position.set(0, 3.0, 0.2);
       group.add(arch);
 
       // Floor
-      const floorGeo = new THREE.CircleGeometry(radius, 18);
+      const floorGeo = new THREE.CircleGeometry(radius, 20);
       const floorMat = new THREE.MeshStandardMaterial({ color: 0x3d4a52, roughness: 0.9 });
       const floor = new THREE.Mesh(floorGeo, floorMat);
       floor.rotation.x = -Math.PI / 2;
-      floor.position.y = -0.3;
+      floor.position.y = -0.4;
       group.add(floor);
 
-      // Roof
-      const roofGeo = new THREE.SphereGeometry(radius * 1.15, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2);
+      // Vaulted Dome Roof
+      const roofGeo = new THREE.SphereGeometry(radius * 1.25, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2);
       const roof = new THREE.Mesh(roofGeo, rockMat);
-      roof.position.y = 1.4;
-      roof.scale.y = 0.5 + Math.random() * 0.2;
+      roof.position.y = 3.6;
+      roof.scale.y = 0.65 + Math.random() * 0.25;
       group.add(roof);
 
-      // Walls
-      const wallGeo = new THREE.CylinderGeometry(radius * 1.05, radius * 1.05, 2.2, 14, 1, true);
+      // Deep Stone Walls
+      const wallGeo = new THREE.CylinderGeometry(radius * 1.05, radius * 1.05, 4.4, 16, 1, true);
       const walls = new THREE.Mesh(wallGeo, rockMat);
-      walls.position.y = 0.7;
+      walls.position.y = 2.0;
       group.add(walls);
 
       // Optional glowing pool + light
       if (hasPool) {
-        const poolGeo = new THREE.CircleGeometry(radius * 0.4, 14);
+        const poolGeo = new THREE.CircleGeometry(radius * 0.45, 16);
         const poolMat = new THREE.MeshStandardMaterial({
           color: glowColor,
           emissive: glowColor,
-          emissiveIntensity: 0.65,
+          emissiveIntensity: 0.7,
           roughness: 0.15,
           metalness: 0.3
         });
         const pool = new THREE.Mesh(poolGeo, poolMat);
         pool.rotation.x = -Math.PI / 2;
-        pool.position.set((Math.random() - 0.5) * 1.2, -0.2, -radius * 0.3);
+        pool.position.set((Math.random() - 0.5) * 1.6, -0.3, -radius * 0.3);
         group.add(pool);
 
-        const light = new THREE.PointLight(glowColor, 2.4, radius * 3);
-        light.position.set(pool.position.x, 1.2, pool.position.z);
+        const light = new THREE.PointLight(glowColor, 2.8, radius * 3.5);
+        light.position.set(pool.position.x, 2.0, pool.position.z);
         group.add(light);
       }
 
@@ -1158,20 +1514,258 @@
 
       const cavernData = {
         x, z,
-        radius: radius * 0.95,
-        floorY: baseY - 0.3,
-        ceilingY: baseY + 2.8 + Math.random() * 0.8,
+        radius: radius * 1.05,
+        floorY: baseY - 0.4,
+        ceilingY: baseY + 5.2 + Math.random() * 1.2,
         name: options.name || "Cavern"
       };
       window.caverns.push(cavernData);
       return cavernData;
     }
 
-    // Seed caverns closer to the starting overlook so they can be found
-    createProceduralCavern(-12, -8, { name: "Crystal Cavern", hasPool: true, glowColor: 0x00bcd4, radius: 4.5 });
-    createProceduralCavern(18, 6, { name: "Alpine Grotto", hasPool: true, glowColor: 0x7e57c2, radius: 3.6 });
-    createProceduralCavern(-22, 18, { name: "Meadow Cave", hasPool: false, radius: 3.4 });
-    createProceduralCavern(6, -28, { name: "Coastal Hollow", hasPool: true, glowColor: 0x26c6da, radius: 4.0 });
+    // Seed caverns with grand scale proportions
+    createProceduralCavern(-12, -8, { name: "Crystal Cavern", hasPool: true, glowColor: 0x00bcd4, radius: 7.0 });
+    createProceduralCavern(18, 6, { name: "Alpine Grotto", hasPool: true, glowColor: 0x7e57c2, radius: 6.2 });
+    createProceduralCavern(-22, 18, { name: "Meadow Cave", hasPool: false, radius: 5.8 });
+    createProceduralCavern(6, -28, { name: "Coastal Hollow", hasPool: true, glowColor: 0x26c6da, radius: 6.8 });
+
+    // --- WHISPERING TUNNEL INTERIOR (MILESTONE B - NATURAL ALPINE CAVERN) ---
+    function createWhisperingTunnel() {
+      const group = new THREE.Group();
+
+      const rockMat = new THREE.MeshStandardMaterial({
+        map: cliffTex,
+        normalMap: cliffNormTex,
+        roughness: 0.9,
+        metalness: 0.06,
+        color: 0x545e68,
+        side: THREE.DoubleSide
+      });
+
+      // Tunnel route traveling eastward directly into the rising Eastern Alpine Ridge
+      const tunnelPath = [
+        { x: 70, z: 6,   heading: 0.42, radius: 4.8 },
+        { x: 77, z: 9,   heading: 0.38, radius: 5.2 },
+        { x: 85, z: 12,  heading: 0.34, radius: 5.8 },
+        { x: 93, z: 15,  heading: 0.30, radius: 6.4 },
+        { x: 101, z: 18, heading: 0.25, radius: 7.2, isSanctuary: true }
+      ];
+
+      const tunnelBaseY = getTerrainHeight(70, 6) - 0.25;
+
+      // 1. Natural Rugged Granite Rock Portal at the Mountain Base (x = 70, z = 6)
+      const entranceX = 70;
+      const entranceZ = 6;
+      const entranceY = tunnelBaseY;
+
+      // Layered natural granite boulders framing the cave mouth arch
+      for (let i = 0; i < 14; i++) {
+        const ang = (i / 13) * Math.PI;
+        const archR = 5.2 + (i % 2) * 0.6;
+        const bRadius = 1.8 + (i % 3) * 0.5;
+        const bx = entranceX - Math.cos(ang) * archR * 0.7;
+        const bz = entranceZ - Math.cos(ang) * archR * 0.5;
+        const by = entranceY + Math.sin(ang) * 5.2 + 0.3;
+
+        const bMesh = createGraniteBoulder(bRadius);
+        bMesh.position.set(bx, by, bz);
+        group.add(bMesh);
+      }
+
+      // Massive keystone boulders forming natural cave ceiling overhang
+      const keystone1 = createGraniteBoulder(2.8);
+      keystone1.position.set(entranceX, entranceY + 5.6, entranceZ);
+      group.add(keystone1);
+
+      const keystone2 = createGraniteBoulder(2.4);
+      keystone2.position.set(entranceX + 2.0, entranceY + 5.2, entranceZ + 1.5);
+      group.add(keystone2);
+
+      // Natural stalactite teeth hanging from the cave mouth ceiling
+      for (let s = 0; s < 5; s++) {
+        const stGeo = new THREE.ConeGeometry(0.22 + (s % 2) * 0.06, 1.3 + (s % 3) * 0.4, 6);
+        const stMesh = new THREE.Mesh(stGeo, rockMat);
+        stMesh.rotation.x = Math.PI;
+        stMesh.position.set(entranceX - 2.0 + s * 1.0, entranceY + 4.2 - (s % 2) * 0.3, entranceZ + (s % 2) * 0.4);
+        group.add(stMesh);
+      }
+
+      // 2. Interior Mountain Tunnel Vaults & Bioluminescent Formations
+      const crystalColors = [0x00e5ff, 0x76ff03, 0xffd600, 0xb388ff, 0x00e5ff];
+
+      tunnelPath.forEach((seg, idx) => {
+        const terrH = getTerrainHeight(seg.x, seg.z);
+
+        // Register in window.caverns for smooth ground & ceiling collision
+        window.caverns.push({
+          x: seg.x,
+          z: seg.z,
+          radius: seg.radius * 1.15,
+          floorY: tunnelBaseY - 0.35,
+          ceilingY: tunnelBaseY + 5.6,
+          name: "Whispering Tunnel"
+        });
+
+        // Carved stone vault geometry with rough-hewn perturbed rock surface
+        const vaultGeo = new THREE.CylinderGeometry(seg.radius, seg.radius * 1.05, 8.8, 16, 4, true);
+        const vPos = vaultGeo.attributes.position;
+        for (let vi = 0; vi < vPos.count; vi++) {
+          const vx = vPos.getX(vi);
+          const vy = vPos.getY(vi);
+          const vz = vPos.getZ(vi);
+          const n = 1.0 + Math.sin(vx * 2.2 + vy * 2.8) * 0.15 + Math.cos(vz * 2.5) * 0.12;
+          vPos.setXYZ(vi, vx * n, vy, vz * n);
+        }
+        vaultGeo.computeVertexNormals();
+
+        const vaultMesh = new THREE.Mesh(vaultGeo, rockMat);
+        vaultMesh.position.set(seg.x, tunnelBaseY + 3.8, seg.z);
+        vaultMesh.rotation.y = seg.heading;
+        vaultMesh.rotation.z = Math.PI / 2;
+        group.add(vaultMesh);
+
+        // Natural mountain rock cover over each segment merging into the ridge
+        const berm = createGraniteBoulder(seg.radius * 0.85);
+        berm.position.set(seg.x, Math.max(terrH + 0.3, tunnelBaseY + 5.4), seg.z);
+        berm.scale.set(1.3, 0.75, 1.3);
+        group.add(berm);
+
+        // Stone cavern floor
+        const floorGeo = new THREE.CircleGeometry(seg.radius * 1.05, 16);
+        const floorMat = new THREE.MeshStandardMaterial({
+          map: cliffTex,
+          roughness: 0.82,
+          metalness: 0.08,
+          color: 0x3d454d
+        });
+        const floorMesh = new THREE.Mesh(floorGeo, floorMat);
+        floorMesh.position.set(seg.x, tunnelBaseY - 0.35, seg.z);
+        floorMesh.rotation.x = -Math.PI / 2;
+        group.add(floorMesh);
+
+        // Natural stalagmites rising from the cavern floor
+        for (let si = 0; si < 3; si++) {
+          const smGeo = new THREE.ConeGeometry(0.24 + si * 0.06, 0.9 + (si % 2) * 0.5, 6);
+          const smMesh = new THREE.Mesh(smGeo, rockMat);
+          const ang = si * 2.2 + idx;
+          smMesh.position.set(
+            seg.x + Math.sin(ang) * (seg.radius * 0.62),
+            tunnelBaseY - 0.35,
+            seg.z + Math.cos(ang) * (seg.radius * 0.62)
+          );
+          group.add(smMesh);
+        }
+
+        // Natural crystal cluster embedded in rock crevices along cavern walls
+        const crystalColor = crystalColors[idx % crystalColors.length];
+        const crystalGroup = new THREE.Group();
+        const clusterCount = seg.isSanctuary ? 6 : 4;
+
+        for (let c = 0; c < clusterCount; c++) {
+          const cGeo = new THREE.ConeGeometry(0.12 + (c % 2) * 0.05, 0.75 + (c % 3) * 0.3, 6);
+          const cMat = new THREE.MeshStandardMaterial({
+            color: crystalColor,
+            emissive: crystalColor,
+            emissiveIntensity: 1.4,
+            roughness: 0.15,
+            metalness: 0.2
+          });
+          const cMesh = new THREE.Mesh(cGeo, cMat);
+          const cAng = (c / clusterCount) * Math.PI * 0.7;
+          cMesh.rotation.z = Math.PI + Math.sin(cAng) * 0.4;
+          cMesh.rotation.x = Math.cos(cAng) * 0.3;
+          cMesh.position.set(Math.sin(c) * 0.3, c * 0.12, Math.cos(c) * 0.3);
+          crystalGroup.add(cMesh);
+        }
+
+        const sideSign = idx % 2 === 0 ? 1 : -1;
+        crystalGroup.position.set(
+          seg.x + Math.sin(seg.heading + Math.PI / 2) * (seg.radius * 0.75 * sideSign),
+          tunnelBaseY + 3.6 + (idx % 2) * 0.5,
+          seg.z + Math.cos(seg.heading + Math.PI / 2) * (seg.radius * 0.75 * sideSign)
+        );
+        group.add(crystalGroup);
+
+        // Soft ambient crystal glow
+        const clight = new THREE.PointLight(crystalColor, 2.0, 12.0);
+        clight.position.set(crystalGroup.position.x, tunnelBaseY + 2.8, crystalGroup.position.z);
+        group.add(clight);
+      });
+
+      // Subterranean bioluminescent pool in deep sanctuary
+      const poolX = 101;
+      const poolZ = 18;
+      const poolGeo = new THREE.CircleGeometry(3.6, 20);
+      const poolMat = new THREE.MeshStandardMaterial({
+        color: 0x00bcd4,
+        emissive: 0x0097a7,
+        emissiveIntensity: 0.65,
+        roughness: 0.1,
+        metalness: 0.5
+      });
+      const poolMesh = new THREE.Mesh(poolGeo, poolMat);
+      poolMesh.position.set(poolX, tunnelBaseY - 0.3, poolZ);
+      poolMesh.rotation.x = -Math.PI / 2;
+      group.add(poolMesh);
+
+      const poolLight = new THREE.PointLight(0x00e5ff, 2.5, 14.0);
+      poolLight.position.set(poolX, tunnelBaseY + 1.4, poolZ);
+      group.add(poolLight);
+
+      scene.add(group);
+    }
+
+    // --- COASTAL SEA ARCHES (MILESTONE B) ---
+    function createCoastalSeaArches() {
+      const archGroup = new THREE.Group();
+      const archX = -8;
+      const archZ = -66;
+      const waterLevel = 0.05;
+
+      const rockMat = new THREE.MeshStandardMaterial({
+        color: 0x4f5860,
+        roughness: 0.8,
+        metalness: 0.1,
+        side: THREE.DoubleSide
+      });
+
+      const mainArchGeo = new THREE.TorusGeometry(8.5, 2.2, 12, 20, Math.PI);
+      const mainArch = new THREE.Mesh(mainArchGeo, rockMat);
+      mainArch.position.set(archX, waterLevel + 1.2, archZ);
+      mainArch.rotation.x = Math.PI / 2;
+      mainArch.rotation.y = 0.25;
+      archGroup.add(mainArch);
+
+      const pillarGeo = new THREE.CylinderGeometry(2.4, 3.8, 12, 10);
+      const pillarL = new THREE.Mesh(pillarGeo, rockMat);
+      pillarL.position.set(archX - 8.2, waterLevel + 3.5, archZ - 1.5);
+      archGroup.add(pillarL);
+
+      const pillarR = new THREE.Mesh(pillarGeo, rockMat);
+      pillarR.position.set(archX + 8.2, waterLevel + 3.5, archZ + 1.5);
+      archGroup.add(pillarR);
+
+      const subArchGeo = new THREE.TorusGeometry(4.5, 1.4, 10, 16, Math.PI);
+      const subArch = new THREE.Mesh(subArchGeo, rockMat);
+      subArch.position.set(archX - 12.0, waterLevel + 0.8, archZ + 4.0);
+      subArch.rotation.x = Math.PI / 2;
+      subArch.rotation.y = -0.4;
+      archGroup.add(subArch);
+
+      window.caverns.push({
+        x: archX,
+        z: archZ,
+        radius: 9.0,
+        floorY: waterLevel - 1.2,
+        ceilingY: waterLevel + 7.5,
+        name: "Coastal Sea Arch"
+      });
+
+      scene.add(archGroup);
+    }
+
+    createWhisperingTunnel();
+    createCoastalSeaArches();
 
     // --- OFFICIAL THREE.JS WATER ENGINE WITH INTERACTIVE RIPPLES & FOAM ---
     let water = null;
@@ -1540,13 +2134,14 @@
         // Original southern cluster
         [5.2, 9.0, 1.3], [-5.0, 10.0, 1.2], [7.0, 15.0, 1.4], [-7.5, 16.0, 1.25],
         [-12.0, 2.0, 1.35], [14.0, 0.0, 1.3], [-18.0, -18.0, 1.4], [18.0, -22.0, 1.45],
-        // Alpine ridge pines
+        // Alpine ridge pines & high mountain stands
         [90, 20, 1.5], [120, -10, 1.4], [150, 40, 1.6], [80, 60, 1.3], [110, 80, 1.45],
-        [140, -30, 1.35], [100, -50, 1.2],
+        [140, -30, 1.35], [100, -50, 1.2], [130, 10, 1.55], [165, 30, 1.5], [175, 50, 1.4],
+        [105, 95, 1.35], [135, -45, 1.5], [75, 110, 1.4], [85, -70, 1.3],
         // Island pines
-        [-90, -170, 1.3], [-85, -165, 1.1], [110, -160, 1.2], [10, -210, 1.25],
+        [-90, -170, 1.3], [-85, -165, 1.1], [110, -160, 1.2], [10, -210, 1.25], [-120, -190, 1.2],
         // Peninsula wind-bent pines
-        [0, -100, 1.1], [10, -120, 1.0], [-5, -90, 1.15]
+        [0, -100, 1.1], [10, -120, 1.0], [-5, -90, 1.15], [-10, -110, 1.1], [5, -130, 1.05], [-12, -135, 1.0]
       ];
       pineSpawns.forEach(([x, z, s]) => {
         const h = getTerrainHeight(x, z);
@@ -1564,7 +2159,9 @@
       const oakSpawns = [
         [-14.0, 14.0, 1.2], [16.0, 18.0, 1.25], [-22.0, -6.0, 1.15],
         [-60, 30, 1.4], [-80, 10, 1.3], [-50, 50, 1.35], [-90, -10, 1.2],
-        [-70, 70, 1.45], [-100, 40, 1.25], [-45, -20, 1.3]
+        [-70, 70, 1.45], [-100, 40, 1.25], [-45, -20, 1.3],
+        [-120, 20, 1.5], [-85, 80, 1.3], [-110, -30, 1.4], [-65, -50, 1.35],
+        [-130, 55, 1.4], [-95, 95, 1.3], [-75, 115, 1.35]
       ];
       oakSpawns.forEach(([x, z, s]) => {
         if (getTerrainHeight(x, z) > -2) spawnEZOak(x, z, s);
@@ -1574,7 +2171,9 @@
       const aspenSpawns = [
         [-3.5, 5.0, 1.05], [5.5, 3.5, 1.1], [-10.0, -10.0, 1.0],
         [11.0, -14.0, 1.15], [-15.0, -32.0, 1.05],
-        [8, 40, 1.1], [-6, 60, 1.0], [12, 80, 1.15], [-8, 20, 1.05]
+        [8, 40, 1.1], [-6, 60, 1.0], [12, 80, 1.15], [-8, 20, 1.05],
+        [-12, 100, 1.1], [14, 115, 1.15], [-16, -45, 1.05], [18, -55, 1.1],
+        [10, 130, 1.1], [-10, 145, 1.05], [-14, -58, 1.1]
       ];
       aspenSpawns.forEach(([x, z, s]) => {
         if (getTerrainHeight(x, z) > -2) spawnEZAspen(x, z, s);
@@ -1686,27 +2285,325 @@
       [5.0, 1.0, 1.1], [-4.0, -8.0, 1.2]
     ], 1.2, 'rocks');
 
+    // --- MILESTONE B: INSTANCED GROUND COVER SYSTEM (HIGH DENSITY, 60 FPS) ---
+    function initInstancedGroundCover() {
+      // 1. Procedural Grass Blade Texture
+      const grassCanvas = document.createElement('canvas');
+      grassCanvas.width = 128;
+      grassCanvas.height = 128;
+      const gctx = grassCanvas.getContext('2d');
+      gctx.clearRect(0, 0, 128, 128);
+
+      // Draw stylized multi-blade grass tuft
+      const blades = [
+        { x: 30, h: 102, w: 10, c: '#366027' },
+        { x: 46, h: 118, w: 12, c: '#487c33' },
+        { x: 64, h: 124, w: 13, c: '#57913d' },
+        { x: 82, h: 112, w: 11, c: '#447530' },
+        { x: 98, h: 96,  w: 9,  c: '#325823' }
+      ];
+      blades.forEach(b => {
+        gctx.fillStyle = b.c;
+        gctx.beginPath();
+        gctx.moveTo(b.x - b.w / 2, 128);
+        gctx.quadraticCurveTo(b.x + (b.x - 64) * 0.4, 128 - b.h * 0.5, b.x + (b.x - 64) * 0.55, 128 - b.h);
+        gctx.quadraticCurveTo(b.x + (b.x - 64) * 0.2, 128 - b.h * 0.5, b.x + b.w / 2, 128);
+        gctx.closePath();
+        gctx.fill();
+      });
+
+      const grassTexture = new THREE.CanvasTexture(grassCanvas);
+      grassTexture.wrapS = THREE.ClampToEdgeWrapping;
+      grassTexture.wrapT = THREE.ClampToEdgeWrapping;
+
+      // Crossed-Plane Geometry for Grass (Realistic Knee/Ankle-High Tuft)
+      const p1 = new THREE.PlaneGeometry(0.48, 0.48);
+      p1.translate(0, 0.24, 0);
+      const p2 = p1.clone();
+      p2.rotateY(Math.PI / 2);
+
+      const grassGeo = new THREE.BufferGeometry();
+      const pos1 = p1.attributes.position.array;
+      const pos2 = p2.attributes.position.array;
+      const uv1 = p1.attributes.uv.array;
+      const uv2 = p2.attributes.uv.array;
+      const norm1 = p1.attributes.normal.array;
+      const norm2 = p2.attributes.normal.array;
+
+      const mergedPos = new Float32Array(pos1.length + pos2.length);
+      mergedPos.set(pos1, 0);
+      mergedPos.set(pos2, pos1.length);
+      const mergedUv = new Float32Array(uv1.length + uv2.length);
+      mergedUv.set(uv1, 0);
+      mergedUv.set(uv2, uv1.length);
+      const mergedNorm = new Float32Array(norm1.length + norm2.length);
+      mergedNorm.set(norm1, 0);
+      mergedNorm.set(norm2, norm1.length);
+
+      grassGeo.setAttribute('position', new THREE.BufferAttribute(mergedPos, 3));
+      grassGeo.setAttribute('uv', new THREE.BufferAttribute(mergedUv, 2));
+      grassGeo.setAttribute('normal', new THREE.BufferAttribute(mergedNorm, 3));
+      if (p1.index) {
+        const idx1 = p1.index.array;
+        const idx2 = p2.index.array;
+        const mergedIdx = new Uint16Array(idx1.length * 2);
+        mergedIdx.set(idx1, 0);
+        const vOffset = pos1.length / 3;
+        for (let i = 0; i < idx2.length; i++) {
+          mergedIdx[idx1.length + i] = idx2[i] + vOffset;
+        }
+        grassGeo.setIndex(new THREE.BufferAttribute(mergedIdx, 1));
+      }
+
+      const grassMat = new THREE.MeshStandardMaterial({
+        map: grassTexture,
+        transparent: true,
+        alphaTest: 0.35,
+        roughness: 0.85,
+        side: THREE.DoubleSide
+      });
+
+      // Scatter 2,000 Grass Tufts in Meadows and Overlook
+      const grassCount = 2000;
+      const grassMesh = new THREE.InstancedMesh(grassGeo, grassMat, grassCount);
+      grassMesh.castShadow = false;
+      grassMesh.receiveShadow = true;
+
+      const dummy = new THREE.Object3D();
+      let placedGrass = 0;
+      let seed = 12345;
+      function pseudoRand() {
+        seed = (seed * 9301 + 49297) % 233280;
+        return seed / 233280;
+      }
+
+      for (let i = 0; i < 5500 && placedGrass < grassCount; i++) {
+        const rx = (pseudoRand() - 0.5) * 380;
+        const rz = (pseudoRand() - 0.5) * 380;
+        const ry = getTerrainHeight(rx, rz);
+
+        if (ry > 0.4 && ry < 22.0) {
+          dummy.position.set(rx, ry - 0.02, rz);
+          const sc = 0.72 + pseudoRand() * 0.35;
+          dummy.scale.set(sc, sc * (0.9 + pseudoRand() * 0.3), sc);
+          dummy.rotation.y = pseudoRand() * Math.PI * 2;
+          dummy.updateMatrix();
+          grassMesh.setMatrixAt(placedGrass, dummy.matrix);
+          placedGrass++;
+        }
+      }
+      grassMesh.count = placedGrass;
+      grassMesh.instanceMatrix.needsUpdate = true;
+      scene.add(grassMesh);
+      window.instancedGrass = grassMesh;
+
+      // 2. Wildflowers Instanced Mesh (600 Blossoms)
+      const flowerCount = 600;
+      const flowerGeo = new THREE.DodecahedronGeometry(0.08, 0);
+      flowerGeo.scale(1.1, 0.75, 1.1);
+      const flowerMat = new THREE.MeshStandardMaterial({ roughness: 0.5 });
+      const flowerMesh = new THREE.InstancedMesh(flowerGeo, flowerMat, flowerCount);
+      const flowerPalette = [
+        new THREE.Color(0xffd54f), // Alpine Buttercup Yellow
+        new THREE.Color(0x42a5f5), // Mountain Bluebell
+        new THREE.Color(0xef5350), // Wild Crimson Poppy
+        new THREE.Color(0xffffff)  // Meadow Daisy White
+      ];
+
+      let placedFlowers = 0;
+      for (let i = 0; i < 2800 && placedFlowers < flowerCount; i++) {
+        const rx = (pseudoRand() - 0.5) * 280;
+        const rz = (pseudoRand() - 0.5) * 280;
+        const ry = getTerrainHeight(rx, rz);
+        if (ry > 0.8 && ry < 18.0) {
+          dummy.position.set(rx, ry + 0.14, rz);
+          const sc = 0.75 + pseudoRand() * 0.35;
+          dummy.scale.set(sc, sc, sc);
+          dummy.rotation.set(pseudoRand() * 0.2, pseudoRand() * Math.PI * 2, pseudoRand() * 0.2);
+          dummy.updateMatrix();
+          flowerMesh.setMatrixAt(placedFlowers, dummy.matrix);
+          flowerMesh.setColorAt(placedFlowers, flowerPalette[Math.floor(pseudoRand() * flowerPalette.length)]);
+          placedFlowers++;
+        }
+      }
+      flowerMesh.count = placedFlowers;
+      flowerMesh.instanceMatrix.needsUpdate = true;
+      if (flowerMesh.instanceColor) flowerMesh.instanceColor.needsUpdate = true;
+      scene.add(flowerMesh);
+      window.instancedFlowers = flowerMesh;
+
+      // 3. Shoreline & Riverbed Pebbles Instanced Mesh (450 River Stones)
+      const pebbleCount = 450;
+      const pebbleGeo = new THREE.DodecahedronGeometry(0.12, 0);
+      pebbleGeo.scale(1.3, 0.55, 1.0);
+      const pebbleMat = new THREE.MeshStandardMaterial({
+        color: 0x48525a,
+        roughness: 0.45,
+        metalness: 0.15
+      });
+      const pebbleMesh = new THREE.InstancedMesh(pebbleGeo, pebbleMat, pebbleCount);
+      pebbleMesh.receiveShadow = true;
+
+      let placedPebbles = 0;
+      for (let i = 0; i < 2500 && placedPebbles < pebbleCount; i++) {
+        const rz = (pseudoRand() - 0.5) * 240;
+        const riverCenter = Math.sin(rz * 0.045) * 12 + Math.sin(rz * 0.02) * 6;
+        const rx = riverCenter + (pseudoRand() - 0.5) * 24;
+        const ry = getTerrainHeight(rx, rz);
+        if (ry > -0.2 && ry < 2.5) {
+          dummy.position.set(rx, ry + 0.04, rz);
+          const sc = 0.7 + pseudoRand() * 0.5;
+          dummy.scale.set(sc, sc * 0.7, sc * 1.2);
+          dummy.rotation.set(pseudoRand() * 0.4, pseudoRand() * Math.PI * 2, pseudoRand() * 0.4);
+          dummy.updateMatrix();
+          pebbleMesh.setMatrixAt(placedPebbles, dummy.matrix);
+          placedPebbles++;
+        }
+      }
+      pebbleMesh.count = placedPebbles;
+      pebbleMesh.instanceMatrix.needsUpdate = true;
+      scene.add(pebbleMesh);
+      window.instancedPebbles = pebbleMesh;
+    }
+    initInstancedGroundCover();
+
+    // --- OPTICAL BLOOM & SUBTLE ATMOSPHERIC GLOW PASS (MILESTONE B) ---
+    function createRadialGlowTexture(coreColor = '#ffffff', haloColor = 'rgb(255, 120, 0)') {
+      const c = document.createElement('canvas');
+      c.width = 128;
+      c.height = 128;
+      const ctx = c.getContext('2d');
+      const grad = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+      grad.addColorStop(0, coreColor);
+      grad.addColorStop(0.2, haloColor);
+      grad.addColorStop(0.55, haloColor.replace('rgb', 'rgba').replace(')', ', 0.28)'));
+      grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 128, 128);
+      return new THREE.CanvasTexture(c);
+    }
+
+    const bloomGlowGroup = new THREE.Group();
+    window.bloomGlowGroup = bloomGlowGroup;
+
+    // 1. Campfire Ember Bloom Halo
+    const fireGlowMat = new THREE.SpriteMaterial({
+      map: createRadialGlowTexture('#ffffff', 'rgb(255, 87, 34)'),
+      blending: THREE.AdditiveBlending,
+      transparent: true,
+      depthWrite: false,
+      opacity: 0.85
+    });
+    const fireGlowSprite = new THREE.Sprite(fireGlowMat);
+    fireGlowSprite.position.set(2.5, 0.45, 9.5);
+    fireGlowSprite.scale.set(2.4, 2.4, 1.0);
+    bloomGlowGroup.add(fireGlowSprite);
+    window.fireGlowSprite = fireGlowSprite;
+
+    // 2. Sentinel Lighthouse Searchlight Beacon Bloom
+    const lightGlowMat = new THREE.SpriteMaterial({
+      map: createRadialGlowTexture('#ffffff', 'rgb(255, 238, 88)'),
+      blending: THREE.AdditiveBlending,
+      transparent: true,
+      depthWrite: false,
+      opacity: 0.95
+    });
+    const lightGlowSprite = new THREE.Sprite(lightGlowMat);
+    lightGlowSprite.position.set(8, getTerrainHeight(8, -35) + 24.4, -35);
+    lightGlowSprite.scale.set(7.5, 7.5, 1.0);
+    bloomGlowGroup.add(lightGlowSprite);
+    window.lightGlowSprite = lightGlowSprite;
+
+    // 3. Whispering Tunnel Sanctuary Mineral Pool Bloom
+    const poolGlowMat = new THREE.SpriteMaterial({
+      map: createRadialGlowTexture('#e0f7fa', 'rgb(0, 229, 255)'),
+      blending: THREE.AdditiveBlending,
+      transparent: true,
+      depthWrite: false,
+      opacity: 0.72
+    });
+    const poolGlowSprite = new THREE.Sprite(poolGlowMat);
+    poolGlowSprite.position.set(101, 7.2, 18);
+    poolGlowSprite.scale.set(5.2, 5.2, 1.0);
+    bloomGlowGroup.add(poolGlowSprite);
+
+    scene.add(bloomGlowGroup);
+
     // --- FIRST-PERSON PLAYER & TOUCH CONTROLS ---
     const player = {
       yaw: 0,
       pitch: 0,
+      roll: 0,
+      pos: new THREE.Vector3(0, 10.65 - 1.88, 12),
       vel: new THREE.Vector3(),
       isGrounded: true,
       isSwimming: false,
       speed: 8.5,
       sprintSpeed: 16.0,
       isSprinting: false,
+      touchSprintRequested: false,
       lastWaterStepTime: 0,
+      stride: 0,
+      headBobEnabled: true,
+      baseFov: 75,
+      sprintFovOffset: 0,
       vitals: { hp: 100, hunger: 85, thirst: 90, temp: 37.0, stamina: 100 },
       inventory: { timber: 2, stone: 4 }
     };
 
-    // Quality tier foundation (Low / Medium / High)
+    // Quality tier architecture (Low / Medium / High)
     window.qualityTier = 'medium';
-    window.setQualityTier = function(tier) {
+    window.setQualityTier = function(tier, suppressToast = false) {
       window.qualityTier = tier;
       console.log('Quality tier set to:', tier);
-      // Future: adjust shadow map size, foliage density, post-processing
+
+      const qualityPills = document.querySelectorAll('#quality-pill-group .pill-btn');
+      const qualityValBadge = document.getElementById('quality-val');
+      qualityPills.forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.quality === tier);
+      });
+
+      const bloomGroup = window.bloomGlowGroup;
+
+      if (tier === 'low') {
+        if (qualityValBadge) qualityValBadge.innerText = 'Performance (Low)';
+        renderer.setPixelRatio(1.0);
+        renderer.shadowMap.enabled = false;
+        if (window.instancedGrass) window.instancedGrass.visible = false;
+        if (window.instancedFlowers) window.instancedFlowers.visible = false;
+        if (window.instancedPebbles) window.instancedPebbles.visible = false;
+        if (water && water.material && water.material.uniforms['distortionScale']) {
+          water.material.uniforms['distortionScale'].value = 1.6;
+        }
+        if (bloomGroup) bloomGroup.visible = false;
+        if (!suppressToast) showToast("⚡ Performance Mode: 60 FPS battery saver active");
+      } else if (tier === 'medium') {
+        if (qualityValBadge) qualityValBadge.innerText = 'Balanced (60 FPS)';
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFShadowMap;
+        if (window.instancedGrass) window.instancedGrass.visible = true;
+        if (window.instancedFlowers) window.instancedFlowers.visible = true;
+        if (window.instancedPebbles) window.instancedPebbles.visible = true;
+        if (water && water.material && water.material.uniforms['distortionScale']) {
+          water.material.uniforms['distortionScale'].value = 3.4;
+        }
+        if (bloomGroup) bloomGroup.visible = true;
+        if (!suppressToast) showToast("⚖️ Balanced Mode: High detail & shadows active");
+      } else if (tier === 'high') {
+        if (qualityValBadge) qualityValBadge.innerText = 'Cinematic (Ultra)';
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2.0));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        if (window.instancedGrass) window.instancedGrass.visible = true;
+        if (window.instancedFlowers) window.instancedFlowers.visible = true;
+        if (window.instancedPebbles) window.instancedPebbles.visible = true;
+        if (water && water.material && water.material.uniforms['distortionScale']) {
+          water.material.uniforms['distortionScale'].value = 4.5;
+        }
+        if (bloomGroup) bloomGroup.visible = true;
+        if (!suppressToast) showToast("💎 Cinematic Mode: Full soft shadows & bloom active");
+      }
     };
 
     // Virtual Joystick
@@ -1874,8 +2771,18 @@
     addTapListener(document.getElementById('btn-campfire'), () => {
       AudioEngine.playFire();
       fireLight.intensity = (fireLight.intensity > 0.5) ? 0.0 : 2.8;
+      if (window.fireGlowSprite) window.fireGlowSprite.visible = (fireLight.intensity > 0.5) && window.qualityTier !== 'low';
       showToast(fireLight.intensity > 0.5 ? "🔥 Campfire stoked! Radiating warmth." : "💨 Campfire embers extinguished.");
     });
+
+    const btnSprint = document.getElementById('btn-sprint');
+    if (btnSprint) {
+      addTapListener(btnSprint, () => {
+        player.touchSprintRequested = !player.touchSprintRequested;
+        btnSprint.classList.toggle('active', player.touchSprintRequested);
+        showToast(player.touchSprintRequested ? "⚡ Sprint Mode Enabled" : "🚶 Walk Mode Enabled");
+      });
+    }
 
     // --- 4-SECTION CONFIGURATION PANEL TAB CONTROLLER ---
     const envToggleBtn = document.getElementById('env-toggle-btn');
@@ -1905,6 +2812,16 @@
 
     tabButtons.forEach(btn => {
       addTapListener(btn, () => switchConfigTab(btn.dataset.tab));
+    });
+
+    // Quality Preset Listeners (Low / Medium / High)
+    const qualityPills = document.querySelectorAll('#quality-pill-group .pill-btn');
+    qualityPills.forEach(btn => {
+      addTapListener(btn, () => {
+        if (window.setQualityTier) {
+          window.setQualityTier(btn.dataset.quality);
+        }
+      });
     });
 
     // 1. WATER ENGINE CONFIGURATION
@@ -2130,6 +3047,28 @@
       sunIntVal.innerText = `${val.toFixed(2)}x`;
     });
 
+    const sliderFov = document.getElementById('slider-fov');
+    const fovVal = document.getElementById('fov-val');
+    if (sliderFov) {
+      sliderFov.addEventListener('input', e => {
+        const val = parseFloat(e.target.value);
+        player.baseFov = val;
+        if (fovVal) fovVal.innerText = `${val.toFixed(0)}°`;
+        camera.fov = getAdaptiveFOV(player.baseFov, camera.aspect) + player.sprintFovOffset;
+        camera.updateProjectionMatrix();
+      });
+    }
+
+    const btnToggleBob = document.getElementById('btn-toggle-bob');
+    if (btnToggleBob) {
+      addTapListener(btnToggleBob, () => {
+        player.headBobEnabled = !player.headBobEnabled;
+        btnToggleBob.classList.toggle('active', player.headBobEnabled);
+        btnToggleBob.innerText = player.headBobEnabled ? '👟 Head Bob ON' : '⏸️ Head Bob OFF';
+        showToast(player.headBobEnabled ? "👟 Dynamic stride head-bob enabled" : "⏸️ Head-bob motion disabled");
+      });
+    }
+
     document.querySelectorAll('.pill-btn[data-weather]').forEach(btn => {
       addTapListener(btn, () => {
         document.querySelectorAll('.pill-btn[data-weather]').forEach(b => b.classList.remove('active'));
@@ -2293,10 +3232,41 @@
         }
       });
 
-      // Camera Rotation
-      camera.rotation.order = 'YXZ';
-      camera.rotation.y = player.yaw;
-      camera.rotation.x = player.pitch;
+      // Animate Sentinel Lighthouse rotating searchlight beam across ocean
+      if (typeof beacon !== 'undefined' && beacon && beacon.target) {
+        beacon.target.position.set(Math.sin(timeSec * 0.75) * 45, -4, Math.cos(timeSec * 0.75) * 45);
+      }
+
+      // Milestone B: Animate subtle optical bloom halos (camp embers & beacon flare)
+      if (window.fireGlowSprite) {
+        const fireActive = typeof fireLight !== 'undefined' && fireLight.intensity > 0.5;
+        window.fireGlowSprite.visible = fireActive && window.qualityTier !== 'low';
+        if (fireActive) {
+          const pulse = 1.0 + Math.sin(timeSec * 7.5) * 0.12 + Math.cos(timeSec * 11.2) * 0.08;
+          window.fireGlowSprite.scale.set(2.4 * pulse, 2.4 * pulse, 1.0);
+          window.fireGlowSprite.material.opacity = 0.75 + Math.sin(timeSec * 6.0) * 0.15;
+        }
+      }
+      if (window.lightGlowSprite) {
+        window.lightGlowSprite.visible = window.qualityTier !== 'low';
+        if (window.lightGlowSprite.visible) {
+          const lPulse = 1.0 + Math.sin(timeSec * 3.0) * 0.08;
+          window.lightGlowSprite.scale.set(7.5 * lPulse, 7.5 * lPulse, 1.0);
+        }
+      }
+
+      // Milestone B: Dynamic player-anchored high-res shadow camera tracking for 800m world
+      if (sunLight && sunLight.target) {
+        sunLight.position.set(camera.position.x + 55, camera.position.y + 85, camera.position.z - 50);
+        sunLight.target.position.copy(camera.position);
+        sunLight.target.updateMatrixWorld();
+      }
+
+      // Milestone B: Height-adaptive atmospheric fog (thinner on peaks for alpine vistas)
+      if (scene.fog && scene.fog.isFogExp2) {
+        const altRatio = Math.max(0, Math.min(1, (camera.position.y - 3.5) / 35.0));
+        scene.fog.density = 0.0035 - altRatio * 0.0016;
+      }
 
       // Movement Vector
       let moveX = joyMove.x;
@@ -2311,10 +3281,19 @@
       const wish = new THREE.Vector3().addScaledVector(fwd, -moveZ).addScaledVector(rgt, moveX);
       if (wish.lengthSq() > 0) wish.normalize();
 
+      // Dynamic Sprint FOV Kick & Optical Speed Expansion (+7.5° FOV lerp)
+      const targetSprintFov = (player.isSprinting && wish.lengthSq() > 0.05) ? 7.5 : 0.0;
+      player.sprintFovOffset += (targetSprintFov - player.sprintFovOffset) * Math.min(1.0, 9.0 * dt);
+      const targetFov = getAdaptiveFOV(player.baseFov, camera.aspect) + player.sprintFovOffset;
+      if (Math.abs(camera.fov - targetFov) > 0.04) {
+        camera.fov = targetFov;
+        camera.updateProjectionMatrix();
+      }
+
       // Hydrology & Buoyancy
-      const wInfo = getWaterInfo(camera.position.x, camera.position.z, timeSec);
-      const terrY = getTerrainHeight(camera.position.x, camera.position.z);
-      const isSub = wInfo.isWater && (camera.position.y - 1.65 < wInfo.surfaceY);
+      const wInfo = getWaterInfo(player.pos.x, player.pos.z, timeSec);
+      const terrY = getTerrainHeight(player.pos.x, player.pos.z);
+      const isSub = wInfo.isWater && (player.pos.y < wInfo.surfaceY);
 
       player.isSwimming = isSub;
       waterOverlay.classList.toggle('submerged', player.isSwimming);
@@ -2324,19 +3303,27 @@
       // Interactive water stepping ripples
       if (wInfo.isWater && wish.lengthSq() > 0.05 && (timeSec - player.lastWaterStepTime > 0.35)) {
         player.lastWaterStepTime = timeSec;
-        addWaterRipple(camera.position.x, camera.position.z, player.isSwimming ? 0.9 : 0.6);
+        addWaterRipple(player.pos.x, player.pos.z, player.isSwimming ? 0.9 : 0.6);
         AudioEngine.playSplash();
       }
 
-      // Sprint toggle (Shift key or future HUD button)
-      if (keys['shift'] && player.vitals.stamina > 5 && !player.isSwimming) {
+      // Sprint toggle (Shift key, touch HUD button, or touch toggle)
+      const wantsSprint = (keys['shift'] || player.touchSprintRequested) && wish.lengthSq() > 0.05;
+      if (wantsSprint && player.vitals.stamina > 5 && !player.isSwimming) {
         player.isSprinting = true;
         player.vitals.stamina = Math.max(0, player.vitals.stamina - 18 * dt);
+        if (player.vitals.stamina <= 5) {
+          player.touchSprintRequested = false;
+        }
       } else {
         player.isSprinting = false;
         if (player.vitals.stamina < 100) {
           player.vitals.stamina = Math.min(100, player.vitals.stamina + 12 * dt);
         }
+      }
+      const sprintBtnEl = document.getElementById('btn-sprint');
+      if (sprintBtnEl) {
+        sprintBtnEl.classList.toggle('active', player.isSprinting || player.touchSprintRequested);
       }
 
       const baseSpeed = player.isSprinting ? player.sprintSpeed : player.speed;
@@ -2345,7 +3332,7 @@
       player.vel.z = wish.z * curSpeed;
 
       if (player.isSwimming) {
-        const depth = wInfo.surfaceY - (camera.position.y - 1.45);
+        const depth = wInfo.surfaceY - player.pos.y;
         if (depth > 0) {
           player.vel.y += depth * 15.0 * dt;
           player.vel.y *= 0.86;
@@ -2356,20 +3343,20 @@
         player.vel.y -= 18.0 * dt;
       }
 
-      camera.position.x += player.vel.x * dt;
-      camera.position.z += player.vel.z * dt;
-      camera.position.y += player.vel.y * dt;
+      player.pos.x += player.vel.x * dt;
+      player.pos.z += player.vel.z * dt;
+      player.pos.y += player.vel.y * dt;
 
       // Ground collision (terrain + procedural cavern interiors)
-      const eyeH = 1.65;
+      const eyeH = 1.88;
       let floorY = terrY;
       let ceilingY = Infinity;
       let insideCavern = null;
 
       if (window.caverns && window.caverns.length) {
         for (const cc of window.caverns) {
-          const dx = camera.position.x - cc.x;
-          const dz = camera.position.z - cc.z;
+          const dx = player.pos.x - cc.x;
+          const dz = player.pos.z - cc.z;
           if (dx * dx + dz * dz < cc.radius * cc.radius) {
             floorY = Math.min(floorY, cc.floorY);
             ceilingY = Math.min(ceilingY, cc.ceilingY);
@@ -2383,17 +3370,64 @@
         locationChip.innerText = "💎 " + insideCavern.name;
       }
 
-      if (camera.position.y < floorY + eyeH) {
-        camera.position.y = floorY + eyeH;
+      // Ambient atmospheric environmental audio triggers
+      player.lastAmbientAudioTime = player.lastAmbientAudioTime || 0;
+      if (timeSec - player.lastAmbientAudioTime > 5.5) {
+        player.lastAmbientAudioTime = timeSec;
+        if (insideCavern) {
+          AudioEngine.playCaveDrip();
+        } else if (player.pos.y > 15.0) {
+          AudioEngine.playWindGust();
+        }
+      }
+
+      if (player.pos.y < floorY) {
+        player.pos.y = floorY;
         player.vel.y = 0;
         player.isGrounded = true;
-      } else if (camera.position.y > ceilingY - 0.3) {
-        camera.position.y = ceilingY - 0.3;
+      } else if (player.pos.y > ceilingY - eyeH - 0.2) {
+        player.pos.y = ceilingY - eyeH - 0.2;
         player.vel.y = Math.min(0, player.vel.y);
         player.isGrounded = false;
       } else {
         player.isGrounded = false;
       }
+
+      // Bipedal Stride Head Bobbing, Breathing & Lateral Sway
+      let bobY = 0;
+      let bobX = 0;
+      let breatheY = 0;
+      const horizSpeed = Math.hypot(player.vel.x, player.vel.z);
+
+      if (player.headBobEnabled && !player.isSwimming && player.isGrounded && horizSpeed > 0.4) {
+        // Cadence: ~1.9 Hz walking (8.5 rad/s), ~2.6 Hz sprint (12.5 rad/s)
+        const strideFreq = player.isSprinting ? 12.5 : 8.5;
+        player.stride += dt * strideFreq;
+        // Vertical step dip occurs twice per gait cycle (sin)
+        bobY = Math.sin(player.stride) * (player.isSprinting ? 0.045 : 0.026);
+        // Lateral weight-shift sway occurs once per gait cycle (cos at half-freq)
+        bobX = Math.cos(player.stride * 0.5) * (player.isSprinting ? 0.022 : 0.012);
+      } else {
+        // Subtly decay stride phase
+        player.stride *= 0.94;
+        // Micro idle breathing respiration
+        breatheY = Math.sin(timeSec * 1.8) * 0.007;
+      }
+
+      // Dynamic banking roll when strafing/turning
+      const targetRoll = -moveX * (player.isSprinting ? 0.022 : 0.014);
+      player.roll += (targetRoll - player.roll) * Math.min(1.0, 10.0 * dt);
+
+      // Compose camera position from physical ground position + eye height + gait offsets
+      camera.position.x = player.pos.x + rgt.x * bobX;
+      camera.position.z = player.pos.z + rgt.z * bobX;
+      camera.position.y = player.pos.y + eyeH + bobY + breatheY;
+
+      // Apply 3-axis rotation with banking roll
+      camera.rotation.order = 'YXZ';
+      camera.rotation.y = player.yaw;
+      camera.rotation.x = player.pitch;
+      camera.rotation.z = player.roll;
 
       // Update Buoyant Timber Logs with hydrodynamic Archimedes physics
       for (let i = buoyantObjects.length - 1; i >= 0; i--) {
@@ -2451,8 +3485,8 @@
             if (obj.velocity.y < 0) obj.velocity.y = 0;
           }
 
-          // Flotilla recycling: when log passes downstream into the lake (z < -36), recycle it upstream
-          if (obj.isFlotilla && p.z < -36) {
+          // Flotilla recycling: when log passes downstream into the bay (z < -65), recycle it upstream
+          if (obj.isFlotilla && p.z < -65) {
             const respawnZ = 32.0 + Math.random() * 8.0;
             const riverX = Math.sin(respawnZ * 0.06) * 6.0 + (Math.random() - 0.5) * 2.2;
             p.set(riverX, 0.08, respawnZ);
@@ -2556,6 +3590,7 @@
 
     window.addEventListener('resize', () => {
       camera.aspect = window.innerWidth / window.innerHeight;
+      camera.fov = getAdaptiveFOV(player.baseFov, camera.aspect) + player.sprintFovOffset;
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
     });
