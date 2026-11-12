@@ -940,12 +940,15 @@
     terrainGeo.rotateX(-Math.PI / 2);
 
     function getTerrainHeight(x, z) {
-      // Multi-octave base rolling hills
-      let y = Math.sin(x * 0.012) * Math.cos(z * 0.012) * 4.5
-            + Math.sin(x * 0.028 + 0.7) * Math.cos(z * 0.028) * 2.1
-            + Math.sin(x * 0.055) * Math.cos(z * 0.055) * 0.8;
+      // Base elevation so the southern highlands stay above water
+      let y = 3.5;
 
-      // Eastern Alpine Ridge (x > 60, peaks up to ~50m)
+      // Multi-octave rolling hills
+      y += Math.sin(x * 0.012) * Math.cos(z * 0.012) * 4.5
+         + Math.sin(x * 0.028 + 0.7) * Math.cos(z * 0.028) * 2.1
+         + Math.sin(x * 0.055) * Math.cos(z * 0.055) * 0.8;
+
+      // Eastern Alpine Ridge
       if (x > 40) {
         const alpineDist = Math.max(0, x - 40);
         const alpine = Math.pow(alpineDist / 180, 1.4) * 48
@@ -954,53 +957,38 @@
         y = Math.max(y, alpine * Math.min(1, alpineDist / 40));
       }
 
-      // Northern Ocean Basin (z < -60, down to -12m)
-      if (z < -40) {
-        const oceanDist = Math.max(0, -z - 40);
-        const oceanDepth = Math.min(12, oceanDist * 0.15);
+      // Northern Ocean Basin (only far north)
+      if (z < -60) {
+        const oceanDist = Math.max(0, -z - 60);
+        const oceanDepth = Math.min(14, oceanDist * 0.18);
         y -= oceanDepth;
-        // Islands
-        const islands = [
-          {x: -90, z: -170, r: 28, h: 8},
-          {x: 110, z: -160, r: 18, h: 5},
-          {x: 10, z: -210, r: 22, h: 6}
-        ];
-        for (const isl of islands) {
-          const d = Math.hypot(x - isl.x, z - isl.z);
-          if (d < isl.r) {
-            const factor = 1 - d / isl.r;
-            y += factor * factor * isl.h;
-          }
-        }
       }
 
-      // Lighthouse Peninsula (curved headland into the sea)
+      // Lighthouse Peninsula
       const penCenterX = -5 + Math.sin((z + 70) * 0.04) * 18;
-      if (z < -50 && z > -150 && Math.abs(x - penCenterX) < 22) {
+      if (z < -40 && z > -140 && Math.abs(x - penCenterX) < 20) {
         const penDist = Math.abs(x - penCenterX);
-        const penFactor = 1 - penDist / 22;
-        y = Math.max(y, penFactor * 4.5 + Math.sin(z * 0.1) * 1.2);
+        const penFactor = 1 - penDist / 20;
+        y = Math.max(y, 2.5 + penFactor * 3.5);
       }
 
-      // Western Rolling Meadow (x < -50)
-      if (x < -30) {
-        const meadow = Math.sin(x * 0.02) * Math.cos(z * 0.018) * 3.5
-                     + Math.sin(z * 0.03) * 1.5;
-        y = y * 0.4 + meadow;
+      // Western meadow stays gently rolling and above water
+      if (x < -30 && z > -40) {
+        y = Math.max(y, 2.8 + Math.sin(x * 0.02) * Math.cos(z * 0.018) * 2.0);
       }
 
-      // Central River Canyon (winding from south to north)
+      // River canyon (carve but don't drop the whole southern area underwater)
       const riverCenter = Math.sin(z * 0.045) * 12 + Math.sin(z * 0.02) * 6;
       const distToRiver = Math.abs(x - riverCenter);
-      if (z > -40 && z < 120 && distToRiver < 14) {
-        const carve = (1 - distToRiver / 14) * 5.5;
+      if (z > -30 && z < 100 && distToRiver < 10) {
+        const carve = (1 - distToRiver / 10) * 4.0;
         y -= carve;
       }
 
-      // Elevated overlook for player spawn (x=0, z=12) - keep familiar start
+      // Strong elevated overlook for player spawn
       const spawnDist = Math.hypot(x, z - 12);
-      if (spawnDist < 15) {
-        y += (1 - spawnDist / 15) * 2.2;
+      if (spawnDist < 20) {
+        y += (1 - spawnDist / 20) * 4.5;
       }
 
       return y;
