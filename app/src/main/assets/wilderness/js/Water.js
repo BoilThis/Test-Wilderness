@@ -24,7 +24,7 @@
 			const waterColor = new THREE.Color( options.waterColor !== undefined ? options.waterColor : 0x7F7F7F );
 			const eye = options.eye !== undefined ? options.eye : new THREE.Vector3( 0, 0, 0 );
 			const distortionScale = options.distortionScale !== undefined ? options.distortionScale : 20.0;
-			const side = options.side !== undefined ? options.side : THREE.FrontSide;
+			const side = options.side !== undefined ? options.side : THREE.DoubleSide;
 			const fog = options.fog !== undefined ? options.fog : false; //
 
 			const mirrorPlane = new THREE.Plane();
@@ -129,8 +129,10 @@
 					float wz = baseWorld.z;
 
 					// Smoothly swell from lively river/bay chop into rolling 3D ocean waves north of z = -35
+					// Calm wave vertical displacement smoothly near shallow shorelines so water never slices abruptly into banks
 					float oceanMix = clamp( ( -35.0 - wz ) / 45.0, 0.0, 1.0 );
-					float amp = ( 0.36 + oceanMix * 1.38 ) * uWaveAmp;
+					float shoreCalm = smoothstep( 0.0, 0.95, aWaterDepth );
+					float amp = ( 0.36 + oceanMix * 1.38 ) * uWaveAmp * shoreCalm;
 
 					float p1 = wx * 0.075 + wz * 0.055 + time * 1.65;
 					float p2 = wx * -0.048 + wz * 0.105 + time * 2.15;
@@ -238,11 +240,28 @@
 						surfaceNormal = normalize(surfaceNormal + vec3(rainWave, 0.0, rainWave));
 					}
 
+					vec3 worldToEye = eye - worldPosition.xyz;
+					vec3 eyeDirection = normalize( worldToEye );
+
+					// Underwater view looking up at the surface: Snell's Window & shimmering subsurface refraction
+					if ( !gl_FrontFacing ) {
+						vec3 underNormal = normalize( vec3( -surfaceNormal.x * 1.3, -1.0, -surfaceNormal.z * 1.3 ) );
+						float upCos = max( 0.0, dot( -eyeDirection, underNormal ) );
+						float snellWindow = smoothstep( 0.36, 0.78, upCos );
+						float sunGlint = pow( max( 0.0, dot( -eyeDirection, normalize( vec3( sunDirection.x * 0.4, 1.0, sunDirection.z * 0.4 ) ) ) ), 18.0 );
+						float causticShimmer = clamp( ( noise.x + noise.z ) * 0.8 + 0.5, 0.0, 1.0 );
+						vec3 tirCol = vec3( 0.02, 0.24, 0.34 );
+						vec3 windowSkyCol = vec3( 0.42, 0.88, 0.96 ) + sunColor * sunGlint * 1.35 + vec3( 0.18, 0.35, 0.38 ) * causticShimmer * snellWindow;
+						vec3 underCol = mix( tirCol, windowSkyCol, snellWindow );
+						float underAlpha = smoothstep( 0.0, 0.35, vWaterDepth ) * 0.86;
+						gl_FragColor = vec4( underCol, underAlpha );
+						#include <tonemapping_fragment>
+						#include <fog_fragment>
+						return;
+					}
+
 					vec3 diffuseLight = vec3(0.0);
 					vec3 specularLight = vec3(0.0);
-
-					vec3 worldToEye = eye-worldPosition.xyz;
-					vec3 eyeDirection = normalize( worldToEye );
 					sunLight( surfaceNormal, eyeDirection, 100.0, 2.0, 0.5, diffuseLight, specularLight );
 
 					float distance = length(worldToEye);
@@ -254,37 +273,42 @@
 					float rf0 = 0.035;
 					float reflectance = rf0 + ( 1.0 - rf0 ) * pow( ( 1.0 - theta ), 5.0 );
 
-					// Depth-based Beer-Lambert lagoon color gradient (translucent aqua -> turquoise -> deep ocean cobalt)
-					float depth = max( 0.0, vWaterDepth + vWaveHeight * 0.28 );
-					vec3 shallowCol = vec3( 0.12, 0.72, 0.72 );
+					// Depth-based Beer-Lambert lagoon color gradient (translucent sand-tinted aqua -> turquoise -> deep ocean cobalt)
+					float depth = max( 0.0, vWaterDepth + vWaveHeight * 0.22 );
+					vec3 ultraShallowCol = vec3( 0.42, 0.76, 0.72 );
+					vec3 shallowCol = vec3( 0.10, 0.70, 0.72 );
 					vec3 deepCol = vec3( 0.008, 0.15, 0.25 );
-					vec3 depthTint = mix( shallowCol, waterColor, smoothstep( 0.0, 1.8, depth ) );
-					depthTint = mix( depthTint, deepCol, smoothstep( 2.2, 8.5, depth ) );
+					vec3 depthTint = mix( ultraShallowCol, shallowCol, smoothstep( 0.0, 0.65, depth ) );
+					depthTint = mix( depthTint, waterColor, smoothstep( 0.45, 2.1, depth ) );
+					depthTint = mix( depthTint, deepCol, smoothstep( 2.4, 8.8, depth ) );
 
 					// Wave-crest subsurface sunlight scattering (translucent jade-cyan glow through swells)
 					float sunBacklit = pow( max( 0.0, dot( -eyeDirection, sunDirection ) ), 3.0 );
 					float sss = clamp( vWaveHeight * 0.52, 0.0, 1.0 ) * ( 0.30 + sunBacklit * 0.90 );
 					vec3 sssGlow = vec3( 0.04, 0.36, 0.34 ) * sss;
 
+					// Reduce mirror reflection weight in ultra-shallow shoreline water (< 0.5m) so submerged sand/pebbles blend seamlessly
+					float shallowReflFade = smoothstep( 0.02, 0.65, depth );
 					vec3 scatter = max( 0.0, dot( surfaceNormal, eyeDirection ) ) * depthTint;
-					vec3 albedo = mix( ( sunColor * diffuseLight * 0.35 + scatter + sssGlow ) * getShadowMask(), ( vec3( 0.04 ) + reflectionSample * 0.94 + reflectionSample * specularLight ), reflectance );
+					vec3 albedo = mix( ( sunColor * diffuseLight * 0.35 + scatter + sssGlow ) * getShadowMask(), ( vec3( 0.04 ) + reflectionSample * 0.94 + reflectionSample * specularLight ), reflectance * shallowReflFade );
 
 					// Dynamic 3D wave crest whitecaps & current foam
 					float waveCrest = clamp( noise.x * noise.z * 2.2, 0.0, 1.0 );
 					float swellWhitecap = smoothstep( 0.35, 1.35, vWaveHeight ) * ( 0.24 + uFoamIntensity * 0.56 );
 
-					// Animated shoreline surf wash & lapping edge foam where depth meets golden sand/rock
-					float inShore = step( 0.005, vWaterDepth ) * ( 1.0 - smoothstep( 0.08, 1.15, depth ) );
-					float surfBands = pow( max( 0.0, sin( depth * 12.5 - time * 3.1 + noise.x * 2.2 ) ), 3.0 );
-					float edgeContact = step( 0.002, depth ) * ( 1.0 - smoothstep( 0.01, 0.18, depth ) );
-					float shoreFoam = ( inShore * surfBands * ( 0.55 + uFoamIntensity * 0.35 ) + edgeContact * 0.55 );
+					// Smoothly feathered shoreline surf wash & lapping edge foam (fades smoothly to 0.0 right at depth = 0.0!)
+					float inShore = smoothstep( 0.03, 0.18, depth ) * ( 1.0 - smoothstep( 0.22, 1.25, depth ) );
+					float surfBands = pow( max( 0.0, sin( depth * 11.5 - time * 2.8 + noise.x * 2.4 ) ), 3.0 );
+					float edgeLace = smoothstep( 0.02, 0.10, depth ) * ( 1.0 - smoothstep( 0.10, 0.32, depth ) ) * ( 0.55 + 0.45 * sin( worldPosition.x * 1.8 + worldPosition.z * 1.6 + time * 2.2 ) );
+					float shoreFoam = ( inShore * surfBands * ( 0.48 + uFoamIntensity * 0.32 ) + edgeLace * 0.42 );
 
-					float foam = pow( waveCrest, 3.0 ) * ( 0.18 + uFoamIntensity * 0.35 ) + swellWhitecap + shoreFoam;
+					float foam = pow( waveCrest, 3.0 ) * ( 0.18 + uFoamIntensity * 0.35 ) * shallowReflFade + swellWhitecap + shoreFoam;
 					albedo += vec3( foam );
 
-					// Translucent shallow lagoon alpha revealing submerged sand, pebbles & reefs
-					float depthAlpha = mix( 0.28, 0.96, smoothstep( 0.02, 2.8, depth ) );
-					float finalAlpha = clamp( max( depthAlpha, shoreFoam * 0.92 ) * alpha, 0.0, 1.0 );
+					// Zero-seam shoreline alpha: feathers smoothly from 0.0 at depth=0.0 to translucent aqua to deep water
+					float shoreFeather = smoothstep( 0.0, 0.42, depth );
+					float depthAlpha = shoreFeather * mix( 0.34, 0.96, smoothstep( 0.18, 2.8, depth ) );
+					float finalAlpha = clamp( max( depthAlpha, shoreFoam * 0.78 * shoreFeather ) * alpha, 0.0, 1.0 );
 
 					vec3 outgoingLight = albedo;
 					gl_FragColor = vec4( outgoingLight, finalAlpha );
@@ -301,7 +325,7 @@
 				side: side,
 				fog: fog,
 				transparent: true,
-				depthWrite: true
+				depthWrite: false
 			} );
 			material.uniforms[ 'mirrorSampler' ].value = renderTarget.texture;
 			material.uniforms[ 'textureMatrix' ].value = textureMatrix;
@@ -320,10 +344,11 @@
 
 				mirrorWorldPosition.setFromMatrixPosition( scope.matrixWorld );
 				cameraWorldPosition.setFromMatrixPosition( camera.matrixWorld );
+				eye.setFromMatrixPosition( camera.matrixWorld );
 				rotationMatrix.extractRotation( scope.matrixWorld );
 				normal.set( 0, 0, 1 );
 				normal.applyMatrix4( rotationMatrix );
-				view.subVectors( mirrorWorldPosition, cameraWorldPosition ); // Avoid rendering when mirror is facing away
+				view.subVectors( mirrorWorldPosition, cameraWorldPosition ); // Avoid planar mirror pass when camera is underwater
 
 				if ( view.dot( normal ) > 0 ) return;
 				view.reflect( normal ).negate();

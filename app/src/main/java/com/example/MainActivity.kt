@@ -190,14 +190,14 @@ fun WildernessSurvivalApp() {
           .testTag("wilderness_webview")
       )
 
-      // 2. Native Floating Action Controls (Top Right, safely below notch/status bar)
+      // 2. Native Floating Action Controls (Top Right, aligned with WebGL Quick Command Dock)
       Row(
         modifier = Modifier
           .align(Alignment.TopEnd)
-          .padding(top = 52.dp, end = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+          .padding(top = 44.dp, end = 14.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
       ) {
-        // Native Settings & Environment Trigger
+        // Native Command Center Trigger
         Surface(
           onClick = {
             webViewRef?.evaluateJavascript(
@@ -206,19 +206,19 @@ fun WildernessSurvivalApp() {
             )
           },
           modifier = Modifier
-            .size(46.dp)
+            .size(40.dp)
             .testTag("settings_button"),
           shape = CircleShape,
-          color = Color(0xD90E2419),
+          color = Color(0xCC0A1016),
           shadowElevation = 8.dp,
-          border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFF26A69A))
+          border = androidx.compose.foundation.BorderStroke(1.2.dp, Color(0x8826E6C6))
         ) {
           Box(contentAlignment = Alignment.Center) {
             Icon(
               imageVector = Icons.Default.Settings,
-              contentDescription = "Environment & Graphics Settings",
-              tint = Color(0xFF80CBC4),
-              modifier = Modifier.size(24.dp)
+              contentDescription = "Command Center & Debug Menu",
+              tint = Color(0xFF26E6C6),
+              modifier = Modifier.size(20.dp)
             )
           }
         }
@@ -227,19 +227,19 @@ fun WildernessSurvivalApp() {
         Surface(
           onClick = { showGuideDialog = true },
           modifier = Modifier
-            .size(46.dp)
+            .size(40.dp)
             .testTag("survival_guide_button"),
           shape = CircleShape,
-          color = Color(0xD90E2419),
+          color = Color(0xCC0A1016),
           shadowElevation = 8.dp,
-          border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0x66FFFFFF))
+          border = androidx.compose.foundation.BorderStroke(1.2.dp, Color(0x40FFFFFF))
         ) {
           Box(contentAlignment = Alignment.Center) {
             Icon(
               imageVector = Icons.Default.Info,
               contentDescription = "Wilderness Field Guide",
-              tint = Color(0xFFE0F2F1),
-              modifier = Modifier.size(24.dp)
+              tint = Color(0xFFF4FBF9),
+              modifier = Modifier.size(20.dp)
             )
           }
         }
@@ -264,9 +264,9 @@ fun SurvivalGuideDialog(onDismiss: () -> Unit) {
         .testTag("survival_guide_dialog"),
       shape = RoundedCornerShape(24.dp),
       colors = CardDefaults.cardColors(
-        containerColor = Color(0xF20B1A12)
+        containerColor = Color(0xF50A1016)
       ),
-      border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x3326A69A))
+      border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x5526E6C6))
     ) {
       Column(
         modifier = Modifier
@@ -283,13 +283,13 @@ fun SurvivalGuideDialog(onDismiss: () -> Unit) {
             Icon(
               imageVector = Icons.Default.Eco,
               contentDescription = null,
-              tint = Color(0xFF80CBC4),
+              tint = Color(0xFF26E6C6),
               modifier = Modifier.size(24.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-              text = "Sylvan Survival Guide",
-              color = Color(0xFFE0F2F1),
+              text = "Sylvan Explorer & HUD Guide",
+              color = Color(0xFFF4FBF9),
               fontSize = 18.sp,
               fontWeight = FontWeight.Bold
             )
@@ -312,24 +312,24 @@ fun SurvivalGuideDialog(onDismiss: () -> Unit) {
 
         GuideSectionItem(
           icon = Icons.Default.Water,
-          title = "Multi-Tier Hydrology & Currents",
-          description = "A mountain stream cascades down rocky valley rapids into Pine Lake and a forest pond. Stream currents push swimmers and floating logs downstream."
+          title = "Twin Highland Lakes, Waterfalls & 3D Diving",
+          description = "Explore the Grand Headwaters Lake and Cliff-Top Alpine Gorge cascading into the river. Tap Dive [🤿] to swim underwater among swaying kelp, pondweed, and sun god-rays."
         )
 
         Spacer(modifier = Modifier.height(12.dp))
 
         GuideSectionItem(
           icon = Icons.Default.Eco,
-          title = "Lifelike Wilderness Ecosystem",
-          description = "Spruce conifers, white birches, granite boulders, ferns, and river pebbles populate the valley with atmospheric lighting and dynamic shadows."
+          title = "370m Subterranean Caverns & Elderwood Forest",
+          description = "Venture 225m inside the Whispering Basalt Cave to discover the glowing crystal Cenote Lake, or explore the 145m Cataract Echo Grotto and Ancient Elderwood Sanctuary."
         )
 
         Spacer(modifier = Modifier.height(12.dp))
 
         GuideSectionItem(
           icon = Icons.Default.Whatshot,
-          title = "Physical Wave Buoyancy",
-          description = "Logs tossed into water bob realistically on wave crests and drift downstream. Campfires provide life-saving warmth against nocturnal hypothermia."
+          title = "Command Center, Fast-Travel & Debug Menu",
+          description = "Use [🗺️ World] to fast-travel to 8 major landmarks, adjust weather & graphics presets, or open [🛠️ Debug] for live FPS/Coord telemetry, survival cheats, and shader uniforms."
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -337,19 +337,19 @@ fun SurvivalGuideDialog(onDismiss: () -> Unit) {
         Card(
           modifier = Modifier.fillMaxWidth(),
           shape = RoundedCornerShape(14.dp),
-          colors = CardDefaults.cardColors(containerColor = Color(0x40000000))
+          colors = CardDefaults.cardColors(containerColor = Color(0x55000000))
         ) {
           Column(modifier = Modifier.padding(14.dp)) {
             Text(
-              text = "🕹️ Touch Controls",
-              color = Color(0xFF80CBC4),
+              text = "🕹️ Ergonomic Radial Thumb-Arc Controls",
+              color = Color(0xFF26E6C6),
               fontWeight = FontWeight.Bold,
               fontSize = 14.sp
             )
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-              text = "• Left Thumb: Virtual Joystick for walking & wading\n• Right Thumb: Drag anywhere to look around\n• Strike [🪓]: Chop trees for timber or drink clean water\n• Float Log [🪵]: Toss buoyant timber into the river\n• Campfire [🔥]: Toggle warm glowing fire pit\n• Settings [⚙️]: Time-of-day, weather & wave controls",
-              color = Color(0xFFB0BEC5),
+              text = "• Top-Left Survivor Pod: Health, Stamina/Oxygen, Vitals & Timber/Stone\n• Top-Center Compass Tape: Live heading degrees, biome & elevation/depth\n• Primary Anchor [Strike]: Chop trees for timber, mine boulders, or drink\n• Radial Arc Buttons: Jump/Surface [⬆️], Dive 3D [🤿], Sprint [⚡], Campfire [🔥]\n• Top-Right Dock: [🗺️ World] Fast-Travel & [🛠️ Debug] Shader/Telemetry Menu",
+              color = Color(0xFFB8CDC8),
               fontSize = 12.sp,
               lineHeight = 18.sp
             )
@@ -365,11 +365,11 @@ fun SurvivalGuideDialog(onDismiss: () -> Unit) {
             .height(48.dp)
             .testTag("dismiss_guide_button"),
           shape = RoundedCornerShape(14.dp),
-          colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF26A69A))
+          colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF26E6C6))
         ) {
           Text(
             text = "Return to Wilderness",
-            color = Color(0xFF041913),
+            color = Color(0xFF041410),
             fontWeight = FontWeight.Bold,
             fontSize = 14.sp
           )
@@ -389,13 +389,13 @@ fun GuideSectionItem(icon: ImageVector, title: String, description: String) {
       modifier = Modifier
         .size(36.dp)
         .clip(RoundedCornerShape(10.dp))
-        .background(Color(0x3326A69A)),
+        .background(Color(0x2826E6C6)),
       contentAlignment = Alignment.Center
     ) {
       Icon(
         imageVector = icon,
         contentDescription = null,
-        tint = Color(0xFF80CBC4),
+        tint = Color(0xFF26E6C6),
         modifier = Modifier.size(20.dp)
       )
     }
@@ -403,14 +403,14 @@ fun GuideSectionItem(icon: ImageVector, title: String, description: String) {
     Column {
       Text(
         text = title,
-        color = Color(0xFFECEFF1),
+        color = Color(0xFFF4FBF9),
         fontSize = 13.sp,
         fontWeight = FontWeight.SemiBold
       )
       Spacer(modifier = Modifier.height(2.dp))
       Text(
         text = description,
-        color = Color(0xFF90A4AE),
+        color = Color(0xFF9AB4AE),
         fontSize = 12.sp,
         lineHeight = 16.sp
       )
