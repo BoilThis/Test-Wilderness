@@ -98,16 +98,25 @@
 					},
 					'uFoamIntensity': {
 						value: 0.4
+					},
+					'uWaveAmp': {
+						value: 1.0
 					}
 				} ] ),
 				vertexShader:
       /* glsl */
       `
+				attribute float aWaterDepth;
+
 				uniform mat4 textureMatrix;
 				uniform float time;
+				uniform float uWaveAmp;
 
 				varying vec4 mirrorCoord;
 				varying vec4 worldPosition;
+				varying float vWaveHeight;
+				varying vec2 vWaveSlope;
+				varying float vWaterDepth;
 
 				#include <common>
 				#include <fog_pars_vertex>
@@ -115,10 +124,36 @@
 				#include <logdepthbuf_pars_vertex>
 
 				void main() {
-					mirrorCoord = modelMatrix * vec4( position, 1.0 );
+					vec4 baseWorld = modelMatrix * vec4( position, 1.0 );
+					float wx = baseWorld.x;
+					float wz = baseWorld.z;
+
+					// Smoothly swell from lively river/bay chop into rolling 3D ocean waves north of z = -35
+					float oceanMix = clamp( ( -35.0 - wz ) / 45.0, 0.0, 1.0 );
+					float amp = ( 0.36 + oceanMix * 1.38 ) * uWaveAmp;
+
+					float p1 = wx * 0.075 + wz * 0.055 + time * 1.65;
+					float p2 = wx * -0.048 + wz * 0.105 + time * 2.15;
+					float p3 = wx * 0.14 - wz * 0.12 + time * 2.85;
+					float p4 = wx * 0.24 + wz * 0.20 - time * 3.40;
+
+					float waveY = ( sin( p1 ) * 0.48 + sin( p2 ) * 0.32 + cos( p3 ) * 0.14 + sin( p4 ) * 0.06 ) * amp;
+
+					// Analytical slope for 3D wave normal tilting
+					float dwdx = ( cos( p1 ) * 0.075 * 0.48 + cos( p2 ) * -0.048 * 0.32 - sin( p3 ) * 0.14 * 0.14 + cos( p4 ) * 0.24 * 0.06 ) * amp;
+					float dwdz = ( cos( p1 ) * 0.055 * 0.48 + cos( p2 ) * 0.105 * 0.32 + sin( p3 ) * 0.12 * 0.14 + cos( p4 ) * 0.20 * 0.06 ) * amp;
+
+					vWaveHeight = waveY;
+					vWaveSlope = vec2( dwdx, dwdz );
+					vWaterDepth = aWaterDepth;
+
+					// PlaneGeometry is rotated -90 deg around X, so local +Z maps to world +Y (vertical height)
+					vec3 displaced = vec3( position.x, position.y, position.z + waveY );
+
+					mirrorCoord = modelMatrix * vec4( displaced, 1.0 );
 					worldPosition = mirrorCoord.xyzw;
 					mirrorCoord = textureMatrix * mirrorCoord;
-					vec4 mvPosition =  modelViewMatrix * vec4( position, 1.0 );
+					vec4 mvPosition = modelViewMatrix * vec4( displaced, 1.0 );
 					gl_Position = projectionMatrix * mvPosition;
 
 				#include <beginnormal_vertex>
@@ -146,6 +181,9 @@
 
 				varying vec4 mirrorCoord;
 				varying vec4 worldPosition;
+				varying float vWaveHeight;
+				varying vec2 vWaveSlope;
+				varying float vWaterDepth;
 
 				vec4 getNoise( vec2 uv ) {
 					vec2 uv0 = ( uv / 103.0 ) + vec2(time / 17.0, time / 29.0);
@@ -179,7 +217,7 @@
 
 					#include <logdepthbuf_fragment>
 					vec4 noise = getNoise( worldPosition.xz * size );
-					vec3 surfaceNormal = normalize( noise.xzy * vec3( 1.5, 1.0, 1.5 ) );
+					vec3 surfaceNormal = normalize( noise.xzy * vec3( 1.5, 1.0, 1.5 ) + vec3( -vWaveSlope.x * 4.5, 0.0, -vWaveSlope.y * 4.5 ) );
 
 					// Interactive expanding impact ripple rings
 					float rippleNormal = 0.0;
@@ -213,18 +251,43 @@
 					vec3 reflectionSample = vec3( texture2D( mirrorSampler, mirrorCoord.xy / mirrorCoord.w + distortion ) );
 
 					float theta = max( dot( eyeDirection, surfaceNormal ), 0.0 );
-					float rf0 = 0.3;
+					float rf0 = 0.035;
 					float reflectance = rf0 + ( 1.0 - rf0 ) * pow( ( 1.0 - theta ), 5.0 );
-					vec3 scatter = max( 0.0, dot( surfaceNormal, eyeDirection ) ) * waterColor;
-					vec3 albedo = mix( ( sunColor * diffuseLight * 0.3 + scatter ) * getShadowMask(), ( vec3( 0.1 ) + reflectionSample * 0.9 + reflectionSample * specularLight ), reflectance);
 
-					// Dynamic wave crest and current foam
-					float waveCrest = clamp(noise.x * noise.z * 2.2, 0.0, 1.0);
-					float foam = pow(waveCrest, 3.0) * (0.25 + uFoamIntensity * 0.4);
-					albedo += vec3(foam);
+					// Depth-based Beer-Lambert lagoon color gradient (translucent aqua -> turquoise -> deep ocean cobalt)
+					float depth = max( 0.0, vWaterDepth + vWaveHeight * 0.28 );
+					vec3 shallowCol = vec3( 0.12, 0.72, 0.72 );
+					vec3 deepCol = vec3( 0.008, 0.15, 0.25 );
+					vec3 depthTint = mix( shallowCol, waterColor, smoothstep( 0.0, 1.8, depth ) );
+					depthTint = mix( depthTint, deepCol, smoothstep( 2.2, 8.5, depth ) );
+
+					// Wave-crest subsurface sunlight scattering (translucent jade-cyan glow through swells)
+					float sunBacklit = pow( max( 0.0, dot( -eyeDirection, sunDirection ) ), 3.0 );
+					float sss = clamp( vWaveHeight * 0.52, 0.0, 1.0 ) * ( 0.30 + sunBacklit * 0.90 );
+					vec3 sssGlow = vec3( 0.04, 0.36, 0.34 ) * sss;
+
+					vec3 scatter = max( 0.0, dot( surfaceNormal, eyeDirection ) ) * depthTint;
+					vec3 albedo = mix( ( sunColor * diffuseLight * 0.35 + scatter + sssGlow ) * getShadowMask(), ( vec3( 0.04 ) + reflectionSample * 0.94 + reflectionSample * specularLight ), reflectance );
+
+					// Dynamic 3D wave crest whitecaps & current foam
+					float waveCrest = clamp( noise.x * noise.z * 2.2, 0.0, 1.0 );
+					float swellWhitecap = smoothstep( 0.35, 1.35, vWaveHeight ) * ( 0.24 + uFoamIntensity * 0.56 );
+
+					// Animated shoreline surf wash & lapping edge foam where depth meets golden sand/rock
+					float inShore = step( 0.005, vWaterDepth ) * ( 1.0 - smoothstep( 0.08, 1.15, depth ) );
+					float surfBands = pow( max( 0.0, sin( depth * 12.5 - time * 3.1 + noise.x * 2.2 ) ), 3.0 );
+					float edgeContact = step( 0.002, depth ) * ( 1.0 - smoothstep( 0.01, 0.18, depth ) );
+					float shoreFoam = ( inShore * surfBands * ( 0.55 + uFoamIntensity * 0.35 ) + edgeContact * 0.55 );
+
+					float foam = pow( waveCrest, 3.0 ) * ( 0.18 + uFoamIntensity * 0.35 ) + swellWhitecap + shoreFoam;
+					albedo += vec3( foam );
+
+					// Translucent shallow lagoon alpha revealing submerged sand, pebbles & reefs
+					float depthAlpha = mix( 0.28, 0.96, smoothstep( 0.02, 2.8, depth ) );
+					float finalAlpha = clamp( max( depthAlpha, shoreFoam * 0.92 ) * alpha, 0.0, 1.0 );
 
 					vec3 outgoingLight = albedo;
-					gl_FragColor = vec4( outgoingLight, alpha );
+					gl_FragColor = vec4( outgoingLight, finalAlpha );
 
 					#include <tonemapping_fragment>
 					#include <fog_fragment>
@@ -236,7 +299,9 @@
 				uniforms: THREE.UniformsUtils.clone( mirrorShader.uniforms ),
 				lights: true,
 				side: side,
-				fog: fog
+				fog: fog,
+				transparent: true,
+				depthWrite: true
 			} );
 			material.uniforms[ 'mirrorSampler' ].value = renderTarget.texture;
 			material.uniforms[ 'textureMatrix' ].value = textureMatrix;
@@ -248,6 +313,7 @@
 			material.uniforms[ 'sunDirection' ].value = sunDirection;
 			material.uniforms[ 'distortionScale' ].value = distortionScale;
 			material.uniforms[ 'eye' ].value = eye;
+			material.uniforms[ 'uWaveAmp' ].value = options.waveAmp !== undefined ? options.waveAmp : 1.0;
 			scope.material = material;
 
 			scope.onBeforeRender = function ( renderer, scene, camera ) {

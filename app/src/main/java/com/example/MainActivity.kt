@@ -12,6 +12,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -168,6 +169,15 @@ fun WildernessSurvivalApp() {
               override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
                 Log.d("SylvanWeb", "Wilderness page loaded: $url")
+              }
+
+              override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+                val crashed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                  detail?.didCrash() == true
+                } else true
+                Log.e("SylvanWeb", "WebView render process gone (didCrash=$crashed); reloading")
+                view?.reload()
+                return true
               }
             }
 
