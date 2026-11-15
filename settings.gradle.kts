@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "Sylvan"
+rootProject.name = "Caldera Castaway"
 
 include(":app")

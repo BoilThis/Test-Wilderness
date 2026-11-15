@@ -42,7 +42,7 @@
 			const parameters = {
 				minFilter: THREE.LinearFilter,
 				magFilter: THREE.LinearFilter,
-				format: THREE.RGBFormat
+				format: THREE.RGBAFormat
 			};
 			const renderTarget = new THREE.WebGLRenderTarget( textureWidth, textureHeight, parameters );
 
@@ -267,30 +267,35 @@
 					float distance = length(worldToEye);
 
 					vec2 distortion = surfaceNormal.xz * ( 0.001 + 1.0 / distance ) * distortionScale;
-					vec3 reflectionSample = vec3( texture2D( mirrorSampler, mirrorCoord.xy / mirrorCoord.w + distortion ) );
+					float safeMirrorW = max( 0.35, mirrorCoord.w );
+					vec2 projMirrorUV = clamp( mirrorCoord.xy / safeMirrorW + distortion, 0.002, 0.998 );
+					vec3 reflectionSample = vec3( texture2D( mirrorSampler, projMirrorUV ) );
 
 					float theta = max( dot( eyeDirection, surfaceNormal ), 0.0 );
 					float rf0 = 0.035;
 					float reflectance = rf0 + ( 1.0 - rf0 ) * pow( ( 1.0 - theta ), 5.0 );
 
-					// Depth-based Beer-Lambert lagoon color gradient (translucent sand-tinted aqua -> turquoise -> deep ocean cobalt)
+					// Depth-based Beer-Lambert lagoon color gradient (translucent sand-tinted aqua -> turquoise -> abyssal ocean cobalt)
 					float depth = max( 0.0, vWaterDepth + vWaveHeight * 0.22 );
 					vec3 ultraShallowCol = vec3( 0.42, 0.76, 0.72 );
 					vec3 shallowCol = vec3( 0.10, 0.70, 0.72 );
-					vec3 deepCol = vec3( 0.008, 0.15, 0.25 );
+					vec3 deepCol = vec3( 0.006, 0.095, 0.185 );
 					vec3 depthTint = mix( ultraShallowCol, shallowCol, smoothstep( 0.0, 0.65, depth ) );
-					depthTint = mix( depthTint, waterColor, smoothstep( 0.45, 2.1, depth ) );
-					depthTint = mix( depthTint, deepCol, smoothstep( 2.4, 8.8, depth ) );
+					depthTint = mix( depthTint, waterColor, smoothstep( 0.45, 2.2, depth ) );
+					depthTint = mix( depthTint, deepCol, smoothstep( 2.4, 11.5, depth ) );
 
 					// Wave-crest subsurface sunlight scattering (translucent jade-cyan glow through swells)
 					float sunBacklit = pow( max( 0.0, dot( -eyeDirection, sunDirection ) ), 3.0 );
 					float sss = clamp( vWaveHeight * 0.52, 0.0, 1.0 ) * ( 0.30 + sunBacklit * 0.90 );
 					vec3 sssGlow = vec3( 0.04, 0.36, 0.34 ) * sss;
 
-					// Reduce mirror reflection weight in ultra-shallow shoreline water (< 0.5m) so submerged sand/pebbles blend seamlessly
-					float shallowReflFade = smoothstep( 0.02, 0.65, depth );
+					// Reduce mirror reflection weight in ultra-shallow shoreline water (< 0.5m) or when eye is at grazing wave-crest level
+					float eyeHeightFade = smoothstep( 0.45, 1.25, eye.y - worldPosition.y );
+					float shallowReflFade = smoothstep( 0.02, 0.65, depth ) * eyeHeightFade;
+					vec3 skyFallbackCol = mix( vec3( 0.46, 0.74, 0.88 ), sunColor * 0.85, 0.25 );
+					vec3 reflCol = mix( skyFallbackCol, reflectionSample, eyeHeightFade );
 					vec3 scatter = max( 0.0, dot( surfaceNormal, eyeDirection ) ) * depthTint;
-					vec3 albedo = mix( ( sunColor * diffuseLight * 0.35 + scatter + sssGlow ) * getShadowMask(), ( vec3( 0.04 ) + reflectionSample * 0.94 + reflectionSample * specularLight ), reflectance * shallowReflFade );
+					vec3 albedo = mix( ( sunColor * diffuseLight * 0.35 + scatter + sssGlow ) * getShadowMask(), ( vec3( 0.04 ) + reflCol * 0.94 + reflCol * specularLight ), reflectance * shallowReflFade );
 
 					// Dynamic 3D wave crest whitecaps & current foam
 					float waveCrest = clamp( noise.x * noise.z * 2.2, 0.0, 1.0 );
@@ -340,15 +345,38 @@
 			material.uniforms[ 'uWaveAmp' ].value = options.waveAmp !== undefined ? options.waveAmp : 1.0;
 			scope.material = material;
 
+			let _waterMirrorFrame = 0;
+			let _lastCamX = -99999, _lastCamY = -99999, _lastCamZ = -99999, _lastLookX = 0, _lastLookY = 0, _lastLookZ = -1;
+			mirrorCamera.layers.set( 0 );
+
 			scope.onBeforeRender = function ( renderer, scene, camera ) {
 
 				mirrorWorldPosition.setFromMatrixPosition( scope.matrixWorld );
 				cameraWorldPosition.setFromMatrixPosition( camera.matrixWorld );
 				eye.setFromMatrixPosition( camera.matrixWorld );
+				if ( window._playerInsideCave ) return;
+				// Skip planar reflection pass when camera is underwater or at grazing wave-crest height (< 0.85m above water plane)
+				if ( cameraWorldPosition.y < mirrorWorldPosition.y + 0.85 ) return;
+				_waterMirrorFrame = ( _waterMirrorFrame + 1 ) | 0;
+				rotationMatrix.extractRotation( camera.matrixWorld );
+				lookAtPosition.set( 0, 0, - 1 );
+				lookAtPosition.applyMatrix4( rotationMatrix );
+				const camMoved = Math.abs( cameraWorldPosition.x - _lastCamX ) + Math.abs( cameraWorldPosition.y - _lastCamY ) + Math.abs( cameraWorldPosition.z - _lastCamZ ) > 0.25;
+				const camTurned = Math.abs( lookAtPosition.x - _lastLookX ) + Math.abs( lookAtPosition.y - _lastLookY ) + Math.abs( lookAtPosition.z - _lastLookZ ) > 0.018;
+				if ( _waterMirrorFrame > 2 ) {
+					if ( camMoved || camTurned ) {
+						if ( ( _waterMirrorFrame & 3 ) !== 2 ) return;
+					} else {
+						if ( ( _waterMirrorFrame & 7 ) !== 2 ) return;
+					}
+				}
+				_lastCamX = cameraWorldPosition.x; _lastCamY = cameraWorldPosition.y; _lastCamZ = cameraWorldPosition.z;
+				_lastLookX = lookAtPosition.x; _lastLookY = lookAtPosition.y; _lastLookZ = lookAtPosition.z;
+
 				rotationMatrix.extractRotation( scope.matrixWorld );
 				normal.set( 0, 0, 1 );
 				normal.applyMatrix4( rotationMatrix );
-				view.subVectors( mirrorWorldPosition, cameraWorldPosition ); // Avoid planar mirror pass when camera is underwater
+				view.subVectors( mirrorWorldPosition, cameraWorldPosition );
 
 				if ( view.dot( normal ) > 0 ) return;
 				view.reflect( normal ).negate();
@@ -365,7 +393,7 @@
 				mirrorCamera.up.applyMatrix4( rotationMatrix );
 				mirrorCamera.up.reflect( normal );
 				mirrorCamera.lookAt( target );
-				mirrorCamera.far = camera.far; // Used in WebGLBackground
+				mirrorCamera.far = Math.min( camera.far, 420.0 ); // Used in WebGLBackground
 
 				mirrorCamera.updateMatrixWorld();
 				mirrorCamera.projectionMatrix.copy( camera.projectionMatrix ); // Update the texture matrix

@@ -1,6 +1,6 @@
 {
-  "name": "Sylvan",
-  "description": "First-person wilderness survival game and visual engine with flowing rivers, lakes, ponds, dynamic buoyancy, and curated 3D assets.",
+  "name": "Caldera Castaway",
+  "description": "3D open-world volcanic island survival game featuring seaplane crash recovery, cave exploration, outrigger raft sailing, modular shelter building, and wildlife.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

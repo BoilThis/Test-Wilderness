@@ -10,6 +10,7 @@ import android.os.VibratorManager
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.webkit.ConsoleMessage
 import android.webkit.JavascriptInterface
 import android.webkit.RenderProcessGoneDetail
@@ -21,9 +22,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -58,22 +56,30 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.ui.theme.MyApplicationTheme
 
 class MainActivity : ComponentActivity() {
@@ -112,83 +118,222 @@ class WebAppInterface(private val context: Context) {
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun WildernessSurvivalApp() {
-  val context = LocalContext.current
+  val lifecycleOwner = LocalLifecycleOwner.current
   var showGuideDialog by remember { mutableStateOf(false) }
-  var webViewRef by remember { mutableStateOf<WebView?>(null) }
+  // Plain non-Compose ref holder prevents triggering a redundant recomposition / SurfaceSyncGroup pass inside AndroidView(factory)
+  val webViewHolder = remember { arrayOfNulls<WebView>(1) }
+  var webViewKey by remember { mutableIntStateOf(0) }
+  var webViewReadyToMount by remember { mutableStateOf(false) }
+  var renderCrashCount by remember { mutableIntStateOf(0) }
+  var webViewCrashMessage by remember { mutableStateOf<String?>(null) }
 
   BackHandler(enabled = showGuideDialog) {
     showGuideDialog = false
+  }
+
+  // Let MainActivity commit its initial WindowManager SurfaceSyncGroup frames (<16ms) before cold-starting Chromium WebView
+  LaunchedEffect(webViewKey) {
+    webViewReadyToMount = false
+    withFrameNanos { }
+    withFrameNanos { }
+    delay(380L)
+    webViewReadyToMount = true
+  }
+
+  DisposableEffect(lifecycleOwner, webViewKey) {
+    val observer = LifecycleEventObserver { _, event ->
+      val wv = webViewHolder[0] ?: return@LifecycleEventObserver
+      when (event) {
+        Lifecycle.Event.ON_RESUME -> {
+          wv.onResume()
+          wv.resumeTimers()
+        }
+        Lifecycle.Event.ON_PAUSE -> {
+          wv.onPause()
+        }
+        else -> Unit
+      }
+    }
+    lifecycleOwner.lifecycle.addObserver(observer)
+    onDispose {
+      lifecycleOwner.lifecycle.removeObserver(observer)
+      val wv = webViewHolder[0]
+      webViewHolder[0] = null
+      wv?.apply {
+        stopLoading()
+        (parent as? ViewGroup)?.removeView(this)
+        destroy()
+      }
+    }
   }
 
   Scaffold(
     modifier = Modifier
       .fillMaxSize()
       .testTag("wilderness_scaffold"),
-    containerColor = Color.Black
+    containerColor = Color(0xFF040A0E)
   ) { _ ->
     Box(
       modifier = Modifier
         .fillMaxSize()
         .testTag("wilderness_container")
     ) {
-      // 1. Hardware-Accelerated 3D WebGL Viewport
-      AndroidView(
-        factory = { ctx ->
-          WebView(ctx).apply {
-            webViewRef = this
-            layoutParams = ViewGroup.LayoutParams(
-              ViewGroup.LayoutParams.MATCH_PARENT,
-              ViewGroup.LayoutParams.MATCH_PARENT
-            )
-            setLayerType(View.LAYER_TYPE_HARDWARE, null)
-            setBackgroundColor(android.graphics.Color.BLACK)
+      // 1. Lightweight FrameLayout wrapper commits AndroidView SurfaceSyncGroup immediately, then attaches Chromium WebView asynchronously
+      if (webViewReadyToMount) {
+        key(webViewKey) {
+          AndroidView(
+            factory = { ctx ->
+              FrameLayout(ctx).apply {
+                layoutParams = ViewGroup.LayoutParams(
+                  ViewGroup.LayoutParams.MATCH_PARENT,
+                  ViewGroup.LayoutParams.MATCH_PARENT
+                )
+                setBackgroundColor(android.graphics.Color.rgb(4, 10, 14))
 
-            settings.apply {
-              javaScriptEnabled = true
-              domStorageEnabled = true
-              allowFileAccess = true
-              allowContentAccess = true
-              @Suppress("DEPRECATION")
-              allowFileAccessFromFileURLs = true
-              @Suppress("DEPRECATION")
-              allowUniversalAccessFromFileURLs = true
-              useWideViewPort = true
-              loadWithOverviewMode = true
-              mediaPlaybackRequiresUserGesture = false
-              cacheMode = WebSettings.LOAD_DEFAULT
-            }
+                postDelayed({
+                  if (!isAttachedToWindow) return@postDelayed
+                  val wv = WebView(ctx).apply {
+                    webViewHolder[0] = this
+                    layoutParams = FrameLayout.LayoutParams(
+                      ViewGroup.LayoutParams.MATCH_PARENT,
+                      ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                    setBackgroundColor(android.graphics.Color.rgb(4, 10, 14))
 
-            webChromeClient = object : WebChromeClient() {
-              override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
-                Log.d("SylvanWeb", "${consoleMessage?.message()} -- line ${consoleMessage?.lineNumber()} of ${consoleMessage?.sourceId()}")
-                return true
+                    settings.apply {
+                      javaScriptEnabled = true
+                      domStorageEnabled = true
+                      allowFileAccess = true
+                      allowContentAccess = true
+                      @Suppress("DEPRECATION")
+                      allowFileAccessFromFileURLs = true
+                      @Suppress("DEPRECATION")
+                      allowUniversalAccessFromFileURLs = true
+                      useWideViewPort = true
+                      loadWithOverviewMode = true
+                      mediaPlaybackRequiresUserGesture = false
+                      cacheMode = WebSettings.LOAD_DEFAULT
+                    }
+
+                    webChromeClient = object : WebChromeClient() {
+                      override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                        Log.d("SylvanWeb", "${consoleMessage?.message()} -- line ${consoleMessage?.lineNumber()} of ${consoleMessage?.sourceId()}")
+                        return true
+                      }
+                    }
+
+                    webViewClient = object : WebViewClient() {
+                      override fun onPageFinished(view: WebView?, url: String?) {
+                        super.onPageFinished(view, url)
+                        Log.d("SylvanWeb", "Wilderness page loaded: $url")
+                      }
+
+                      override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+                        val crashed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                          detail?.didCrash() == true
+                        } else true
+                        Log.e("SylvanWeb", "WebView render process gone (didCrash=$crashed, attempt=$renderCrashCount)")
+                        if (renderCrashCount < 1) {
+                          renderCrashCount += 1
+                          webViewKey += 1
+                        } else {
+                          webViewCrashMessage = if (crashed) {
+                            "The 3D WebGL graphics process stopped unexpectedly."
+                          } else {
+                            "The Android WebView renderer ran low on graphics memory."
+                          }
+                        }
+                        return true
+                      }
+                    }
+
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                      setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false)
+                    }
+
+                    addJavascriptInterface(WebAppInterface(ctx), "AndroidBridge")
+                  }
+                  addView(wv)
+                  wv.postOnAnimation {
+                    if (webViewHolder[0] === wv && wv.isAttachedToWindow) {
+                      wv.loadUrl("file:///android_asset/wilderness/index.html")
+                    }
+                  }
+                }, 140L)
+              }
+            },
+            modifier = Modifier
+              .fillMaxSize()
+              .testTag("wilderness_webview")
+          )
+        }
+      } else {
+        Box(
+          modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF040A0E)),
+          contentAlignment = Alignment.Center
+        ) {
+          Text(
+            text = "Preparing Sylvan 3D Archipelago...",
+            color = Color(0xFF26E6C6),
+            fontSize = 15.sp,
+            fontWeight = FontWeight.SemiBold
+          )
+        }
+      }
+
+      if (webViewCrashMessage != null) {
+        Box(
+          modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xEE050B10)),
+          contentAlignment = Alignment.Center
+        ) {
+          Card(
+            modifier = Modifier
+              .fillMaxWidth()
+              .padding(24.dp)
+              .testTag("webview_recovery_card"),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF0A141D)),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x6626E6C6))
+          ) {
+            Column(
+              modifier = Modifier.padding(24.dp),
+              horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+              Text(
+                text = "3D Engine Recovery",
+                color = Color(0xFF26E6C6),
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+              )
+              Spacer(modifier = Modifier.height(10.dp))
+              Text(
+                text = webViewCrashMessage ?: "WebGL renderer paused.",
+                color = Color(0xFFD8E8F2),
+                fontSize = 14.sp
+              )
+              Spacer(modifier = Modifier.height(18.dp))
+              Button(
+                onClick = {
+                  webViewCrashMessage = null
+                  renderCrashCount = 0
+                  webViewKey += 1
+                },
+                modifier = Modifier.testTag("webview_retry_button"),
+                colors = ButtonDefaults.buttonColors(
+                  containerColor = Color(0xFF26E6C6),
+                  contentColor = Color(0xFF041410)
+                )
+              ) {
+                Text("Reload 3D World", fontWeight = FontWeight.Bold)
               }
             }
-
-            webViewClient = object : WebViewClient() {
-              override fun onPageFinished(view: WebView?, url: String?) {
-                super.onPageFinished(view, url)
-                Log.d("SylvanWeb", "Wilderness page loaded: $url")
-              }
-
-              override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
-                val crashed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                  detail?.didCrash() == true
-                } else true
-                Log.e("SylvanWeb", "WebView render process gone (didCrash=$crashed); reloading")
-                view?.reload()
-                return true
-              }
-            }
-
-            addJavascriptInterface(WebAppInterface(ctx), "AndroidBridge")
-            loadUrl("file:///android_asset/wilderness/index.html")
           }
-        },
-        modifier = Modifier
-          .fillMaxSize()
-          .testTag("wilderness_webview")
-      )
+        }
+      }
 
       // 2. Native Floating Action Controls (Top Right, aligned with WebGL Quick Command Dock)
       Row(
@@ -200,7 +345,7 @@ fun WildernessSurvivalApp() {
         // Native Command Center Trigger
         Surface(
           onClick = {
-            webViewRef?.evaluateJavascript(
+            webViewHolder[0]?.evaluateJavascript(
               "if (typeof toggleEnvModal === 'function') { toggleEnvModal(); } else if (window.toggleEnvModal) { window.toggleEnvModal(); }",
               null
             )
