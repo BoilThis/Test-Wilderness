@@ -2505,29 +2505,29 @@
 
       // NW Basalt Arc (k = 6..10)
       { x: -380, z: -265, r: 46, h: 17, isBasalt: true, treeCount: 22, name: "Driftwood Basalt Atoll", arc: "nw_Basalt" },
-      { x: -495, z: -410, r: 52, h: 24, isBasalt: true, treeCount: 26, name: "Basalt Arch Isle", arc: "nw_Basalt" },
+      { x: -495, z: -410, r: 52, h: 24, isBasalt: true, treeCount: 26, name: "Basalt Arch Isle", arc: "nw_Basalt", part: "keel" },
       { x: -640, z: -235, r: 42, h: 15, treeCount: 20, name: "Sea-Stack Shoal", arc: "nw_Basalt" },
       { x: -610, z: -585, r: 56, h: 28, isBasalt: true, treeCount: 28, name: "Stormwatch Crag", arc: "nw_Basalt" },
-      { x: -765, z: -775, r: 68, h: 36, isBasalt: true, isRaftOnly: true, sharkGuarded: true, treeCount: 34, name: "Northwest Obsidian Stronghold", arc: "nw_Basalt" },
+      { x: -797, z: -814, r: 68, h: 36, isBasalt: true, isRaftOnly: true, sharkGuarded: true, treeCount: 34, name: "Northwest Obsidian Stronghold", arc: "nw_Basalt" },
 
       // NE Volcanic Arc (k = 11..16)
       { x: 395,  z: -310, r: 44, h: 19, isVolcano: false, isBasalt: true, treeCount: 20, name: "Pumice Spur Cay", arc: "ne_Volcanic" },
-      { x: 540,  z: -420, r: 55, h: 31, isVolcano: true, treeCount: 22, name: "Cinder Cone Islet", arc: "ne_Volcanic" },
+      { x: 540,  z: -420, r: 55, h: 31, isVolcano: true, treeCount: 22, name: "Cinder Cone Islet", arc: "ne_Volcanic", part: "brace" },
       { x: 660,  z: -245, r: 46, h: 20, treeCount: 21, name: "Sulfur Breeze Reef", arc: "ne_Volcanic" },
       { x: 480,  z: -620, r: 48, h: 23, isBasalt: true, treeCount: 22, name: "Tephra Ring Atoll", arc: "ne_Volcanic" },
       { x: 695,  z: -560, r: 52, h: 26, isBasalt: true, treeCount: 24, name: "Basalt Finger Ridge", arc: "ne_Volcanic" },
-      { x: 795,  z: -715, r: 70, h: 40, isVolcano: true, isRaftOnly: true, sharkGuarded: true, treeCount: 28, name: "Magma Trench Bastion", arc: "ne_Volcanic" },
+      { x: 844,  z: -791, r: 70, h: 40, isVolcano: true, isRaftOnly: true, sharkGuarded: true, treeCount: 28, name: "Magma Trench Bastion", arc: "ne_Volcanic" },
 
       // SE Coral Arc (k = 17..22)
       { x: 465,  z: 270,  r: 45, h: 14, isCoral: true, treeCount: 24, name: "Coral Fan Cay", arc: "se_Coral" },
-      { x: 590,  z: 430,  r: 50, h: 18, isCoral: true, treeCount: 26, name: "Pearlshell Atoll", arc: "se_Coral" },
+      { x: 590,  z: 430,  r: 50, h: 18, isCoral: true, treeCount: 26, name: "Pearlshell Atoll", arc: "se_Coral", part: "skin" },
       { x: 350,  z: 495,  r: 44, h: 16, isCoral: true, treeCount: 22, name: "Lagoon Spit Key", arc: "se_Coral" },
       { x: 740,  z: 290,  r: 52, h: 21, isCoral: true, treeCount: 28, name: "Tradewind Terrace Isle", arc: "se_Coral" },
       { x: 560,  z: 710,  r: 56, h: 24, isCoral: true, treeCount: 28, name: "Sea-Turtle Barrier", arc: "se_Coral" },
-      { x: 795,  z: 745,  r: 68, h: 32, isCoral: true, isRaftOnly: true, sharkGuarded: true, treeCount: 36, name: "Deep Coral Fortress", arc: "se_Coral" },
+      { x: 844,  z: 752,  r: 68, h: 32, isCoral: true, isRaftOnly: true, sharkGuarded: true, treeCount: 36, name: "Deep Coral Fortress", arc: "se_Coral" },
 
       // SW Kelp Arc (k = 23..27)
-      { x: -455, z: 390,  r: 46, h: 16, isBamboo: true, treeCount: 26, name: "Kelp Shoal Isle", arc: "sw_Kelp" },
+      { x: -455, z: 390,  r: 46, h: 16, isBamboo: true, treeCount: 26, name: "Kelp Shoal Isle", arc: "sw_Kelp", part: "sail" },
       { x: -330, z: 540,  r: 44, h: 15, isBamboo: true, treeCount: 24, name: "Fern Hollow Cay", arc: "sw_Kelp" },
       { x: -640, z: 355,  r: 50, h: 20, treeCount: 26, name: "Misty Barrier Island", arc: "sw_Kelp" },
       { x: -575, z: 620,  r: 54, h: 22, isBamboo: true, treeCount: 28, name: "Sunfish Sanctuary Reef", arc: "sw_Kelp" },
@@ -5873,6 +5873,65 @@
       return (Math.sin(p1) * 0.48 + Math.sin(p2) * 0.32 + Math.cos(p3) * 0.14 + Math.sin(p4) * 0.06) * amp;
     }
 
+    // Lee water can be swum. Open water and the trench around a stronghold cannot.
+    function getSeaBand(x, z) {
+      const frame = (performance.now() / 32) | 0;
+      if (getSeaBand._frame !== frame) {
+        getSeaBand._frame = frame;
+        getSeaBand._cache = new Map();
+      }
+      const key = ((x * 0.2) | 0) + ':' + ((z * 0.2) | 0);
+      const cached = getSeaBand._cache.get(key);
+      if (cached) return cached;
+
+      const terrH = getTerrainHeight(x, z);
+      let bestLand = Infinity;
+      let bestStrong = Infinity;
+      let shore = null;
+      for (let i = 0; i < archipelagoIslets.length; i++) {
+        const isl = archipelagoIslets[i];
+        const dist = Math.hypot(x - isl.x, z - isl.z) - isl.r;
+        if (isl.isRaftOnly) {
+          if (dist < bestStrong) bestStrong = dist;
+        } else if (dist < bestLand) {
+          bestLand = dist;
+          shore = { x: isl.x, z: isl.z };
+        }
+      }
+      if (terrH > 0.2) {
+        bestLand = 0;
+        shore = { x: x, z: z };
+      } else {
+        for (let a = 0; a < 4; a++) {
+          const ang = a * Math.PI * 0.5;
+          const sx = x + Math.cos(ang) * 36;
+          const sz = z + Math.sin(ang) * 36;
+          if (getTerrainHeight(sx, sz) > 0.4) {
+            bestLand = Math.min(bestLand, 30);
+            shore = { x: sx, z: sz };
+          }
+        }
+      }
+      const sheltered = (x > -360 && x < -250 && z > 180 && z < 270);
+      const standable = terrH > -1.2 && terrH < 0.45;
+      let band = 'open';
+      if (sheltered || standable || bestLand < 40 || terrH > 0.2 || bestStrong < 16) band = 'lee';
+      else if (bestStrong < 75) band = 'trench';
+      const weather = window.calderaCampaign && window.calderaCampaign.weather;
+      const storm = weather && (weather.current === 'storm' || weather.current === 'rain');
+      const mag = (band === 'trench' ? 5.2 : band === 'open' ? 4.4 : 0.35) * (storm && band !== 'lee' ? 1.45 : 1);
+      const result = {
+        band: band,
+        distShore: Math.min(bestLand, bestStrong),
+        shore: shore || { x: -16, z: -36 },
+        windX: 0.71 * mag,
+        windZ: -0.70 * mag
+      };
+      getSeaBand._cache.set(key, result);
+      return result;
+    }
+    window.getSeaBand = getSeaBand;
+
     // Hydrology & Archipelago biome query for player, swimming, and buoyant objects
     function getWaterInfo(x, z, time) {
       const terrH = getTerrainHeight(x, z);
@@ -6007,15 +6066,17 @@
       // Open Deep Ocean Trenches vs Sheltered Coastal Lagoon Shallows
       if (terrH < 0.05) {
         const waterDepth = 0.05 - terrH;
-        const isSwimChannel = (x > -340 && x < -250 && z > 188 && z < 260);
+        const sea = getSeaBand(x, z);
+        const isSwimChannel = sea.band === 'lee' && (x > -360 && x < -250 && z > 180 && z < 270);
         const bodyLabel = isSwimChannel
           ? "🏖️ Sheltered Swim Channel"
-          : (waterDepth > 6.5 ? "🦈 Deep Ocean Channel" : (z < -42 ? "🌊 Open Archipelago Sea" : "🐠 Coral Lagoon Shallows"));
+          : (sea.band === 'trench' ? "🌊 Trench Water" : (sea.band === 'open' ? "🌬️ Open Trade Wind" : (waterDepth > 6.5 ? "🦈 Deep Ocean Channel" : "🐠 Coral Lagoon Shallows")));
         return {
           isWater: true,
           surfaceY: 0.05 + wave,
-          current: new THREE.Vector2(0, -0.35 * flowMult),
-          bodyName: bodyLabel
+          current: new THREE.Vector2(sea.windX, sea.windZ),
+          bodyName: bodyLabel,
+          seaBand: sea.band
         };
       }
 
@@ -8121,6 +8182,17 @@
         for (let k = 5; k < archipelagoIslets.length; k++) {
           const isl = archipelagoIslets[k];
           hullGroup.add(buildIslandHullMesh(isl, k));
+          const sigMat = new THREE.MeshStandardMaterial({
+            color: isl.part ? 0xffe082 : (isl.isRaftOnly ? 0xff7043 : (isl.isCoral ? 0x4dd0e1 : (isl.isBamboo ? 0x7cb342 : 0x90a4ae))),
+            roughness: 0.82
+          });
+          const sig = new THREE.Mesh(
+            isl.isRaftOnly ? new THREE.ConeGeometry(2.4, 9.0, 6) : new THREE.DodecahedronGeometry(isl.part ? 1.7 : 1.15, 0),
+            sigMat
+          );
+          const sigY = getTerrainHeight(isl.x, isl.z);
+          sig.position.set(isl.x, Math.max(sigY, 0.6) + (isl.isRaftOnly ? 4.5 : 1.5), isl.z);
+          hullGroup.add(sig);
 
           let s = ((k + 13) * 1103515245) >>> 0;
           const rnd = () => { s = (Math.imul(1664525, s) + 1013904223) >>> 0; return s / 4294967296; };
@@ -10913,6 +10985,8 @@
       isSprinting: false,
       touchSprintRequested: false,
       lastWaterStepTime: 0,
+      lastShore: { x: -16, z: -36 },
+      washingBack: false,
       stride: 0,
       headBobEnabled: true,
       baseFov: 75,
@@ -11482,7 +11556,7 @@
       valley_pond:      { x: 88.0,   z: 168.0,  yaw: 3.14,  pitch: -0.06, dive: false, label: "🌿 Teleported to the north shore of Windward Valley Lagoon (+6.8m)!" },
       canyon_gorge:     { x: 215.0,  z: 42.0,   yaw: -1.57, pitch: -0.04, dive: false, label: "🪨 Teleported to Stratified Eastern Limestone Canyon!" },
       swim_cay:         { x: -294.0, z: 224.0,  yaw: 1.57,  pitch: -0.05, dive: false, label: "🏖️ Teleported to Sheltered Reef Cove (25m Swim to Cay)!" },
-      outer_stronghold: { x: 742.0,  z: 715.0,  yaw: -0.78, pitch: -0.06, dive: false, label: "⛵ Teleported to Outer Deep Coral Stronghold (2400m Archipelago)!" },
+      outer_stronghold: { x: 791.0,  z: 722.0,  yaw: -0.78, pitch: -0.06, dive: false, label: "⛵ Teleported to Outer Deep Coral Stronghold (2400m Archipelago)!" },
       ruins:            { x: 412.0,  z: 268.0,  yOverride: -2.6, yaw: 1.45, pitch: -0.18, dive: true, label: "🏛️ Submerged into Coral Fan Cay Ruins & Isotope Trench!" },
       cavern:           { x: 31.5,   z: 45.2,   yaw: -1.45, pitch: -0.02, dive: false, label: "🕳️ Teleported to Whispering Basalt Cave Entrance!" },
       cenote:           { x: 215.0,  z: 68.0,   yaw: -1.45, pitch: -0.06, dive: false, caveInterior: true, label: "💎 Teleported inside Subterranean Karst Cenote!" },
@@ -13180,12 +13254,38 @@
           player.vel.y *= 0.5;
         }
 
-        // Apply gentle river/lake current (reduced when deep underwater)
+        // Apply river, lake, and trade-wind current (reduced when deep underwater)
         const subRatio = Math.max(0.25, Math.min(1.0, 1.0 - (wInfo.surfaceY - (player.pos.y + eyeH)) * 0.18));
         player.vel.x += wInfo.current.x * 1.65 * subRatio;
         player.vel.z += wInfo.current.y * 1.65 * subRatio;
+        if (wInfo.seaBand === 'lee') {
+          player.lastShore = { x: player.pos.x, z: player.pos.z };
+          player.washingBack = false;
+        } else if (wInfo.seaBand === 'open' || wInfo.seaBand === 'trench') {
+          player.vitals.stamina = Math.max(0, player.vitals.stamina - 22 * dt);
+          if (player.vitals.stamina <= 6) player.washingBack = true;
+        }
       } else {
         player.vel.y -= 18.0 * dt;
+        if (!wInfo.isWater) player.washingBack = false;
+      }
+
+      if (player.washingBack && player.lastShore && !(window.calderaCampaign && window.calderaCampaign.onRaft)) {
+        const dx = player.lastShore.x - player.pos.x;
+        const dz = player.lastShore.z - player.pos.z;
+        const dist = Math.hypot(dx, dz) || 1;
+        player.vel.x = (dx / dist) * 7.5;
+        player.vel.z = (dz / dist) * 7.5;
+        player.vel.y = Math.max(player.vel.y, 0.4);
+        if (dist < 8) {
+          player.washingBack = false;
+          player.vitals.stamina = 45;
+          if (!player._washTold) {
+            player._washTold = true;
+            showToast('The trade wind carries you back to shore. This gap needs a boat.');
+            setTimeout(() => { player._washTold = false; }, 8000);
+          }
+        }
       }
 
       player.pos.x += player.vel.x * dt;

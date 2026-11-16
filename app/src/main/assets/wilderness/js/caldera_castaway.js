@@ -81,6 +81,10 @@
     outpostRepaired: false,
     rescueTriggered: false,
     onRaft: false,
+    vessel: null,
+    raftBuilt: false,
+    boatBuilt: false,
+    boatParts: { keel: false, brace: false, skin: false, sail: false },
     toolSwing: 0,
     fishingState: {
       cast: false,
@@ -2003,7 +2007,7 @@
 
     // 2. NW Obsidian Stronghold (-765, -775) & Basalt Arch Isle (-495, -410): Coastal Watchtower Beacon & Monoliths
     {
-      const wx = -762.0, wz = -772.0;
+      const wx = -794.0, wz = -811.0;
       const wy = getTerrainHeight(wx, wz);
       const tower = new THREE.Group();
       tower.position.set(wx, wy, wz);
@@ -2055,7 +2059,7 @@
     // 3. NE Magma Trench Bastion (795, -715) & Cinder Cone Islet (540, -420): Fumarole Cones
     {
       const vents = [
-        { x: 792.0, z: -712.0, r: 2.4, h: 3.6 },
+        { x: 841.0, z: -788.0, r: 2.4, h: 3.6 },
         { x: 540.0, z: -420.0, r: 1.9, h: 2.8 }
       ];
       vents.forEach((v, idx) => {
@@ -2080,12 +2084,12 @@
       });
     }
 
-    // 4. SE Deep Coral Fortress (795, 745): Tidewater Timber Pier & Coral Ceremonial Arch
+    // 4. SE Deep Coral Fortress (844, 752): Tidewater Timber Pier & Coral Ceremonial Arch
     {
-      let pierX = 732.0, pierZ = 696.0;
+      let pierX = 781.0, pierZ = 703.0;
       for (let d = 55; d <= 92; d += 3) {
-        const tx = 795.0 - d * 0.72;
-        const tz = 745.0 - d * 0.68;
+        const tx = 844.0 - d * 0.72;
+        const tz = 752.0 - d * 0.68;
         const ty = getTerrainHeight(tx, tz);
         if (ty >= -0.25 && ty <= 1.15) {
           pierX = tx;
@@ -2095,7 +2099,7 @@
       }
       const pier = new THREE.Group();
       pier.position.set(pierX, 0.85, pierZ);
-      pier.rotation.y = Math.atan2(795.0 - pierX, 745.0 - pierZ);
+      pier.rotation.y = Math.atan2(844.0 - pierX, 752.0 - pierZ);
       const deckLen = 11.5;
       const plankDeck = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.24, deckLen), matTimberLog);
       plankDeck.castShadow = true;
@@ -2113,7 +2117,7 @@
       registerClimbableBox(pierX, pierZ, 1.45, deckLen * 0.5, pier.rotation.y, 0.98, -2.0);
 
       // Coral Ceremonial Arch on fortress plateau
-      const ax = 788.0, az = 742.0;
+      const ax = 837.0, az = 749.0;
       const ay = getTerrainHeight(ax, az);
       const arch = new THREE.Group();
       arch.position.set(ax, ay, az);
@@ -2292,6 +2296,51 @@
     scene.add(rGroup);
     registerInteractiveTarget(rGroup);
     registerClimbableBox(raftState.pos.x, raftState.pos.z, 1.9, 2.8, raftState.yaw, 0.32, -1.0);
+
+    const poles = new THREE.Group();
+    for (let i = -2; i <= 2; i++) {
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.13, 5.1, 6), matSeasonedBamboo);
+      pole.rotation.x = Math.PI / 2;
+      pole.position.set(i * 0.38, 0.18, (i % 2) * 0.35);
+      poles.add(pole);
+    }
+    poles.position.set(raftState.pos.x, getTerrainHeight(raftState.pos.x, raftState.pos.z) + 0.12, raftState.pos.z);
+    poles.rotation.y = 0.4;
+    scene.add(poles);
+    raftState.poles = poles;
+    rGroup.visible = false;
+
+    const keel = new THREE.Group();
+    const keelLog = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.32, 6.4), matTimberLog);
+    keel.add(keelLog);
+    const keelRibL = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.7, 0.18), matTimberLog);
+    keelRibL.position.set(-0.55, 0.2, 0.4);
+    keel.add(keelRibL);
+    const keelRibR = keelRibL.clone();
+    keelRibR.position.x = 0.55;
+    keel.add(keelRibR);
+    raftState.boatPos = new THREE.Vector3(-10.5, 0.4, -31.5);
+    keel.position.copy(raftState.boatPos);
+    keel.position.y = getTerrainHeight(-10.5, -31.5) + 0.28;
+    scene.add(keel);
+    raftState.keel = keel;
+    raftState.boatMesh = null;
+    raftState.boatYaw = 0.2;
+
+    const partColors = { keel: 0xb0bec5, brace: 0x6d4c41, skin: 0xff8a65, sail: 0xa5d6a7 };
+    if (window.archipelagoIslets) {
+      window.archipelagoIslets.forEach(isl => {
+        if (!isl.part) return;
+        const marker = new THREE.Mesh(
+          new THREE.BoxGeometry(0.8, 0.5, 0.8),
+          new THREE.MeshStandardMaterial({ color: partColors[isl.part], roughness: 0.7 })
+        );
+        const my = getTerrainHeight(isl.x, isl.z);
+        marker.position.set(isl.x, Math.max(my, 0.3) + 0.55, isl.z);
+        scene.add(marker);
+        isl._marker = marker;
+      });
+    }
   }
 
   // ============================================================================
@@ -3020,14 +3069,14 @@
       {
         id: 'nw_tower_rifle',
         name: 'Survey Rifle Strongbox (NW Stronghold)',
-        x: -760.5, z: -770.5, yOverride: null,
+        x: -792.5, z: -809.5, yOverride: null,
         loot: { unlock: 'rifle', rifleAmmo: 4, dynamite: 2 },
         desc: 'Recovered Bolt-Action Hunting Rifle (4 rounds) + 2 Dynamite Sticks!'
       },
       {
         id: 'ne_bastion_blaster',
         name: 'Volcanic Miner Blast Crate (NE Bastion)',
-        x: 788.0, z: -708.0, yOverride: null,
+        x: 837.0, z: -784.0, yOverride: null,
         loot: { dynamite: 2, pistolAmmo: 3, obsidian: 3 },
         desc: 'Recovered 2 Dynamite Sticks, 3 Pistol Rounds & 3 Volcanic Obsidian!'
       },
@@ -7409,14 +7458,32 @@
 
     const toggleRaftHandler = e => {
       e.stopPropagation();
-      campaign.onRaft = !campaign.onRaft;
       if (campaign.onRaft) {
+        campaign.onRaft = false;
+        campaign.vessel = null;
+        player.pos.y += 0.65;
+        showToast('⚓ Disembarked.');
+        updateCastawayHUD();
+        return;
+      }
+      const dRaft = Math.hypot(player.pos.x - raftState.pos.x, player.pos.z - raftState.pos.z);
+      const dBoat = raftState.boatPos ? Math.hypot(player.pos.x - raftState.boatPos.x, player.pos.z - raftState.boatPos.z) : 999;
+      if (campaign.boatBuilt && dBoat < 9 && dBoat <= dRaft) {
+        campaign.onRaft = true;
+        campaign.vessel = 'boat';
+        player.pos.set(raftState.boatPos.x, raftState.boatPos.y + 0.45, raftState.boatPos.z);
+        player.vel.set(0, 0, 0);
+        showToast('⛵ Boarded the keeled boat. She holds the wind.');
+      } else if (dRaft < 9) {
+        if (!campaign.raftBuilt) {
+          showToast('The hull is still loose poles. Lash it here with 4 bamboo and 2 fiber.');
+          return;
+        }
+        campaign.onRaft = true;
+        campaign.vessel = 'raft';
         player.pos.set(raftState.pos.x, raftState.pos.y + 0.35, raftState.pos.z);
         player.vel.set(0, 0, 0);
-        showToast('⛵ Boarded Outrigger Bamboo Raft! Use joystick to sail across the archipelago!');
-      } else {
-        player.pos.y += 0.65;
-        showToast('⚓ Disembarked Outrigger Raft.');
+        showToast('🛶 Boarded the bamboo raft. She will not cross trench water.');
       }
       updateCastawayHUD();
     };
@@ -7480,7 +7547,8 @@
           <button class="cc-btn-secondary" id="cc-act-arrows" style="margin-top:0;">🏹 +5 Arrows (1T+1Fl+1Fe)</button>
           <button class="cc-btn-secondary" id="cc-act-bolts" style="margin-top:0;">🎯 +4 Bolts (1T+1Ob+1Fe)</button>
           <button class="cc-btn-secondary" id="cc-act-flare" style="margin-top:0;">🎇 +2 Flares (1Ob+1Bam)</button>
-          <button class="cc-btn-secondary" id="cc-act-raft" style="margin-top:0;">🛶 Summon Raft Here</button>
+          <button class="cc-btn-secondary" id="cc-act-raft" style="margin-top:0;">🛶 Lash Beach Raft (4 Bam + 2 Fiber)</button>
+          <button class="cc-btn-secondary" id="cc-act-boat" style="margin-top:0;">⛵ Build Keeled Boat (4 arc pieces)</button>
         </div>
 
         <div class="cc-section-lbl">🔨 Modular Shelter Blueprints (Tap to Arm Hammer)</div>
@@ -7645,11 +7713,63 @@
     });
 
     document.getElementById('cc-act-raft').addEventListener('click', () => {
-      const fwd = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(0, player.yaw, 0));
-      raftState.pos.set(player.pos.x + fwd.x * 4.5, 0.08, player.pos.z + fwd.z * 4.5);
-      raftState.mesh.position.copy(raftState.pos);
+      if (campaign.raftBuilt) {
+        showToast('The beach raft is already lashed.');
+        return;
+      }
+      const dist = Math.hypot(player.pos.x - raftState.pos.x, player.pos.z - raftState.pos.z);
+      if (dist > 22) {
+        showToast('The pole hull is on the crash-cove beach, not in your pack.');
+        return;
+      }
+      if ((player.inventory.bamboo || 0) < 4 || (player.inventory.fiber || 0) < 2) {
+        showToast('Need 4 bamboo and 2 fiber, gathered on this island.');
+        return;
+      }
+      player.inventory.bamboo -= 4;
+      player.inventory.fiber -= 2;
+      campaign.raftBuilt = true;
+      raftState.mesh.visible = true;
+      if (raftState.poles) raftState.poles.visible = false;
       craftModal.style.display = 'none';
-      showToast('🛶 Outrigger Bamboo Raft moored right ahead!');
+      showToast('🛶 Raft lashed. She will cross open water and be blown off a trench.');
+      updateCastawayHUD();
+    });
+
+    document.getElementById('cc-act-boat').addEventListener('click', () => {
+      const parts = campaign.boatParts;
+      const missing = ['keel', 'brace', 'skin', 'sail'].filter(k => !parts[k]);
+      if (missing.length) {
+        showToast('The keel is still short: ' + missing.join(', ') + '. One piece from each arc, not from a stronghold.');
+        return;
+      }
+      const dist = Math.hypot(player.pos.x - raftState.boatPos.x, player.pos.z - raftState.boatPos.z);
+      if (dist > 22) {
+        showToast('Bring the four pieces back to the keel on the home beach.');
+        return;
+      }
+      if (campaign.boatBuilt) {
+        showToast('The keeled boat is already built.');
+        return;
+      }
+      campaign.boatBuilt = true;
+      const hull = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.55, 6.2), matTimberLog);
+      body.position.y = 0.25;
+      hull.add(body);
+      const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 3.2, 6), matHickory);
+      mast.position.set(0, 1.8, -0.4);
+      hull.add(mast);
+      const sail = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.8, 2.2), matThatch);
+      sail.position.set(0, 2.1, -0.4);
+      hull.add(sail);
+      hull.position.copy(raftState.boatPos);
+      scene.add(hull);
+      raftState.boatMesh = hull;
+      if (raftState.keel) raftState.keel.visible = false;
+      craftModal.style.display = 'none';
+      showToast('⛵ Keeled boat finished. She is faster, and she is the only craft that crosses the trench.');
+      updateCastawayHUD();
     });
 
     const NEW_WAYPOINTS = {
@@ -7662,7 +7782,7 @@
       valley_pond:      { x: 88.0,   z: 168.0,  yaw: 3.14, pitch: -0.06, dive: false, label: '🌿 Teleported to the north shore of Windward Valley Lagoon (+6.8m)!' },
       canyon_gorge:     { x: 215.0,  z: 42.0,   yaw: -1.57, pitch: -0.04, dive: false, label: '🪨 Teleported to Stratified Eastern Limestone Canyon!' },
       swim_cay:         { x: -294.0, z: 224.0,  yaw: 1.57,  pitch: -0.05, dive: false, label: '🏖️ Teleported to Sheltered Reef Cove (25m Swim to Cay)!' },
-      outer_stronghold: { x: 742.0,  z: 715.0,  yaw: -0.78, pitch: -0.06, dive: false, label: '⛵ Teleported to Outer Deep Coral Stronghold (2400m Archipelago)!' }
+      outer_stronghold: { x: 791.0,  z: 722.0,  yaw: -0.78, pitch: -0.06, dive: false, label: '⛵ Teleported to Outer Deep Coral Stronghold (2400m Archipelago)!' }
     };
     if (WAYPOINTS) Object.assign(WAYPOINTS, NEW_WAYPOINTS);
 
@@ -8323,42 +8443,82 @@
 
     // 4. Update Outrigger Bamboo Raft Boarding & Sailing Physics (Dirty-Checked DOM Sync)
     const distToRaft = Math.hypot(px - raftState.pos.x, pz - raftState.pos.z);
+    const distToBoat = raftState.boatPos ? Math.hypot(px - raftState.boatPos.x, pz - raftState.boatPos.z) : 999;
     const raftBtn = updateCalderaCastaway._raftBtn || (updateCalderaCastaway._raftBtn = document.getElementById('cc-raft-btn'));
     if (raftBtn) {
-      const nextState = campaign.onRaft ? 2 : (distToRaft < 8.5 ? 1 : 0);
-      if (updateCalderaCastaway._lastRaftState !== nextState) {
-        updateCalderaCastaway._lastRaftState = nextState;
-        if (nextState === 2) {
+      const nearCraft = distToRaft < 8.5 || (campaign.boatBuilt && distToBoat < 8.5);
+      const nextState = campaign.onRaft ? 'on' : (nearCraft ? 'near' : 'far');
+      const token = nextState + (campaign.raftBuilt ? 'R' : 'r') + (campaign.boatBuilt ? 'B' : 'b') + (distToBoat < distToRaft ? '1' : '0');
+      if (updateCalderaCastaway._lastRaftState !== token) {
+        updateCalderaCastaway._lastRaftState = token;
+        if (nextState === 'on') {
           raftBtn.style.display = 'block';
-          raftBtn.innerText = '⚓ Disembark Raft';
-        } else if (nextState === 1) {
+          raftBtn.innerText = '⚓ Disembark';
+        } else if (nextState === 'near') {
           raftBtn.style.display = 'block';
-          raftBtn.innerText = '🛶 Board Outrigger Raft';
+          if (!campaign.raftBuilt && distToRaft <= distToBoat) raftBtn.innerText = '🛶 Hull not lashed';
+          else if (campaign.boatBuilt && distToBoat < distToRaft) raftBtn.innerText = '⛵ Board keeled boat';
+          else raftBtn.innerText = '🛶 Board bamboo raft';
         } else {
           raftBtn.style.display = 'none';
         }
       }
     }
 
-    const raftW = getWaterInfo(raftState.pos.x, raftState.pos.z, timeSec);
-    const targetRaftY = raftW.isWater ? raftW.surfaceY + 0.06 : getTerrainHeight(raftState.pos.x, raftState.pos.z) + 0.08;
-    raftState.pos.y += (targetRaftY - raftState.pos.y) * Math.min(1.0, 6.0 * dt);
-
-    if (campaign.onRaft) {
-      const sailSpeed = 14.5;
-      if (wish && wish.lengthSq() > 0.02) {
-        const nextX = Math.max(-1220, Math.min(1220, raftState.pos.x + wish.x * sailSpeed * dt));
-        const nextZ = Math.max(-1220, Math.min(1220, raftState.pos.z + wish.z * sailSpeed * dt));
-        if (getTerrainHeight(nextX, nextZ) < raftState.pos.y + 0.35) {
-          raftState.pos.x = nextX;
-          raftState.pos.z = nextZ;
-          raftState.yaw = Math.atan2(-wish.x, -wish.z);
+    if (frameCounter % 20 === 0 && window.archipelagoIslets && campaign.boatParts) {
+      const partNames = { keel: 'stone keel', brace: 'obsidian brace', skin: 'coral resin', sail: 'fiber sail' };
+      for (let i = 0; i < window.archipelagoIslets.length; i++) {
+        const isl = window.archipelagoIslets[i];
+        if (!isl.part || campaign.boatParts[isl.part]) continue;
+        if (Math.hypot(px - isl.x, pz - isl.z) < isl.r * 0.72) {
+          campaign.boatParts[isl.part] = true;
+          if (isl._marker) isl._marker.visible = false;
+          showToast('Recovered the ' + partNames[isl.part] + ' from ' + isl.name + '.');
         }
       }
-      player.pos.set(raftState.pos.x, raftState.pos.y + 0.32, raftState.pos.z);
+    }
+
+    const floatCraft = (pos) => {
+      const w = getWaterInfo(pos.x, pos.z, timeSec);
+      const targetY = w.isWater ? w.surfaceY + 0.06 : getTerrainHeight(pos.x, pos.z) + 0.2;
+      pos.y += (targetY - pos.y) * Math.min(1.0, 6.0 * dt);
+    };
+    floatCraft(raftState.pos);
+    if (raftState.boatPos) floatCraft(raftState.boatPos);
+
+    if (campaign.onRaft) {
+      const usingBoat = campaign.vessel === 'boat' && campaign.boatBuilt;
+      const pos = usingBoat ? raftState.boatPos : raftState.pos;
+      let sailSpeed = usingBoat ? 22 : 14.5;
+      const sea = window.getSeaBand ? window.getSeaBand(pos.x, pos.z) : null;
+      const storm = campaign.weather && (campaign.weather.current === 'storm' || campaign.weather.current === 'rain');
+      const drift = (usingBoat ? 0.45 : 2.7) * (storm ? 1.55 : 1);
+      if (sea && sea.band === 'trench' && !usingBoat) {
+        sailSpeed = 1.1;
+        if (!campaign._trenchTold) {
+          campaign._trenchTold = true;
+          showToast('The raft makes no headway in the trench. This water wants the keeled boat.');
+          setTimeout(() => { campaign._trenchTold = false; }, 9000);
+        }
+      }
+      pos.x += 0.71 * drift * dt;
+      pos.z += -0.70 * drift * dt;
+      if (wish && wish.lengthSq() > 0.02) {
+        const nextX = Math.max(-1220, Math.min(1220, pos.x + wish.x * sailSpeed * dt));
+        const nextZ = Math.max(-1220, Math.min(1220, pos.z + wish.z * sailSpeed * dt));
+        if (getTerrainHeight(nextX, nextZ) < pos.y + 0.5) {
+          pos.x = nextX;
+          pos.z = nextZ;
+          const yaw = Math.atan2(-wish.x, -wish.z);
+          if (usingBoat) raftState.boatYaw = yaw;
+          else raftState.yaw = yaw;
+        }
+      }
+      player.pos.set(pos.x, pos.y + (usingBoat ? 0.5 : 0.32), pos.z);
       player.vel.set(0, 0, 0);
       player.isSwimming = false;
       player.isGrounded = true;
+      player.washingBack = false;
       camera.position.set(player.pos.x, player.pos.y + 1.88, player.pos.z);
     }
 
@@ -8366,6 +8526,10 @@
     raftState.mesh.rotation.y = raftState.yaw;
     raftState.mesh.rotation.x = Math.sin(timeSec * 2.2 + raftState.pos.x * 0.2) * 0.045;
     raftState.mesh.rotation.z = Math.cos(timeSec * 1.9 + raftState.pos.z * 0.2) * 0.045;
+    if (raftState.boatMesh) {
+      raftState.boatMesh.position.copy(raftState.boatPos);
+      raftState.boatMesh.rotation.y = raftState.boatYaw || 0.2;
+    }
 
     // 5. Update Interactive Fishing Bobber & Bite Minigame
     const fs = campaign.fishingState;
