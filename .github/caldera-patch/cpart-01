@@ -1,0 +1,70 @@
+-        dirX: -52.0 / Math.hypot(-52.0, -58.0),
+-        dirZ: -58.0 / Math.hypot(-52.0, -58.0),
+-        perpX: 58.0 / Math.hypot(-52.0, -58.0),
+-        perpZ: -52.0 / Math.hypot(-52.0, -58.0),
++        // East-flank portal on the relocated cone (angle 0.05 rad, 88m from the crater). Tube runs west into the mountain.
++        startX: -214.1, startZ: 68.4,
++        px: -214.1, pz: 68.4,
++        vecX: -302.0, vecZ: 64.0,
++        dirX: -0.99875, dirZ: -0.04998,
++        perpX: 0.04998, perpZ: -0.99875,
+         swayAmp: 8.5, swayFreq: 2.0,
+         wiggle1: 6.5, wiggle2: 2.2,
+-        baseY: 27.0, drop: -1.8,
++        baseY: 33.0, drop: -8.0,
+         hasCenote: false,
+         isLavaTube: true,
+         length: 115.0,
+@@ -3000,16 +3003,16 @@
+             const ptM = cv.getPoint(midS);
+             ctrlPts = [
+               { x: pt0.x, z: pt0.z, y: pt0.floorY },
+-              { x: pt0.x + fwd0X * 8.0 + rgt0X * side * (latPeak * 0.58), z: pt0.z + fwd0Z * 8.0 + rgt0Z * side * (latPeak * 0.58), y: pt0.floorY + sp.dropY * 0.55 },
++              { x: pt0.x + fwd0X * 14.0 + rgt0X * side * (latPeak * 0.42), z: pt0.z + fwd0Z * 14.0 + rgt0Z * side * (latPeak * 0.42), y: pt0.floorY + sp.dropY * 0.42 },
+               { x: ptM.x + ptM.perpX * side * latPeak, z: ptM.z + ptM.perpZ * side * latPeak, y: 0.5 * (pt0.floorY + pt1.floorY) + sp.dropY },
+-              { x: pt1.x - fwd1X * 8.0 + rgt1X * side * (latPeak * 0.55), z: pt1.z - fwd1Z * 8.0 + rgt1Z * side * (latPeak * 0.55), y: pt1.floorY + sp.dropY * 0.50 },
++              { x: pt1.x - fwd1X * 14.0 + rgt1X * side * (latPeak * 0.40), z: pt1.z - fwd1Z * 14.0 + rgt1Z * side * (latPeak * 0.40), y: pt1.floorY + sp.dropY * 0.40 },
+               { x: pt1.x, z: pt1.z, y: pt1.floorY }
+             ];
+           } else {
+             const ext = sp.forwardExt || 40.0;
+             ctrlPts = [
+               { x: pt0.x, z: pt0.z, y: pt0.floorY },
+-              { x: pt0.x + fwd0X * 9.0 + rgt0X * side * (latPeak * 0.52), z: pt0.z + fwd0Z * 9.0 + rgt0Z * side * (latPeak * 0.52), y: pt0.floorY + sp.dropY * 0.25 },
++              { x: pt0.x + fwd0X * 16.0 + rgt0X * side * (latPeak * 0.38), z: pt0.z + fwd0Z * 16.0 + rgt0Z * side * (latPeak * 0.38), y: pt0.floorY + sp.dropY * 0.22 },
+               { x: pt0.x + fwd0X * (ext * 0.48) + rgt0X * side * latPeak, z: pt0.z + fwd0Z * (ext * 0.48) + rgt0Z * side * latPeak, y: pt0.floorY + sp.dropY * 0.85 },
+               { x: pt0.x + fwd0X * (ext * 0.85) + rgt0X * side * (latPeak * 0.92), z: pt0.z + fwd0Z * (ext * 0.85) + rgt0Z * side * (latPeak * 0.92), y: pt0.floorY + sp.dropY },
+               { x: pt0.x + fwd0X * ext + rgt0X * side * (latPeak * 0.72), z: pt0.z + fwd0Z * ext + rgt0Z * side * (latPeak * 0.72), y: pt0.floorY + sp.dropY }
+@@ -3065,10 +3068,14 @@
+               halfW *= domeCap;
+               ceilH *= domeCap;
+             }
+-            // Widen junction throats smoothly so tunnels connect cleanly
+-            const juncStart = t < 0.10 ? (1.0 - t / 0.10) * 1.15 : 0.0;
+-            const juncEnd = (sp.reconnectS !== null && sp.reconnectS !== undefined && t > 0.90) ? ((t - 0.90) / 0.10) * 1.15 : 0.0;
++            // Smooth eroded fork: a long cosine throat (not a 10% pinch) so the branch mouth matches the parent tunnel.
++            // juncStart/juncEnd are meters added to halfW; ceilH follows at 0.42 so the lintel doesn't knife into the fork.
++            const juncStart = t < 0.24 ? Math.pow(1.0 - t / 0.24, 1.25) * ((pt0.halfW * 0.62) + 1.6) : 0.0;
++            const juncEnd = (sp.reconnectS !== null && sp.reconnectS !== undefined && t > 0.76)
++              ? Math.pow((t - 0.76) / 0.24, 1.25) * ((cv.getPoint(sp.reconnectS).halfW * 0.50) + 1.5)
++              : 0.0;
+             halfW += juncStart + juncEnd;
++            ceilH += (juncStart + juncEnd) * 0.42;
+ 
+             if (i > 0) {
+               accumLen += Math.hypot(x - samples[i - 1].x, z - samples[i - 1].z);
+@@ -3442,53 +3449,60 @@
+         }
+       }
+ 
+-      // Inland Mount Caldera Stratovolcano Massif (Southern Interior Mountain Ridge: -124, 224, Peak ~102–107m ASL)
++      // Mount Caldera massif. Reads MOUNT_CALDERA (center, baseR, rimR, rimY, floorY, footY).
++      // East flank ties into Elderwood; west flank is a sea cliff. Crater floor stays below the dark rim.
+       const vcDx = x - MOUNT_CALDERA.x;
+       const vcDz = z - MOUNT_CALDERA.z;
+       const vcDist = Math.hypot(vcDx, vcDz);
+-      if (vcDist < MOUNT_CALDERA.baseR + 10.0) {
++      if (vcDist < MOUNT_CALDERA.baseR + 14.0) {
+         const ang = Math.atan2(vcDz, vcDx);
++        const footY = MOUNT_CALDERA.footY;
+         const coneT = Math.max(0.0, Math.min(1.0, (vcDist - MOUNT_CALDERA.rimR) / (MOUNT_CALDERA.baseR - MOUNT_CALDERA.rimR)));
