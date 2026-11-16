@@ -1,0 +1,70 @@
+-        const profile = Math.pow(1.0 - coneT, 1.48);
++        const profile = Math.pow(1.0 - coneT, 1.42);
+ 
+-        // Radial basalt lava ribs & stratified ash shoulders (zero ribs inside cauldron)
+-        const outerMask = smoothstep(0.02, 0.24, coneT) * (1.0 - smoothstep(0.76, 1.0, coneT));
++        // Radial basalt ribs on the mid-slopes only (quiet inside the cauldron, quiet on the outer skirt)
++        const outerMask = smoothstep(0.04, 0.22, coneT) * (1.0 - smoothstep(0.78, 1.0, coneT));
+         const ribWave = Math.sin(ang * 7.0 + fbm2(Math.cos(ang) * 2.2, Math.sin(ang) * 2.2, 2) * 1.55) * 0.5 + 0.5;
+-        const ribs = (ribWave * 3.6 + ridged2(x * 0.032 + 1.4, z * 0.032 - 2.1, 2) * 3.2 + fbm2(x * 0.018, z * 0.018, 2) * 2.2) * outerMask;
++        const ribs = (ribWave * 4.8 + ridged2(x * 0.028 + 1.4, z * 0.028 - 2.1, 2) * 4.0 + fbm2(x * 0.016, z * 0.016, 2) * 2.6) * outerMask;
+ 
+-        // Jagged volcanic crater rim crest (~102..107m ASL) + NE Caldera Overlook Notch (-0.62 rad -> ~97.8m ASL)
+-        const rimBelt = Math.exp(-Math.pow(coneT / 0.14, 2.0));
+-        const rimJagged = (Math.sin(ang * 5.0 + 0.7) * 2.0 + Math.cos(ang * 9.0 - 1.2) * 1.2 + ridged2(Math.cos(ang) * 2.1, Math.sin(ang) * 2.1, 2) * 1.6) * rimBelt;
+-        const dAngOverlook = Math.atan2(Math.sin(ang - (-0.62)), Math.cos(ang - (-0.62)));
+-        const overlookDip = Math.exp(-Math.pow(dAngOverlook / 0.34, 2.0)) * 4.2 * Math.exp(-Math.pow(coneT / 0.22, 2.0));
++        // Jagged crest. North-fjord overlook notch at 2.20 rad drops the rim ~7m so the trail can crest it.
++        const rimBelt = Math.exp(-Math.pow(coneT / 0.12, 2.0));
++        const rimJagged = (Math.sin(ang * 5.0 + 0.7) * 3.2 + Math.cos(ang * 9.0 - 1.2) * 1.8 + ridged2(Math.cos(ang) * 2.1, Math.sin(ang) * 2.1, 2) * 2.2) * rimBelt;
++        const overlookAng = 2.20;
++        const dAngOverlook = Math.atan2(Math.sin(ang - overlookAng), Math.cos(ang - overlookAng));
++        const overlookDip = Math.exp(-Math.pow(dAngOverlook / 0.32, 2.0)) * 7.0 * Math.exp(-Math.pow(coneT / 0.18, 2.0));
+ 
+         const rimCrestY = MOUNT_CALDERA.rimY + rimJagged - overlookDip;
+-        let volcH = 24.0 + profile * (MOUNT_CALDERA.rimY - 24.0) + ribs + rimJagged - overlookDip;
+-
+-        // Walkable spiraling ash trail ascending from SE Lava Tube trailhead (-72, 282) around S->W->N to NE Overlook (-0.62 rad)
+-        if (vcDist >= MOUNT_CALDERA.rimR - 1.0 && vcDist <= 84.0) {
+-          let uAng = ang - 0.84;
++        let volcH = footY + profile * (MOUNT_CALDERA.rimY - footY) + ribs + rimJagged - overlookDip;
++
++        // Ash trail: east lava-tube trailhead (angle 0.05) climbing to the north overlook (angle 2.20).
++        const trailOuter = MOUNT_CALDERA.baseR * 0.74;
++        const trailInner = MOUNT_CALDERA.rimR + 2.4;
++        if (vcDist >= trailInner - 2.0 && vcDist <= trailOuter + 8.0) {
++          const trailStart = 0.05;
++          let uAng = ang - trailStart;
+           if (uAng < 0.0) uAng += Math.PI * 2.0;
+-          const totalSweep = 4.823; // 0.84 -> +5.663 (= -0.62 rad)
+-          if (uAng <= totalSweep + 0.28) {
++          const totalSweep = overlookAng - trailStart;
++          if (uAng <= totalSweep + 0.30) {
+             const sTrail = Math.max(0.0, Math.min(1.0, uAng / totalSweep));
+-            const rTrail = 78.0 - sTrail * (78.0 - 25.0);
++            const rTrail = trailOuter - sTrail * (trailOuter - trailInner);
+             const rDiff = Math.abs(vcDist - rTrail);
+-            if (rDiff < 5.8) {
+-              const trailBlend = (1.0 - smoothstep(2.1, 5.8, rDiff)) * smoothstep(0.0, 0.06, sTrail) * (1.0 - smoothstep(0.95, 1.0, sTrail) * 0.25);
+-              const trailTargetY = 27.5 + sTrail * 70.3;
+-              volcH = volcH * (1.0 - trailBlend * 0.88) + trailTargetY * (trailBlend * 0.88);
++            if (rDiff < 6.4) {
++              const trailBlend = (1.0 - smoothstep(2.3, 6.4, rDiff)) * smoothstep(0.0, 0.05, sTrail) * (1.0 - smoothstep(0.94, 1.0, sTrail) * 0.20);
++              const trailTargetY = (footY + 20.0) + sTrail * (MOUNT_CALDERA.rimY - footY - 28.0);
++              volcH = volcH * (1.0 - trailBlend * 0.90) + trailTargetY * (trailBlend * 0.90);
+             }
+           }
+         }
+ 
+-        const skirtW = smoothstep(MOUNT_CALDERA.baseR + 8.0, MOUNT_CALDERA.baseR - 20.0, vcDist);
++        const skirtW = smoothstep(MOUNT_CALDERA.baseR + 12.0, MOUNT_CALDERA.baseR - 28.0, vcDist);
+         y = y * (1.0 - skirtW) + Math.max(y, volcH) * skirtW;
+ 
+-        // Concave Volcanic Cauldron Bowl inside rimR = 24.5m dropping cleanly down to recessed 81m floor (86.5m lava level)
++        // Crater bowl. Flat floor inside poolEdgeR*0.62, walls up to the jagged crest. Lava mesh sits on lavaY.
+         if (vcDist < MOUNT_CALDERA.rimR) {
+-          const wallSpan = Math.max(0.01, (vcDist - 10.0) / (MOUNT_CALDERA.rimR - 10.0));
+-          const bowlFrac = vcDist <= 10.0 ? 0.0 : Math.pow(wallSpan, 1.65);
++          const floorR = MOUNT_CALDERA.poolEdgeR * 0.62;
++          const wallSpan = Math.max(0.01, (vcDist - floorR) / Math.max(0.01, MOUNT_CALDERA.rimR - floorR));
++          const bowlFrac = vcDist <= floorR ? 0.0 : Math.pow(wallSpan, 1.55);
