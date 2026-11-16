@@ -1694,33 +1694,40 @@
       [-229, 75], [-225, 111], [-269, 121], [-301, 110], [-324, 97], [-378, 95], [-393, 35], [-324, -5],
       // Cinder Cone Islet (NE Volcanic Arc)
       [530, -412], [548, -426], [522, -432],
-      // Magma Trench Bastion (NE Raft Stronghold)
-      [782, -704], [806, -722], [790, -734],
-      // Northwest Obsidian Stronghold (NW Raft Stronghold)
-      [-752, -764], [-774, -780], [-760, -792]
+      // Magma Trench Bastion (NE Raft Stronghold at 844, -791)
+      [832, -778], [854, -798], [838, -806],
+      // Northwest Obsidian Stronghold (NW Raft Stronghold at -797, -814)
+      [-784, -802], [-808, -822], [-792, -830]
     ];
-    obsidianCoords.forEach(([ox, oz]) => {
-      const oy = getTerrainHeight(ox, oz);
-      if (oy < 0.5) return;
+    function spawnObsidianNode(ox, oy, oz, isLavaTubeVein) {
       const node = new THREE.Group();
       node.position.set(ox, oy, oz);
-      // Basalt matrix plinth + 6 razor-faceted volcanic obsidian shards
       const baseRock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.56, 1), matAnodizedDark);
       baseRock.scale.set(1.3, 0.48, 1.2);
       baseRock.position.y = 0.14;
       baseRock.raycast = () => {};
       node.add(baseRock);
 
+      const shardMat = isLavaTubeVein
+        ? new THREE.MeshStandardMaterial({
+            color: 0x0b0e14,
+            emissive: 0xb71c1c,
+            emissiveIntensity: 0.42,
+            roughness: 0.08,
+            metalness: 0.85
+          })
+        : matObsidianGlass;
+
       for (let s = 0; s < 6; s++) {
         const shard = new THREE.Mesh(
           new THREE.ConeGeometry(0.32 + (s % 2) * 0.12, 1.45 + (s % 3) * 0.35, 5),
-          matObsidianGlass
+          shardMat
         );
         const a = (s / 6) * Math.PI * 2;
         const rad = (s === 0) ? 0.0 : 0.28;
         shard.position.set(Math.cos(a) * rad, 0.62, Math.sin(a) * rad);
         shard.rotation.set(Math.sin(a) * 0.28, s * 1.1, -Math.cos(a) * 0.28);
-        shard.castShadow = true;
+        shard.castShadow = !isLavaTubeVein;
         shard.raycast = () => {};
         node.add(shard);
       }
@@ -1728,13 +1735,98 @@
 
       node.userData = {
         type: 'obsidian',
+        isLavaTubeVein: !!isLavaTubeVein,
         health: 2,
-        promptLabel: 'Mine Volcanic Obsidian Shard [Tap Strike]'
+        promptLabel: isLavaTubeVein
+          ? 'Mine Magma-Veined Lava Tube Obsidian (+2 Obsidian, +1 Flint) [Tap Strike]'
+          : 'Mine Volcanic Obsidian Shard [Tap Strike]'
       };
       worldLandmarksGroup.add(node);
       registerInteractiveTarget(node);
       registerCollider(ox, oz, 0.68, oy - 0.5, oy + 1.8, 'obsidian');
+    }
+
+    obsidianCoords.forEach(([ox, oz]) => {
+      const oy = getTerrainHeight(ox, oz);
+      if (oy < 0.5) return;
+      spawnObsidianNode(ox, oy, oz, false);
     });
+
+    // Deep Lava Tube Magma-Veined Obsidian Clusters along CAVE_SYSTEMS[2]
+    const lavaTubeCave = window.CAVE_SYSTEMS && window.CAVE_SYSTEMS[2];
+    if (lavaTubeCave) {
+      [0.18, 0.34, 0.50, 0.66, 0.80, 0.90].forEach((sVal, vIdx) => {
+        const pt = lavaTubeCave.getPoint(sVal);
+        const side = (vIdx % 2 === 0) ? 1 : -1;
+        const wallOff = (pt.halfW || 4.2) * 0.62 * side;
+        const vxNode = pt.x + pt.perpX * wallOff;
+        const vzNode = pt.z + pt.perpZ * wallOff;
+        spawnObsidianNode(vxNode, pt.floorY - 0.05, vzNode, true);
+      });
+    }
+
+    // Register Active Geothermal Steam Vents (warm body temperature & boost stamina recovery when nearby)
+    const geothermalVents = [
+      { x: -213.5, z: 68.4, y: 33.2, name: 'Lava Tube Portal Fumarole' },
+      { x: 540.0,  z: -420.0, y: 22.0, name: 'Cinder Cone Fumarole' },
+      { x: 841.0,  z: -788.0, y: 28.0, name: 'Magma Trench Fumarole' }
+    ];
+    [0.42, 1.48, 2.55, 3.65, 4.78].forEach(va => {
+      const gx = vx + Math.cos(va) * 23.2;
+      const gz = vz + Math.sin(va) * 23.2;
+      geothermalVents.push({ x: gx, z: gz, y: getTerrainHeight(gx, gz), name: 'Caldera Rim Fumarole' });
+    });
+    window.geothermalVents = geothermalVents;
+
+    // Mount Caldera Summit Survey Cairn & Obsidian Signal Brazier on East Rim Overlook (-265.2, 64.0)
+    {
+      const bx = vx + (mc.rimR || 36.0) + 0.8;
+      const bz = vz;
+      const by = getTerrainHeight(bx, bz);
+      const brazierGroup = new THREE.Group();
+      brazierGroup.position.set(bx, by, bz);
+
+      const cairnBase = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 1.25, 0.85, 8), matAnodizedDark);
+      cairnBase.position.y = 0.42;
+      brazierGroup.add(cairnBase);
+
+      const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.78, 0.48, 0.55, 8), matObsidianGlass);
+      bowl.position.y = 1.05;
+      brazierGroup.add(bowl);
+
+      const emberCore = new THREE.Mesh(
+        new THREE.DodecahedronGeometry(0.46, 1),
+        new THREE.MeshStandardMaterial({ color: 0xff5722, emissive: 0xff3d00, emissiveIntensity: 0.45, roughness: 0.4 })
+      );
+      emberCore.scale.set(1.1, 0.55, 1.1);
+      emberCore.position.y = 1.28;
+      brazierGroup.add(emberCore);
+
+      const brazierFlame = new THREE.Mesh(
+        new THREE.ConeGeometry(0.42, 1.35, 7),
+        new THREE.MeshBasicMaterial({ color: 0xffab00 })
+      );
+      brazierFlame.position.y = 1.85;
+      brazierFlame.visible = false;
+      brazierGroup.add(brazierFlame);
+
+      brazierGroup.traverse(c => { if (c.isMesh) c.raycast = () => {}; });
+      const bProxy = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 2.3, 8), _landmarkProxyMat);
+      bProxy.position.y = 1.1;
+      brazierGroup.add(bProxy);
+
+      brazierGroup.userData = {
+        type: 'summit_brazier',
+        lit: false,
+        flame: brazierFlame,
+        ember: emberCore,
+        promptLabel: 'Ignite Mount Caldera Summit Signal Brazier (+168m Peak) [Tap Strike]'
+      };
+      worldLandmarksGroup.add(brazierGroup);
+      registerInteractiveTarget(brazierGroup);
+      registerCollider(bx, bz, 0.95, by - 0.5, by + 2.2, 'brazier');
+      geothermalVents.push({ x: bx, z: bz, y: by, name: 'Mount Caldera Summit Brazier' });
+    }
 
     const cave1 = window.CAVE_SYSTEMS && window.CAVE_SYSTEMS[0];
     if (cave1) {
@@ -2327,18 +2419,54 @@
     raftState.boatMesh = null;
     raftState.boatYaw = 0.2;
 
-    const partColors = { keel: 0xb0bec5, brace: 0x6d4c41, skin: 0xff8a65, sail: 0xa5d6a7 };
+    const partColors = { keel: 0xb0bec5, brace: 0x4fc3f7, skin: 0xff8a65, sail: 0xffe082 };
     if (window.archipelagoIslets) {
       window.archipelagoIslets.forEach(isl => {
         if (!isl.part) return;
-        const marker = new THREE.Mesh(
-          new THREE.BoxGeometry(0.8, 0.5, 0.8),
-          new THREE.MeshStandardMaterial({ color: partColors[isl.part], roughness: 0.7 })
-        );
+        const relic = new THREE.Group();
         const my = getTerrainHeight(isl.x, isl.z);
-        marker.position.set(isl.x, Math.max(my, 0.3) + 0.55, isl.z);
-        scene.add(marker);
-        isl._marker = marker;
+        relic.position.set(isl.x, Math.max(my, 0.3), isl.z);
+
+        // Timber salvage plinth + signal pennant mast
+        const chock = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.26, 1.35), matTimberLog);
+        chock.position.y = 0.13;
+        relic.add(chock);
+
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.06, 4.2, 6), matSeasonedBamboo);
+        pole.position.set(-0.48, 2.1, -0.48);
+        relic.add(pole);
+
+        const pennant = new THREE.Mesh(
+          new THREE.ConeGeometry(0.38, 1.15, 3),
+          new THREE.MeshStandardMaterial({ color: partColors[isl.part], emissive: partColors[isl.part], emissiveIntensity: 0.28, roughness: 0.5 })
+        );
+        pennant.rotation.z = -Math.PI / 2;
+        pennant.position.set(0.05, 3.85, -0.48);
+        relic.add(pennant);
+
+        // Part-specific 3D nautical salvage centerpiece
+        const pMat = new THREE.MeshStandardMaterial({ color: partColors[isl.part], roughness: 0.42, metalness: 0.22 });
+        if (isl.part === 'keel') {
+          const beam = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.45, 1.85), pMat);
+          beam.position.y = 0.52;
+          relic.add(beam);
+        } else if (isl.part === 'brace') {
+          const knee = new THREE.Mesh(new THREE.TorusGeometry(0.46, 0.14, 6, 12, Math.PI * 1.15), matObsidianGlass);
+          knee.position.y = 0.65;
+          relic.add(knee);
+        } else if (isl.part === 'skin') {
+          const amphora = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.36, 0.92, 10), pMat);
+          amphora.position.y = 0.72;
+          relic.add(amphora);
+        } else {
+          const sailRoll = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.24, 1.65, 10), pMat);
+          sailRoll.rotation.z = Math.PI / 2;
+          sailRoll.position.y = 0.54;
+          relic.add(sailRoll);
+        }
+
+        scene.add(relic);
+        isl._marker = relic;
       });
     }
   }
@@ -4728,7 +4856,8 @@
   }
 
   async function spawnBoarsAndWolvesAsync() {
-    const boarCoords = [[-32, 18], [-48, 36], [-62, -16], [18, 52], [-88, -128], [26, -34]];
+    // Wild Boars forage along Elderwood glades, S-Meandering River point bars (48, 178), and Spring T2/T4 banks
+    const boarCoords = [[-32, 18], [-48, 36], [-62, -16], [18, 52], [48, 178], [26, -34], [-50, 142]];
     for (let i = 0; i < boarCoords.length; i++) {
       createQuadruped('boar', boarCoords[i][0], boarCoords[i][1]);
       if (i % 2 === 1) await yieldFrame();
@@ -5028,9 +5157,15 @@
 
   const fishAgents = [];
   function spawnFish() {
+    // Lagoon & Estuary schools + Waterfall Plunge-Pool Trout (C1: 21.5, 2.0; C2: -14.5, 124.0) + Multi-Lobe Lakes (L1, L2, L3) & S-Meander River (R2)
     const fishCoords = [
-      [2, 12], [5, 22], [-2, 4], [-6, -12], [-14, -28], [-38, -104], [-44, -112],
-      [102, 2], [96, 4], [-16, 192], [-20, 186], [8, 30], [-4, -22], [12, 18]
+      [2, 12], [5, 22], [-2, 4], [-6, -12], [-14, -28], [8, 30], [-4, -22], [12, 18],
+      // C1 East Gorge Waterfall Plunge Scour Pool (-4.4m)
+      [21.5, 2.0], [18.5, 3.2],
+      // C2 Headwaters Waterfall Plunge Scour Pool (-4.6m)
+      [-14.5, 124.0], [-16.2, 121.5],
+      // L1 Cliff-Top Tarn (+33.6m), L2 Headwaters Lake (+26.6m), L3 Windward Valley Lagoon (+6.8m) & R2 Meander Bend
+      [114, 2], [122, 4], [-18, 198], [-22, 208], [86, 212], [92, 218], [46, 179]
     ];
     fishCoords.forEach(([fx, fz], idx) => {
       const w = getWaterInfo(fx, fz, 0);
@@ -5237,14 +5372,14 @@
 
   function spawnSharks() {
     const assets = buildSharedSharkAssets();
-    // Deep channels & raft-gated approaches (strictly distant from Swim-Safe Reef Cay at (-342, 224))
+    // Patrol the trench rings around the 3 outer strongholds + outer archipelago sea channels (strictly clear of Swim-Safe Reef Cay at (-342, 224))
     const patrolAnchors = [
-      { x: -540, z: -520, rad: 68, name: 'Northwest Basalt Trench Shark' },
-      { x:  520, z: -510, rad: 72, name: 'Volcanic Caldera Trench Shark' },
-      { x:  545, z:  490, rad: 66, name: 'Deep Coral Shelf Shark' },
-      { x: -575, z:  520, rad: 70, name: 'Abyssal Kelp Channel Shark' },
-      { x: -165, z: -275, rad: 56, name: 'North Sentinel Channel Shark' },
-      { x:  255, z: -155, rad: 58, name: 'East Passage Reef Shark' }
+      { x: -735, z: -755, rad: 62, name: 'Northwest Obsidian Trench Shark' },
+      { x:  780, z: -730, rad: 64, name: 'Magma Bastion Trench Shark' },
+      { x:  780, z:  695, rad: 62, name: 'Deep Coral Fortress Trench Shark' },
+      { x: -555, z: -485, rad: 66, name: 'Basalt Arc Channel Shark' },
+      { x:  595, z: -365, rad: 64, name: 'Volcanic Passage Reef Shark' },
+      { x: -520, z:  465, rad: 66, name: 'Abyssal Kelp Channel Shark' }
     ];
 
     patrolAnchors.forEach((anch, idx) => {
@@ -5991,24 +6126,24 @@
   }
 
   async function spawnForestWildlifeAsync() {
-    // 12 Forest Deer (5 Antlered Bucks + 7 Does across Elderwood Rainforest, Windward Meadows & Outer Islets)
+    // 12 Forest Deer (5 Antlered Bucks + 7 Does across Elderwood, S-Meandering River Point Bars, Windward Lagoon Littoral Shelf & Springs)
     const deerSpecs = [
       { x: -55,  z: 56,  buck: true },
       { x: -64,  z: 62,  buck: false },
       { x: -96,  z: 38,  buck: false },
       { x: -132, z: 76,  buck: true },
-      { x: -162, z: 62,  buck: false },
-      { x: -194, z: 94,  buck: true },
-      { x: -206, z: 54,  buck: false },
-      { x: 28,   z: 174, buck: false },
-      { x: 64,   z: 218, buck: true },
-      { x: 88,   z: 196, buck: false },
+      { x: 88,   z: 66,  buck: false }, // Karst Spring T1 glade
+      { x: 16,   z: 155, buck: true },  // S-Meander River R2 inner sandy point bar
+      { x: 46,   z: 177, buck: false }, // S-Meander River R2 upper point bar
+      { x: 74,   z: 198, buck: false }, // Windward Valley Lagoon L3 weir shelf
+      { x: 88,   z: 172, buck: true },  // Windward Valley Lagoon L3 north sandy littoral shelf
+      { x: 106,  z: 212, buck: false }, // Windward Valley Lagoon L3 east cove
       { x: 455,  z: 274, buck: true },
       { x: -452, z: 392, buck: false }
     ];
     for (let i = 0; i < deerSpecs.length; i++) {
       const d = deerSpecs[i];
-      if (getTerrainHeight(d.x, d.z) > 1.2) createForestDeer(d.x, d.z, d.buck);
+      if (getTerrainHeight(d.x, d.z) > 0.35) createForestDeer(d.x, d.z, d.buck);
       if (i % 3 === 2) await yieldFrame();
     }
 
@@ -6909,10 +7044,36 @@
           removeInteractiveTarget(root);
           player.inventory.obsidian += 2;
           player.inventory.stone += 1;
-          showToast('🖤 Mined +2 Volcanic Obsidian & +1 Stone!');
+          if (u.isLavaTubeVein) {
+            player.inventory.flint = (player.inventory.flint || 0) + 1;
+            showToast('🌋 Mined Magma-Veined Obsidian! +2 Obsidian, +1 Flint & +1 Stone!');
+          } else {
+            showToast('🖤 Mined +2 Volcanic Obsidian & +1 Stone!');
+          }
           updateCastawayHUD();
         } else {
           showToast('⛏️ Chipping volcanic obsidian...');
+        }
+        return;
+      }
+
+      if (u.type === 'summit_brazier') {
+        AudioEngine.playFire();
+        if (!u.lit) {
+          u.lit = true;
+          if (u.flame) u.flame.visible = true;
+          if (u.ember && u.ember.material) u.ember.material.emissiveIntensity = 1.35;
+          player.inventory.obsidian = (player.inventory.obsidian || 0) + 3;
+          player.inventory.flares = (player.inventory.flares || 0) + 2;
+          player.vitals.temp = 37.4;
+          player.vitals.stamina = 100;
+          u.promptLabel = 'Mount Caldera Summit Signal Brazier (Lit — Warming +168m Crest)';
+          showToast('🌋 Ignited the +168m Mount Caldera Summit Brazier! Found +3 Obsidian & +2 Signal Flares!');
+          updateCastawayHUD();
+        } else {
+          player.vitals.temp = 37.4;
+          player.vitals.stamina = 100;
+          showToast('🔥 Warmed by the Mount Caldera Summit Signal Brazier (+168m ASL)!');
         }
         return;
       }
@@ -7006,21 +7167,31 @@
         showToast('🎣 Aim at the river, lagoon, or cliff-top lake to cast your fishing line!');
         return;
       }
+      const isPlungeOrPointBar = Math.hypot(bx - 21.5, bz - 2.0) < 15.0
+        || Math.hypot(bx - (-14.5), bz - 124.0) < 16.0
+        || Math.hypot(bx - 88.0, bz - 214.0) < 28.0
+        || Math.hypot(bx - 46.0, bz - 178.0) < 16.0;
       fs.cast = true;
-      fs.biteTimer = 2.5 + Math.random() * 2.0;
+      fs.isPrimeSpot = isPlungeOrPointBar;
+      fs.biteTimer = (isPlungeOrPointBar ? 1.5 : 2.5) + Math.random() * 1.4;
       fs.biting = false;
       fs.bobberPos.set(bx, w.surfaceY, bz);
       fishingBobber.position.copy(fs.bobberPos);
       fishingBobber.visible = true;
       addWaterRipple(bx, bz, 1.4);
       AudioEngine.playSplash();
-      showToast('🎣 Line cast! Wait for the bobber to plunge, then tap Strike to reel in!');
+      showToast(isPlungeOrPointBar
+        ? '🎣 Cast into prime Plunge-Pool / Point-Bar eddy! Trout are schooling here!'
+        : '🎣 Line cast! Wait for the bobber to plunge, then tap Strike to reel in!');
     } else {
       if (fs.biting) {
-        player.inventory.rawFish += 1;
+        const bonus = fs.isPrimeSpot ? 2 : 1;
+        player.inventory.rawFish += bonus;
         AudioEngine.playSplash();
         addWaterRipple(fs.bobberPos.x, fs.bobberPos.z, 1.8);
-        showToast('🐟 Caught a prized Caldera Trout! +1 Raw Fish (Cook at any campfire spit!)');
+        showToast(fs.isPrimeSpot
+          ? '🐟 Caught a Trophy Waterfall Plunge Trout! +2 Raw Fish!'
+          : '🐟 Caught a prized Caldera Trout! +1 Raw Fish (Cook at any campfire spit!)');
         updateCastawayHUD();
       } else {
         showToast('🎣 Reeled line back in early.');
@@ -7456,6 +7627,11 @@
     raftBtn.innerText = '🛶 Board Outrigger Raft';
     document.body.appendChild(raftBtn);
 
+    const navalHud = document.createElement('div');
+    navalHud.id = 'cc-naval-hud';
+    navalHud.style.cssText = 'position:fixed;top:52px;left:50%;transform:translateX(-50%);z-index:48;background:rgba(6,18,28,0.86);border:1px solid rgba(102,252,241,0.38);border-radius:999px;padding:4px 13px;color:#e0f7fa;font-size:11px;font-weight:700;letter-spacing:0.02em;display:none;pointer-events:none;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,0.45);';
+    document.body.appendChild(navalHud);
+
     const toggleRaftHandler = e => {
       e.stopPropagation();
       if (campaign.onRaft) {
@@ -7754,15 +7930,69 @@
       }
       campaign.boatBuilt = true;
       const hull = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.55, 6.2), matTimberLog);
-      body.position.y = 0.25;
-      hull.add(body);
-      const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 3.2, 6), matHickory);
-      mast.position.set(0, 1.8, -0.4);
+      // Carved keel spine + flared port/starboard carvel hull strakes + pointed prow stempost + ribs
+      const keelSpine = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.36, 6.6), matTimberLog);
+      keelSpine.position.y = 0.14;
+      hull.add(keelSpine);
+
+      const deckPlank = new THREE.Mesh(new THREE.BoxGeometry(1.56, 0.16, 5.6), matTimberLog);
+      deckPlank.position.y = 0.34;
+      hull.add(deckPlank);
+
+      [-0.78, 0.78].forEach(sx => {
+        const gunwale = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.44, 5.8), matHickory);
+        gunwale.position.set(sx, 0.48, 0);
+        gunwale.rotation.z = sx > 0 ? -0.18 : 0.18;
+        hull.add(gunwale);
+      });
+
+      [-1.8, -0.6, 0.6, 1.8].forEach(rz => {
+        const rib = new THREE.Mesh(new THREE.BoxGeometry(1.52, 0.14, 0.16), matHickory);
+        rib.position.set(0, 0.43, rz);
+        hull.add(rib);
+      });
+
+      const prowStem = new THREE.Mesh(new THREE.ConeGeometry(0.48, 1.45, 4), matHickory);
+      prowStem.rotation.x = -Math.PI / 2 + 0.38;
+      prowStem.position.set(0, 0.56, -3.15);
+      hull.add(prowStem);
+
+      // Stepped Mast + Articulated Lateen Sail Boom Pivot + Stern Rudder Pivot + Night Bow Lantern
+      const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.09, 3.8, 8), matHickory);
+      mast.position.set(0, 2.15, -0.45);
       hull.add(mast);
-      const sail = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.8, 2.2), matThatch);
-      sail.position.set(0, 2.1, -0.4);
-      hull.add(sail);
+
+      const sailPivot = new THREE.Group();
+      sailPivot.position.set(0, 2.25, -0.45);
+      const boom = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 2.6, 6), matSeasonedBamboo);
+      boom.rotation.x = Math.PI / 2;
+      boom.position.set(0, -0.82, 0.35);
+      sailPivot.add(boom);
+
+      const sailCanvas = new THREE.Mesh(new THREE.BoxGeometry(0.06, 2.05, 2.45), matThatch);
+      sailCanvas.position.set(0, 0.12, 0.32);
+      sailPivot.add(sailCanvas);
+      hull.add(sailPivot);
+
+      const rudderPivot = new THREE.Group();
+      rudderPivot.position.set(0, 0.35, 3.15);
+      const rudderBlade = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.68, 0.52), matHickory);
+      rudderBlade.position.set(0, -0.18, 0.22);
+      rudderPivot.add(rudderBlade);
+      hull.add(rudderPivot);
+
+      const lanternGlobe = new THREE.Mesh(
+        new THREE.SphereGeometry(0.13, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0xffd54f })
+      );
+      lanternGlobe.position.set(0, 0.88, -2.85);
+      hull.add(lanternGlobe);
+      const boatLight = new THREE.PointLight(0xffb74d, 2.2, 24.0);
+      boatLight.position.set(0, 1.05, -2.85);
+      hull.add(boatLight);
+      registerManagedLight(boatLight, 32.0);
+
+      hull.userData = { sailPivot, rudderPivot };
       hull.position.copy(raftState.boatPos);
       scene.add(hull);
       raftState.boatMesh = hull;
@@ -8478,6 +8708,19 @@
       }
     }
 
+    // Geothermal Fumarole & Lava Tube Warming (restores body warmth & stamina near volcanic steam vents)
+    if (window.geothermalVents) {
+      for (let gv = 0; gv < window.geothermalVents.length; gv++) {
+        const vent = window.geothermalVents[gv];
+        const dSq = (px - vent.x) * (px - vent.x) + (pz - vent.z) * (pz - vent.z);
+        if (dSq < 196.0) { // within 14m of fumarole / summit brazier
+          player.vitals.temp = Math.min(37.4, player.vitals.temp + dt * 0.45);
+          player.vitals.stamina = Math.min(100, player.vitals.stamina + dt * 4.5);
+          break;
+        }
+      }
+    }
+
     const floatCraft = (pos) => {
       const w = getWaterInfo(pos.x, pos.z, timeSec);
       const targetY = w.isWater ? w.surfaceY + 0.06 : getTerrainHeight(pos.x, pos.z) + 0.2;
@@ -8512,6 +8755,9 @@
           const yaw = Math.atan2(-wish.x, -wish.z);
           if (usingBoat) raftState.boatYaw = yaw;
           else raftState.yaw = yaw;
+          if ((frameCounter % 10) === 0) {
+            addWaterRipple(pos.x - Math.sin(yaw) * 2.2, pos.z - Math.cos(yaw) * 2.2, usingBoat ? 1.75 : 1.35);
+          }
         }
       }
       player.pos.set(pos.x, pos.y + (usingBoat ? 0.5 : 0.32), pos.z);
@@ -8522,13 +8768,47 @@
       camera.position.set(player.pos.x, player.pos.y + 1.88, player.pos.z);
     }
 
+    // Live Naval Wind-Vane, Sea-Band & Boat-Part HUD Indicator
+    if ((frameCounter & 7) === 0) {
+      const navalHud = updateCalderaCastaway._navalHud || (updateCalderaCastaway._navalHud = document.getElementById('cc-naval-hud'));
+      if (navalHud) {
+        const showNaval = campaign.onRaft || (player.isSwimming && (Math.abs(px) > 150 || Math.abs(pz) > 150));
+        if (!showNaval) {
+          if (navalHud.style.display !== 'none') navalHud.style.display = 'none';
+        } else {
+          const sea = window.getSeaBand ? window.getSeaBand(px, pz) : { band: 'lee' };
+          const bandLbl = sea.band === 'trench'
+            ? '🌊 Stronghold Trench (5.2kt NE)'
+            : (sea.band === 'open' ? '🌬️ Open Trade Wind (4.4kt NE)' : '🏖️ Sheltered Lee Water');
+          const vesselLbl = campaign.onRaft
+            ? (campaign.vessel === 'boat' ? '⛵ Keeled Boat' : '🛶 Bamboo Raft')
+            : '🏊 Swimming';
+          const bp = campaign.boatParts || {};
+          const partCnt = (bp.keel ? 1 : 0) + (bp.brace ? 1 : 0) + (bp.skin ? 1 : 0) + (bp.sail ? 1 : 0);
+          const partStr = campaign.boatBuilt ? '• ✅ Boat Built' : `• ⚙️ Boat Parts: ${partCnt}/4`;
+          navalHud.style.display = 'block';
+          navalHud.innerText = `${vesselLbl} • ${bandLbl} ${partStr}`;
+        }
+      }
+    }
+
     raftState.mesh.position.copy(raftState.pos);
     raftState.mesh.rotation.y = raftState.yaw;
     raftState.mesh.rotation.x = Math.sin(timeSec * 2.2 + raftState.pos.x * 0.2) * 0.045;
     raftState.mesh.rotation.z = Math.cos(timeSec * 1.9 + raftState.pos.z * 0.2) * 0.045;
     if (raftState.boatMesh) {
       raftState.boatMesh.position.copy(raftState.boatPos);
-      raftState.boatMesh.rotation.y = raftState.boatYaw || 0.2;
+      const bYaw = raftState.boatYaw || 0.2;
+      raftState.boatMesh.rotation.y = bYaw;
+      raftState.boatMesh.rotation.x = Math.sin(timeSec * 2.0 + raftState.boatPos.x * 0.15) * 0.038;
+      raftState.boatMesh.rotation.z = Math.cos(timeSec * 1.7 + raftState.boatPos.z * 0.15) * 0.035;
+      const u = raftState.boatMesh.userData;
+      if (u && u.sailPivot) {
+        u.sailPivot.rotation.y = Math.sin(bYaw - 0.78) * 0.55 + Math.sin(timeSec * 2.6) * 0.05;
+      }
+      if (u && u.rudderPivot && wish) {
+        u.rudderPivot.rotation.y = Math.max(-0.45, Math.min(0.45, -wish.x * 0.35));
+      }
     }
 
     // 5. Update Interactive Fishing Bobber & Bite Minigame
