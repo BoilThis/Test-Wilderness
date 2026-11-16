@@ -1,0 +1,69 @@
+From 8628e07b4ed920a62169d76485953d6e934e9125 Mon Sep 17 00:00:00 2001
+From: BoilThis <34217932+BoilThis@users.noreply.github.com>
+Date: Mon, 16 Nov 2026 16:11:58 +0000
+Subject: [PATCH] feat: enlarge Mount Caldera and contain the waterways
+
+Move the stratovolcano to the western coast, raise the crest to 168m with a dark scoria rim, and retie the lava tube and ash trail to the new cone. Seal cave mouths to a thin doorway so the hillside no longer reads as a hole, and smooth branch forks. Keep lakes, the valley pond, and river ribbons inside their banks instead of sheeting over the gorges.
+---
+ app/src/main/assets/wilderness/index.html     | 278 ++++++++++--------
+ .../assets/wilderness/js/caldera_castaway.js  |  27 +-
+ 2 files changed, 171 insertions(+), 134 deletions(-)
+
+diff --git a/app/src/main/assets/wilderness/index.html b/app/src/main/assets/wilderness/index.html
+index de3586e..c59d51f 100644
+--- a/app/src/main/assets/wilderness/index.html
++++ b/app/src/main/assets/wilderness/index.html
+@@ -2402,16 +2402,20 @@
+       return (f + s) * stepH;
+     }
+ 
+-    // Mount Caldera Inland Stratovolcano Spec (Southern Interior Mountain Ridge: Highest Peak on Map)
++    // Mount Caldera — western coastal stratovolcano.
++    // Moved off the valley pond (was -124,224, ~236m from the pond, 102m crest).
++    // Now -302,64: ~449m from Windward Valley Pond, crest 168m, dark scoria rim.
++    // footY is the skirt elevation the cone blends into; do not raise it or the sea cliff becomes a mesa.
+     const MOUNT_CALDERA = {
+-      x: -124.0,
+-      z: 224.0,
+-      baseR: 96.0,
+-      rimR: 24.5,
+-      poolEdgeR: 18.8,
+-      rimY: 102.0,
+-      floorY: 81.0,
+-      lavaY: 86.5
++      x: -302.0,
++      z: 64.0,
++      baseR: 112.0,
++      rimR: 36.0,
++      poolEdgeR: 26.5,
++      rimY: 168.0,
++      floorY: 126.0,
++      lavaY: 132.5,
++      footY: 12.0
+     };
+     window.MOUNT_CALDERA = MOUNT_CALDERA;
+ 
+@@ -2424,7 +2428,7 @@
+         { id: 'windward_meadows',     name: '🌾 Windward Valley Meadows',   x: 55.0,   z: 225.0,  moisture: 0.56 },
+         { id: 'karst_canyon',         name: '🪨 Stratified Karst Canyon',   x: 168.0,  z: 28.0,   moisture: 0.34 },
+         { id: 'bamboo_mangrove',      name: '🎍 Emerald Bamboo Wetlands',   x: -124.0, z: -136.0, moisture: 0.94 },
+-        { id: 'caldera_volcano',      name: '🌋 Mount Caldera Volcano',     x: -124.0, z: 224.0,  moisture: 0.22 }
++        { id: 'caldera_volcano',      name: '🌋 Mount Caldera Volcano',     x: -302.0, z: 64.0,   moisture: 0.18 }
+       ]
+     };
+     window.BIOME_SYSTEM = BIOME_SYSTEM;
+@@ -2443,7 +2447,7 @@
+         if (yHint !== null) {
+           if (centers[i].id === 'karst_canyon' && yHint > 24.0) d -= 14.0;
+           if (centers[i].id === 'windward_meadows' && yHint > 1.5 && yHint < 16.0) d -= 8.0;
+-          if (centers[i].id === 'caldera_volcano' && yHint > 52.0) d -= 26.0;
++          if (centers[i].id === 'caldera_volcano' && yHint > 34.0) d -= 26.0;
+         }
+         dists[i] = d;
+         if (d < minD) { minD = d; minIdx = i; }
+@@ -2914,16 +2918,15 @@
+       {
+         id: 'caldera_lava_tube',
+         name: "🌋 Caldera Obsidian Lava Tube",
+-        startX: -72.0, startZ: 282.0,
+-        px: -72.0, pz: 282.0,
