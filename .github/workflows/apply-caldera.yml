@@ -1,0 +1,32 @@
+name: Apply Mount Caldera patch
+on:
+  push:
+    branches: [caldera-apply]
+    paths:
+      - .github/workflows/apply-caldera.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Rebuild patch, verify, and push
+        run: |
+          set -euo pipefail
+          git fetch origin caldera-apply
+          git config user.name "BoilThis"
+          git config user.email "34217932+BoilThis@users.noreply.github.com"
+          : > /tmp/caldera.patch
+          for i in 00 01 02 03 04 05 06 07 08; do
+            git show "origin/caldera-apply:.github/caldera-patch/cpart-$i" >> /tmp/caldera.patch
+          done
+          test "$(git hash-object /tmp/caldera.patch)" = "4e3a51b3d6c46bcdf7d2e82fbb91d7bafe0cc616"
+          git am /tmp/caldera.patch
+          git push origin HEAD:main
