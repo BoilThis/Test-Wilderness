@@ -1259,7 +1259,7 @@
       <!-- TAB 1: WORLD & FAST-TRAVEL WAYPOINTS -->
       <div class="tab-pane active" id="tab-world">
         <div class="section-desc">
-          Interactive Geological &amp; Fluvial Geomorphology Survey Map — Unified Dendritic Watershed, Multi-Lobe Basins, Bedrock Sill Weirs, Plunge Amphitheaters &amp; Spring Tributaries. Tap any feature on the map or cards below to fast-travel:
+          Island. Tap the map or a card to travel.
         </div>
         <div style="position:relative;margin-bottom:14px;border-radius:14px;overflow:hidden;border:1px solid rgba(102,252,241,0.35);background:#071824;box-shadow:0 8px 26px rgba(0,0,0,0.55);">
           <canvas id="cc-world-hydrology-map" width="760" height="520" style="width:100%;height:auto;display:block;cursor:pointer;touch-action:manipulation;"></canvas>
@@ -5315,7 +5315,9 @@
 
               const terrH = getTerrainHeight(wx, wz);
               const rawDepth = Math.max(0.0, (lakeCfg.waterY + vy) - terrH);
-              const wDepth = Math.max(rawDepth, outletCurrent * 1.35);
+              // Outer ring over a drop, outside the spill throat, is a sheet. The lake owns only the basin.
+              if (rawDepth > 2.2 && rf > 0.56 && outletCurrent < 0.28) spillFade = 0.0;
+              const wDepth = (spillFade <= 0.0) ? 0.0 : Math.max(rawDepth, outletCurrent * 1.35);
               lakePos.push(lx, vy, lz);
               lakeUvs.push(0.5 + (lx / uvSpanX), 0.5 + (lz / uvSpanZ));
               lakeDataList.push(spillFade, outletCurrent, wDepth);
@@ -5336,7 +5338,8 @@
 
               const terrH = getTerrainHeight(wx, wz);
               const rawDepth = Math.max(0.0, (lakeCfg.waterY + vy) - terrH);
-              const wDepth = Math.max(rawDepth, outletCurrent * 1.35);
+              if (rawDepth > 2.2 && rf > 0.56 && outletCurrent < 0.28) spillFade = 0.0;
+              const wDepth = (spillFade <= 0.0) ? 0.0 : Math.max(rawDepth, outletCurrent * 1.35);
               lakePos.push(lx, vy, lz);
               lakeUvs.push(0.5 + (lx / uvSpanX), 0.5 + (lz / uvSpanZ));
               lakeDataList.push(spillFade, outletCurrent, wDepth);
@@ -5408,10 +5411,12 @@
             // Smooth cobble weir outflow current toward S-Meandering Valley River head (76, 202)
             const weirDist = Math.hypot(wx - 76.0, wz - 202.0);
             const weirCur = Math.max(0.0, 1.0 - weirDist / 10.5) * 0.65;
-            const wDepth = Math.max(rawDepth, weirCur * 0.85);
+            let pondFade = 1.0;
+            if (rawDepth > 2.3 && rf > 0.62 && weirCur < 0.15) pondFade = 0.0;
+            const wDepth = (pondFade <= 0.0) ? 0.0 : Math.max(rawDepth, weirCur * 0.85);
             lakePos.push(lx, 0.0, lz);
             lakeUvs.push(0.5 + (lx / uvSpanX), 0.5 + (lz / uvSpanZ));
-            lakeDataList.push(1.0, 0.10 + weirCur, wDepth);
+            lakeDataList.push(pondFade, pondFade > 0.0 ? 0.10 + weirCur : 0.0, wDepth);
           }
         }
         const ringStride = lakeSegs + 1;
@@ -5467,10 +5472,9 @@
             let edgeFade = Math.pow(Math.sin(u * Math.PI), 0.68);
             const dropSlope = i < pts.length - 1 ? Math.max(0.0, (p.y - pts[i + 1].y) * 0.45) : 0.1;
             const terrBed = getTerrainHeight(wx, wz);
-            // Smoothly feather ribbon where it merges into any lake or the main estuary
-            if (isInsideValleyPond(wx, wz, -1.2) || isInsideUplandLake(wx, wz, -1.2) || isInsideHeadwatersLake(wx, wz, -1.2)) {
-              edgeFade *= 0.15;
-            }
+            // Lakes own their basins. A ribbon more than 3.2m above the bed is floating.
+            if (isInsideValleyPond(wx, wz, -0.4) || isInsideUplandLake(wx, wz, -0.4) || isInsideHeadwatersLake(wx, wz, -0.4)) edgeFade = 0.0;
+            if ((p.y + heightOffset) - terrBed > 3.2) edgeFade = 0.0;
             const bankClip = terrBed > p.y + 0.12 ? (1.0 - smoothstep(p.y + 0.12, p.y + 0.45, terrBed)) : 1.0;
             edgeFade *= bankClip;
             const wy = p.y + heightOffset - Math.abs(u - 0.5) * 0.10;
@@ -11473,19 +11477,25 @@
 
     // Fast-Travel Waypoint Cards in World Tab
     const WAYPOINTS = {
-      headwaters:       { x: -24.0,  z: 162.0,  yaw: -0.25, pitch: -0.10, dive: false, label: "🏔️ Teleported to Grand Headwaters Lake (+26.6m) & Sill Weir!" },
-      alpine:           { x: 58.0,   z: 2.5,    yaw: -1.57, pitch: -0.08, dive: false, label: "🏞️ Teleported to Cliff-Top Alpine Tarn (+33.6m) & Gorge!" },
-      valley_pond:      { x: 68.0,   z: 212.0,  yaw: -1.35, pitch: -0.06, dive: false, label: "🌿 Teleported to Windward Valley Lagoon (+6.8m) & S-Meander River!" },
+      headwaters:       { x: -18.0,  z: 262.0,  yaw: 0.0,   pitch: -0.10, dive: false, label: "🏔️ Teleported to the south shore of Grand Headwaters Lake (+26.6m)!" },
+      alpine:           { x: 118.0,  z: 58.0,   yaw: 0.0,   pitch: -0.08, dive: false, label: "🏞️ Teleported to the south shore of the Cliff-Top Tarn (+33.6m)!" },
+      valley_pond:      { x: 88.0,   z: 168.0,  yaw: 3.14,  pitch: -0.06, dive: false, label: "🌿 Teleported to the north shore of Windward Valley Lagoon (+6.8m)!" },
       canyon_gorge:     { x: 215.0,  z: 42.0,   yaw: -1.57, pitch: -0.04, dive: false, label: "🪨 Teleported to Stratified Eastern Limestone Canyon!" },
       swim_cay:         { x: -294.0, z: 224.0,  yaw: 1.57,  pitch: -0.05, dive: false, label: "🏖️ Teleported to Sheltered Reef Cove (25m Swim to Cay)!" },
       outer_stronghold: { x: 742.0,  z: 715.0,  yaw: -0.78, pitch: -0.06, dive: false, label: "⛵ Teleported to Outer Deep Coral Stronghold (2400m Archipelago)!" },
       ruins:            { x: 412.0,  z: 268.0,  yOverride: -2.6, yaw: 1.45, pitch: -0.18, dive: true, label: "🏛️ Submerged into Coral Fan Cay Ruins & Isotope Trench!" },
       cavern:           { x: 31.5,   z: 45.2,   yaw: -1.45, pitch: -0.02, dive: false, label: "🕳️ Teleported to Whispering Basalt Cave Entrance!" },
-      cenote:           { x: 215.0,  z: 68.0,   yaw: -1.45, pitch: -0.06, dive: false, caveInterior: true, label: "💎 Teleported inside Subterranean Karst Cenote (+12.4m Aquifer)!" },
+      cenote:           { x: 215.0,  z: 68.0,   yaw: -1.45, pitch: -0.06, dive: false, caveInterior: true, label: "💎 Teleported inside Subterranean Karst Cenote!" },
       grotto:           { x: -33.5,  z: 85.8,   yaw: 1.25,  pitch: -0.02, dive: false, label: "🌊 Teleported to Cataract Echo Grotto Entrance!" },
       elderwood:        { x: -54.0,  z: 26.0,   yaw: 0.65,  pitch: 0.0,   dive: false, label: "🌲 Teleported to Ancient Elderwood Sanctuary!" },
       overlook:         { x: -22.0,  z: 24.0,   yaw: -0.52, pitch: -0.04, dive: false, label: "🌺 Teleported to Sunlit Coral Overlook Base Camp!" },
-      dive:             { x: 4.5,    z: 14.0,   yOverride: -2.2, yaw: 0.0, pitch: -0.15, dive: true, label: "🤿 Submerged into Deep River Kelp Trench!" }
+      dive:             { x: 4.5,    z: 14.0,   yOverride: -2.2, yaw: 0.0, pitch: -0.15, dive: true, label: "🤿 Submerged into Deep River Kelp Trench!" },
+      plunge_east:      { x: 21.5,   z: 2.0,    yaw: 1.57,  pitch: -0.08, dive: false, label: "🌊 Teleported to East Gorge Plunge Pool!" },
+      plunge_head:      { x: -14.5,  z: 124.0,  yaw: 0.0,   pitch: -0.06, dive: false, label: "🌊 Teleported to Headwaters Plunge Pool!" },
+      estuary:          { x: -2.0,   z: 42.0,   yaw: 0.0,   pitch: -0.04, dive: false, label: "〰️ Teleported to Emerald Estuary!" },
+      volcano:          { x: -250.0, z: 64.0,   yaw: 1.57,  pitch: -0.22, dive: false, label: "🌋 Teleported to Mount Caldera east rim. Crest is 168m at -302, 64." },
+      lavatube:         { x: -208.1, z: 68.7,   yaw: 1.52,  pitch: -0.04, dive: false, label: "🔥 Teleported to the lava tube mouth on the east flank!" },
+      crash:            { x: -16.0,  z: -40.0,  yaw: -0.25, pitch: -0.05, dive: false, label: "✈️ Teleported to Flight 409 Seaplane Crash Cove!" }
     };
 
     function teleportToWaypointKey(key) {
@@ -11524,8 +11534,8 @@
       const ctx = mapCanvas.getContext('2d');
       let cachedBgImageData = null;
 
-      // Map world coordinate domain: X in [-340, 340], Z in [-290, 290] (North -Z at top, South +Z at bottom)
-      const X_MIN = -340, X_MAX = 340;
+      // Map covers the central island plus the western cone (base reaches x=-414).
+      const X_MIN = -430, X_MAX = 360;
       const Z_MIN = -280, Z_MAX = 290;
       function wxToPx(x, W) { return ((x - X_MIN) / (X_MAX - X_MIN)) * W; }
       function wzToPy(z, H) { return ((z - Z_MIN) / (Z_MAX - Z_MIN)) * H; }
@@ -11536,11 +11546,12 @@
         { key: 'alpine',      x: 118,  z: 2,    code: 'L1', title: 'Cliff-Top Tarn (+33.6m)', color: '#4fc3f7' },
         { key: 'headwaters',  x: -18,  z: 204,  code: 'L2', title: 'Headwaters Lake (+26.6m)', color: '#4fc3f7' },
         { key: 'valley_pond', x: 88,   z: 214,  code: 'L3', title: 'Valley Lagoon (+6.8m)', color: '#26c6da' },
-        { key: 'overlook',    x: 21.5, z: 2.0,  code: 'C1', title: 'East Gorge Falls & Plunge (-4.4m)', color: '#80deea' },
-        { key: 'grotto',      x: -14.5,z: 124.0,code: 'C2', title: 'Headwaters Falls & Plunge (-4.6m)', color: '#80deea' },
-        { key: 'dive',        x: -2.0, z: 42.0, code: 'R1', title: 'Emerald Estuary & Sand-Spit', color: '#00e5ff' },
-        { key: 'cenote',      x: 218,  z: 72,   code: 'K1', title: 'Karst Cenote Aquifer (+12.4m)', color: '#b388ff' },
-        { key: 'volcano',     x: -145, z: 78,   code: 'MT', title: 'Mt. Caldera Peak (+168m)', color: '#ff7043' },
+        { key: 'overlook',    x: 21.5, z: 2.0,  code: 'C1', title: 'East Gorge Plunge (-4.4m)', color: '#80deea', tp: 'plunge_east' },
+        { key: 'grotto',      x: -14.5,z: 124.0,code: 'C2', title: 'Headwaters Plunge (-4.6m)', color: '#80deea', tp: 'plunge_head' },
+        { key: 'dive',        x: -2.0, z: 42.0, code: 'R1', title: 'Emerald Estuary', color: '#00e5ff', tp: 'estuary' },
+        { key: 'cenote',      x: 215,  z: 68,   code: 'K1', title: 'Karst Cenote', color: '#b388ff' },
+        { key: 'volcano',     x: -302, z: 64,   code: 'MT', title: 'Mt. Caldera (+168m)', color: '#ff7043' },
+        { key: 'lavatube',    x: -214.1, z: 68.4, code: 'LT', title: 'Lava Tube Mouth', color: '#ff8a65' },
         { key: 'canyon_gorge',x: 215,  z: 42,   code: 'CY', title: 'Stratified Limestone Canyon', color: '#ffb74d' },
         { key: 'crash',       x: -16,  z: -40,  code: 'AP', title: 'Crash Cove & Tidal Shoal', color: '#ffd54f' }
       ];
@@ -11589,8 +11600,8 @@
               r = 112 - t * 34; g = 96 - t * 32; b = 86 - t * 26;
             } else {
               // Mount Caldera high volcanic cone & cauldron rim
-              const dCrater = Math.hypot(wx - (-145), wz - 78);
-              if (dCrater < 24.0) {
+              const dCrater = Math.hypot(wx - MOUNT_CALDERA.x, wz - MOUNT_CALDERA.z);
+              if (dCrater < MOUNT_CALDERA.poolEdgeR) {
                 r = 235; g = 86; b = 28;
               } else {
                 r = 76; g = 62; b = 58;
@@ -11926,8 +11937,8 @@
             bestPin = pin;
           }
         });
-        if (bestPin && WAYPOINTS[bestPin.key]) {
-          teleportToWaypointKey(bestPin.key);
+        if (bestPin && WAYPOINTS[bestPin.tp || bestPin.key]) {
+          teleportToWaypointKey(bestPin.tp || bestPin.key);
         }
       });
     })();

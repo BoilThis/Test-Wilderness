@@ -7655,11 +7655,11 @@
     const NEW_WAYPOINTS = {
       crash:            { x: -16.0,  z: -40.0,  yaw: -0.25, pitch: -0.05, dive: false, label: '✈️ Teleported to Flight 409 Seaplane Crash Cove!' },
       outpost:          { x: 46.0,   z: 88.0,   yaw: -0.45, pitch: 0.05,  dive: false, label: '📡 Teleported to Abandoned Radio Outpost & Weather Station!' },
-      volcano:          { x: -224.6, z: 73.3, yaw: 1.45, pitch: -0.28, dive: false, label: '🌋 Teleported to Mount Caldera East Slope (168m dark crest)!' },
-      lavatube:         { x: -206.1, z: 68.8, yaw: 1.52, pitch: -0.04, dive: false, label: '🔥 Teleported to Volcanic Lava Tube Trailhead!' },
+      volcano:          { x: -250.0, z: 64.0, yaw: 1.57, pitch: -0.22, dive: false, label: '🌋 Teleported to Mount Caldera east rim. Crest is 168m at -302, 64.' },
+      lavatube:         { x: -208.1, z: 68.7, yaw: 1.52, pitch: -0.04, dive: false, label: '🔥 Teleported to the lava tube mouth on the east flank!' },
       ruins:            { x: 412.0,  z: 268.0,  yOverride: -2.6, yaw: 1.45, pitch: -0.18, dive: true, label: '🏛️ Submerged into Coral Fan Cay Ruins & Isotope Trench!' },
       bamboo:           { x: -64.0,  z: -24.0,  yaw: 0.65,  pitch: 0.0,   dive: false, label: '🎍 Teleported to Emerald Bamboo Jungle & Mangrove Delta!' },
-      valley_pond:      { x: 68.0,   z: 212.0,  yaw: -1.35, pitch: -0.06, dive: false, label: '🌿 Teleported to Windward Valley Lagoon (+6.8m) & S-Meander River!' },
+      valley_pond:      { x: 88.0,   z: 168.0,  yaw: 3.14, pitch: -0.06, dive: false, label: '🌿 Teleported to the north shore of Windward Valley Lagoon (+6.8m)!' },
       canyon_gorge:     { x: 215.0,  z: 42.0,   yaw: -1.57, pitch: -0.04, dive: false, label: '🪨 Teleported to Stratified Eastern Limestone Canyon!' },
       swim_cay:         { x: -294.0, z: 224.0,  yaw: 1.57,  pitch: -0.05, dive: false, label: '🏖️ Teleported to Sheltered Reef Cove (25m Swim to Cay)!' },
       outer_stronghold: { x: 742.0,  z: 715.0,  yaw: -0.78, pitch: -0.06, dive: false, label: '⛵ Teleported to Outer Deep Coral Stronghold (2400m Archipelago)!' }
