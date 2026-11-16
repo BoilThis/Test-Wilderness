@@ -1327,7 +1327,7 @@
   // --- 5E. MOUNT CALDERA VOLCANO CRATER, WALL-TO-WALL MAGMA CAULDRON, PLUMES & OBSIDIAN NODES ---
   function buildVolcanicCalderaBiome() {
     const mc = window.MOUNT_CALDERA || {
-      x: -124.0, z: 224.0, baseR: 96.0, rimR: 24.5, poolEdgeR: 18.8, rimY: 102.0, floorY: 81.0, lavaY: 86.5
+      x: -302.0, z: 64.0, baseR: 112.0, rimR: 36.0, poolEdgeR: 26.5, rimY: 168.0, floorY: 126.0, lavaY: 132.5, footY: 12.0
     };
     const vx = mc.x, vz = mc.z;
     const lavaY = mc.lavaY || 86.5;
@@ -1371,15 +1371,18 @@
       return geo;
     }
 
-    const lavaGeo = createRadialMagmaGeometry(21.0, 12, 64);
+    const lavaRadius = (mc.poolEdgeR || 26.5) + 2.4;
+    const lavaGeo = createRadialMagmaGeometry(lavaRadius, 12, 64);
     const lavaShaderMat = new THREE.ShaderMaterial({
       uniforms: {
         uTime: window.fireShaderTime || { value: 0.0 },
         uCalderaCenter: { value: new THREE.Vector2(vx, vz) },
-        uPoolEdgeR: { value: mc.poolEdgeR || 18.0 }
+        uPoolEdgeR: { value: mc.poolEdgeR || 26.5 },
+        uLavaRadius: { value: lavaRadius }
       },
       vertexShader: `
         uniform float uTime;
+        uniform float uLavaRadius;
         varying vec2 vUv;
         varying vec3 vWorldPos;
         varying float vRad;
@@ -1388,7 +1391,7 @@
           vec3 pos = position;
           float rad = length(pos.xz);
           vRad = rad;
-          float rimDamp = 1.0 - smoothstep(13.0, 20.5, rad);
+          float rimDamp = 1.0 - smoothstep(uLavaRadius * 0.62, uLavaRadius * 0.96, rad);
           float swell = (sin(pos.x * 0.34 + uTime * 1.45) * cos(pos.z * 0.34 - uTime * 1.15) * 0.28
                       + sin(rad * 0.65 - uTime * 2.1) * 0.12) * rimDamp;
           pos.y += swell;
@@ -1464,8 +1467,8 @@
     // Jagged Basalt & Obsidian Crater Rim Monoliths (clear of NE Overlook Saddle at -0.62 rad)
     const rimAngs = [0.25, 1.15, 2.05, 3.05, 4.05, 4.95];
     rimAngs.forEach((ra, rIdx) => {
-      const rx = vx + Math.cos(ra) * 25.4;
-      const rz = vz + Math.sin(ra) * 25.4;
+      const rx = vx + Math.cos(ra) * ((mc.rimR || 36.0) - 1.8);
+      const rz = vz + Math.sin(ra) * ((mc.rimR || 36.0) - 1.8);
       const ry = getTerrainHeight(rx, rz);
       const spire = new THREE.Mesh(
         new THREE.ConeGeometry(1.8 + (rIdx % 2) * 0.65, 5.2 + (rIdx % 3) * 1.6, 5),
@@ -1683,8 +1686,8 @@
     const obsProxyGeo = new THREE.CylinderGeometry(0.75, 0.75, 1.85, 8);
     obsProxyGeo.translate(0, 0.85, 0);
     const obsidianCoords = [
-      // Relocated Mount Caldera Inland Volcano Slopes, Trailhead & Rim Overlook
-      [-78, 276], [-92, 266], [-146, 268], [-168, 226], [-152, 182], [-118, 174], [-92, 186], [-101, 204],
+      // East skirt, crest, and north overlook of the relocated Mount Caldera (-302, 64)
+      [-229, 75], [-225, 111], [-269, 121], [-301, 110], [-324, 97], [-378, 95], [-393, 35], [-324, -5],
       // Cinder Cone Islet (NE Volcanic Arc)
       [530, -412], [548, -426], [522, -432],
       // Magma Trench Bastion (NE Raft Stronghold)
@@ -7639,8 +7642,8 @@
     const NEW_WAYPOINTS = {
       crash:            { x: -16.0,  z: -40.0,  yaw: -0.25, pitch: -0.05, dive: false, label: '✈️ Teleported to Flight 409 Seaplane Crash Cove!' },
       outpost:          { x: 46.0,   z: 88.0,   yaw: -0.45, pitch: 0.05,  dive: false, label: '📡 Teleported to Abandoned Radio Outpost & Weather Station!' },
-      volcano:          { x: -103.5, z: 209.5, yaw: 2.18, pitch: -0.34, dive: false, label: '🌋 Teleported to Mount Caldera Crater Rim Overlook (+98m ASL)!' },
-      lavatube:         { x: -65.0,  z: 290.0, yaw: 0.72, pitch: -0.02, dive: false, label: '🔥 Teleported to Volcanic Lava Tube Trailhead!' },
+      volcano:          { x: -224.6, z: 73.3, yaw: 1.45, pitch: -0.28, dive: false, label: '🌋 Teleported to Mount Caldera East Slope (168m dark crest)!' },
+      lavatube:         { x: -206.1, z: 68.8, yaw: 1.52, pitch: -0.04, dive: false, label: '🔥 Teleported to Volcanic Lava Tube Trailhead!' },
       ruins:            { x: 412.0,  z: 268.0,  yOverride: -2.6, yaw: 1.45, pitch: -0.18, dive: true, label: '🏛️ Submerged into Coral Fan Cay Ruins & Isotope Trench!' },
       bamboo:           { x: -64.0,  z: -24.0,  yaw: 0.65,  pitch: 0.0,   dive: false, label: '🎍 Teleported to Emerald Bamboo Jungle & Mangrove Delta!' },
       valley_pond:      { x: 82.0,   z: 238.0,  yaw: -1.57, pitch: -0.06, dive: false, label: '🌿 Teleported to Windward Valley Pond & Inland River!' },
@@ -7727,8 +7730,8 @@
       },
       {
         title: '10/12 ⛰️ Mount Caldera Crater & Molten Lava Lake',
-        desc: 'Towering 102m inland stratovolcano rim overlook, wall-to-wall boiling lava cauldron, rising ash smoke & fumarole steam.',
-        x: -102.5, z: 208.5, tx: -124.0, tz: 224.0, pitch: -0.38, dive: false, tool: 'flare'
+        desc: 'Coastal stratovolcano, 168m dark scoria crest, molten crater pool, ash column and the east-flank lava tube.',
+        x: -224.6, z: 73.3, tx: -302.0, tz: 64.0, pitch: -0.28, dive: false, tool: 'flare'
       },
       {
         title: '11/12 📡 Abandoned Radio Outpost & 22m Tower',

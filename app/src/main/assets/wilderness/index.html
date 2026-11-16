@@ -2402,16 +2402,20 @@
       return (f + s) * stepH;
     }
 
-    // Mount Caldera Inland Stratovolcano Spec (Southern Interior Mountain Ridge: Highest Peak on Map)
+    // Mount Caldera — western coastal stratovolcano.
+    // Moved off the valley pond (was -124,224, ~236m from the pond, 102m crest).
+    // Now -302,64: ~449m from Windward Valley Pond, crest 168m, dark scoria rim.
+    // footY is the skirt elevation the cone blends into; do not raise it or the sea cliff becomes a mesa.
     const MOUNT_CALDERA = {
-      x: -124.0,
-      z: 224.0,
-      baseR: 96.0,
-      rimR: 24.5,
-      poolEdgeR: 18.8,
-      rimY: 102.0,
-      floorY: 81.0,
-      lavaY: 86.5
+      x: -302.0,
+      z: 64.0,
+      baseR: 112.0,
+      rimR: 36.0,
+      poolEdgeR: 26.5,
+      rimY: 168.0,
+      floorY: 126.0,
+      lavaY: 132.5,
+      footY: 12.0
     };
     window.MOUNT_CALDERA = MOUNT_CALDERA;
 
@@ -2424,7 +2428,7 @@
         { id: 'windward_meadows',     name: '🌾 Windward Valley Meadows',   x: 55.0,   z: 225.0,  moisture: 0.56 },
         { id: 'karst_canyon',         name: '🪨 Stratified Karst Canyon',   x: 168.0,  z: 28.0,   moisture: 0.34 },
         { id: 'bamboo_mangrove',      name: '🎍 Emerald Bamboo Wetlands',   x: -124.0, z: -136.0, moisture: 0.94 },
-        { id: 'caldera_volcano',      name: '🌋 Mount Caldera Volcano',     x: -124.0, z: 224.0,  moisture: 0.22 }
+        { id: 'caldera_volcano',      name: '🌋 Mount Caldera Volcano',     x: -302.0, z: 64.0,   moisture: 0.18 }
       ]
     };
     window.BIOME_SYSTEM = BIOME_SYSTEM;
@@ -2443,7 +2447,7 @@
         if (yHint !== null) {
           if (centers[i].id === 'karst_canyon' && yHint > 24.0) d -= 14.0;
           if (centers[i].id === 'windward_meadows' && yHint > 1.5 && yHint < 16.0) d -= 8.0;
-          if (centers[i].id === 'caldera_volcano' && yHint > 52.0) d -= 26.0;
+          if (centers[i].id === 'caldera_volcano' && yHint > 34.0) d -= 26.0;
         }
         dists[i] = d;
         if (d < minD) { minD = d; minIdx = i; }
@@ -2914,16 +2918,15 @@
       {
         id: 'caldera_lava_tube',
         name: "🌋 Caldera Obsidian Lava Tube",
-        startX: -72.0, startZ: 282.0,
-        px: -72.0, pz: 282.0,
-        vecX: -124.0, vecZ: 224.0,
-        dirX: -52.0 / Math.hypot(-52.0, -58.0),
-        dirZ: -58.0 / Math.hypot(-52.0, -58.0),
-        perpX: 58.0 / Math.hypot(-52.0, -58.0),
-        perpZ: -52.0 / Math.hypot(-52.0, -58.0),
+        // East-flank portal on the relocated cone (angle 0.05 rad, 88m from the crater). Tube runs west into the mountain.
+        startX: -214.1, startZ: 68.4,
+        px: -214.1, pz: 68.4,
+        vecX: -302.0, vecZ: 64.0,
+        dirX: -0.99875, dirZ: -0.04998,
+        perpX: 0.04998, perpZ: -0.99875,
         swayAmp: 8.5, swayFreq: 2.0,
         wiggle1: 6.5, wiggle2: 2.2,
-        baseY: 27.0, drop: -1.8,
+        baseY: 33.0, drop: -8.0,
         hasCenote: false,
         isLavaTube: true,
         length: 115.0,
@@ -3000,16 +3003,16 @@
             const ptM = cv.getPoint(midS);
             ctrlPts = [
               { x: pt0.x, z: pt0.z, y: pt0.floorY },
-              { x: pt0.x + fwd0X * 8.0 + rgt0X * side * (latPeak * 0.58), z: pt0.z + fwd0Z * 8.0 + rgt0Z * side * (latPeak * 0.58), y: pt0.floorY + sp.dropY * 0.55 },
+              { x: pt0.x + fwd0X * 14.0 + rgt0X * side * (latPeak * 0.42), z: pt0.z + fwd0Z * 14.0 + rgt0Z * side * (latPeak * 0.42), y: pt0.floorY + sp.dropY * 0.42 },
               { x: ptM.x + ptM.perpX * side * latPeak, z: ptM.z + ptM.perpZ * side * latPeak, y: 0.5 * (pt0.floorY + pt1.floorY) + sp.dropY },
-              { x: pt1.x - fwd1X * 8.0 + rgt1X * side * (latPeak * 0.55), z: pt1.z - fwd1Z * 8.0 + rgt1Z * side * (latPeak * 0.55), y: pt1.floorY + sp.dropY * 0.50 },
+              { x: pt1.x - fwd1X * 14.0 + rgt1X * side * (latPeak * 0.40), z: pt1.z - fwd1Z * 14.0 + rgt1Z * side * (latPeak * 0.40), y: pt1.floorY + sp.dropY * 0.40 },
               { x: pt1.x, z: pt1.z, y: pt1.floorY }
             ];
           } else {
             const ext = sp.forwardExt || 40.0;
             ctrlPts = [
               { x: pt0.x, z: pt0.z, y: pt0.floorY },
-              { x: pt0.x + fwd0X * 9.0 + rgt0X * side * (latPeak * 0.52), z: pt0.z + fwd0Z * 9.0 + rgt0Z * side * (latPeak * 0.52), y: pt0.floorY + sp.dropY * 0.25 },
+              { x: pt0.x + fwd0X * 16.0 + rgt0X * side * (latPeak * 0.38), z: pt0.z + fwd0Z * 16.0 + rgt0Z * side * (latPeak * 0.38), y: pt0.floorY + sp.dropY * 0.22 },
               { x: pt0.x + fwd0X * (ext * 0.48) + rgt0X * side * latPeak, z: pt0.z + fwd0Z * (ext * 0.48) + rgt0Z * side * latPeak, y: pt0.floorY + sp.dropY * 0.85 },
               { x: pt0.x + fwd0X * (ext * 0.85) + rgt0X * side * (latPeak * 0.92), z: pt0.z + fwd0Z * (ext * 0.85) + rgt0Z * side * (latPeak * 0.92), y: pt0.floorY + sp.dropY },
               { x: pt0.x + fwd0X * ext + rgt0X * side * (latPeak * 0.72), z: pt0.z + fwd0Z * ext + rgt0Z * side * (latPeak * 0.72), y: pt0.floorY + sp.dropY }
@@ -3065,10 +3068,14 @@
               halfW *= domeCap;
               ceilH *= domeCap;
             }
-            // Widen junction throats smoothly so tunnels connect cleanly
-            const juncStart = t < 0.10 ? (1.0 - t / 0.10) * 1.15 : 0.0;
-            const juncEnd = (sp.reconnectS !== null && sp.reconnectS !== undefined && t > 0.90) ? ((t - 0.90) / 0.10) * 1.15 : 0.0;
+            // Smooth eroded fork: a long cosine throat (not a 10% pinch) so the branch mouth matches the parent tunnel.
+            // juncStart/juncEnd are meters added to halfW; ceilH follows at 0.42 so the lintel doesn't knife into the fork.
+            const juncStart = t < 0.24 ? Math.pow(1.0 - t / 0.24, 1.25) * ((pt0.halfW * 0.62) + 1.6) : 0.0;
+            const juncEnd = (sp.reconnectS !== null && sp.reconnectS !== undefined && t > 0.76)
+              ? Math.pow((t - 0.76) / 0.24, 1.25) * ((cv.getPoint(sp.reconnectS).halfW * 0.50) + 1.5)
+              : 0.0;
             halfW += juncStart + juncEnd;
+            ceilH += (juncStart + juncEnd) * 0.42;
 
             if (i > 0) {
               accumLen += Math.hypot(x - samples[i - 1].x, z - samples[i - 1].z);
@@ -3442,53 +3449,60 @@
         }
       }
 
-      // Inland Mount Caldera Stratovolcano Massif (Southern Interior Mountain Ridge: -124, 224, Peak ~102–107m ASL)
+      // Mount Caldera massif. Reads MOUNT_CALDERA (center, baseR, rimR, rimY, floorY, footY).
+      // East flank ties into Elderwood; west flank is a sea cliff. Crater floor stays below the dark rim.
       const vcDx = x - MOUNT_CALDERA.x;
       const vcDz = z - MOUNT_CALDERA.z;
       const vcDist = Math.hypot(vcDx, vcDz);
-      if (vcDist < MOUNT_CALDERA.baseR + 10.0) {
+      if (vcDist < MOUNT_CALDERA.baseR + 14.0) {
         const ang = Math.atan2(vcDz, vcDx);
+        const footY = MOUNT_CALDERA.footY;
         const coneT = Math.max(0.0, Math.min(1.0, (vcDist - MOUNT_CALDERA.rimR) / (MOUNT_CALDERA.baseR - MOUNT_CALDERA.rimR)));
-        const profile = Math.pow(1.0 - coneT, 1.48);
+        const profile = Math.pow(1.0 - coneT, 1.42);
 
-        // Radial basalt lava ribs & stratified ash shoulders (zero ribs inside cauldron)
-        const outerMask = smoothstep(0.02, 0.24, coneT) * (1.0 - smoothstep(0.76, 1.0, coneT));
+        // Radial basalt ribs on the mid-slopes only (quiet inside the cauldron, quiet on the outer skirt)
+        const outerMask = smoothstep(0.04, 0.22, coneT) * (1.0 - smoothstep(0.78, 1.0, coneT));
         const ribWave = Math.sin(ang * 7.0 + fbm2(Math.cos(ang) * 2.2, Math.sin(ang) * 2.2, 2) * 1.55) * 0.5 + 0.5;
-        const ribs = (ribWave * 3.6 + ridged2(x * 0.032 + 1.4, z * 0.032 - 2.1, 2) * 3.2 + fbm2(x * 0.018, z * 0.018, 2) * 2.2) * outerMask;
+        const ribs = (ribWave * 4.8 + ridged2(x * 0.028 + 1.4, z * 0.028 - 2.1, 2) * 4.0 + fbm2(x * 0.016, z * 0.016, 2) * 2.6) * outerMask;
 
-        // Jagged volcanic crater rim crest (~102..107m ASL) + NE Caldera Overlook Notch (-0.62 rad -> ~97.8m ASL)
-        const rimBelt = Math.exp(-Math.pow(coneT / 0.14, 2.0));
-        const rimJagged = (Math.sin(ang * 5.0 + 0.7) * 2.0 + Math.cos(ang * 9.0 - 1.2) * 1.2 + ridged2(Math.cos(ang) * 2.1, Math.sin(ang) * 2.1, 2) * 1.6) * rimBelt;
-        const dAngOverlook = Math.atan2(Math.sin(ang - (-0.62)), Math.cos(ang - (-0.62)));
-        const overlookDip = Math.exp(-Math.pow(dAngOverlook / 0.34, 2.0)) * 4.2 * Math.exp(-Math.pow(coneT / 0.22, 2.0));
+        // Jagged crest. North-fjord overlook notch at 2.20 rad drops the rim ~7m so the trail can crest it.
+        const rimBelt = Math.exp(-Math.pow(coneT / 0.12, 2.0));
+        const rimJagged = (Math.sin(ang * 5.0 + 0.7) * 3.2 + Math.cos(ang * 9.0 - 1.2) * 1.8 + ridged2(Math.cos(ang) * 2.1, Math.sin(ang) * 2.1, 2) * 2.2) * rimBelt;
+        const overlookAng = 2.20;
+        const dAngOverlook = Math.atan2(Math.sin(ang - overlookAng), Math.cos(ang - overlookAng));
+        const overlookDip = Math.exp(-Math.pow(dAngOverlook / 0.32, 2.0)) * 7.0 * Math.exp(-Math.pow(coneT / 0.18, 2.0));
 
         const rimCrestY = MOUNT_CALDERA.rimY + rimJagged - overlookDip;
-        let volcH = 24.0 + profile * (MOUNT_CALDERA.rimY - 24.0) + ribs + rimJagged - overlookDip;
+        let volcH = footY + profile * (MOUNT_CALDERA.rimY - footY) + ribs + rimJagged - overlookDip;
 
-        // Walkable spiraling ash trail ascending from SE Lava Tube trailhead (-72, 282) around S->W->N to NE Overlook (-0.62 rad)
-        if (vcDist >= MOUNT_CALDERA.rimR - 1.0 && vcDist <= 84.0) {
-          let uAng = ang - 0.84;
+        // Ash trail: east lava-tube trailhead (angle 0.05) climbing to the north overlook (angle 2.20).
+        const trailOuter = MOUNT_CALDERA.baseR * 0.74;
+        const trailInner = MOUNT_CALDERA.rimR + 2.4;
+        if (vcDist >= trailInner - 2.0 && vcDist <= trailOuter + 8.0) {
+          const trailStart = 0.05;
+          let uAng = ang - trailStart;
           if (uAng < 0.0) uAng += Math.PI * 2.0;
-          const totalSweep = 4.823; // 0.84 -> +5.663 (= -0.62 rad)
-          if (uAng <= totalSweep + 0.28) {
+          const totalSweep = overlookAng - trailStart;
+          if (uAng <= totalSweep + 0.30) {
             const sTrail = Math.max(0.0, Math.min(1.0, uAng / totalSweep));
-            const rTrail = 78.0 - sTrail * (78.0 - 25.0);
+            const rTrail = trailOuter - sTrail * (trailOuter - trailInner);
             const rDiff = Math.abs(vcDist - rTrail);
-            if (rDiff < 5.8) {
-              const trailBlend = (1.0 - smoothstep(2.1, 5.8, rDiff)) * smoothstep(0.0, 0.06, sTrail) * (1.0 - smoothstep(0.95, 1.0, sTrail) * 0.25);
-              const trailTargetY = 27.5 + sTrail * 70.3;
-              volcH = volcH * (1.0 - trailBlend * 0.88) + trailTargetY * (trailBlend * 0.88);
+            if (rDiff < 6.4) {
+              const trailBlend = (1.0 - smoothstep(2.3, 6.4, rDiff)) * smoothstep(0.0, 0.05, sTrail) * (1.0 - smoothstep(0.94, 1.0, sTrail) * 0.20);
+              const trailTargetY = (footY + 20.0) + sTrail * (MOUNT_CALDERA.rimY - footY - 28.0);
+              volcH = volcH * (1.0 - trailBlend * 0.90) + trailTargetY * (trailBlend * 0.90);
             }
           }
         }
 
-        const skirtW = smoothstep(MOUNT_CALDERA.baseR + 8.0, MOUNT_CALDERA.baseR - 20.0, vcDist);
+        const skirtW = smoothstep(MOUNT_CALDERA.baseR + 12.0, MOUNT_CALDERA.baseR - 28.0, vcDist);
         y = y * (1.0 - skirtW) + Math.max(y, volcH) * skirtW;
 
-        // Concave Volcanic Cauldron Bowl inside rimR = 24.5m dropping cleanly down to recessed 81m floor (86.5m lava level)
+        // Crater bowl. Flat floor inside poolEdgeR*0.62, walls up to the jagged crest. Lava mesh sits on lavaY.
         if (vcDist < MOUNT_CALDERA.rimR) {
-          const wallSpan = Math.max(0.01, (vcDist - 10.0) / (MOUNT_CALDERA.rimR - 10.0));
-          const bowlFrac = vcDist <= 10.0 ? 0.0 : Math.pow(wallSpan, 1.65);
+          const floorR = MOUNT_CALDERA.poolEdgeR * 0.62;
+          const wallSpan = Math.max(0.01, (vcDist - floorR) / Math.max(0.01, MOUNT_CALDERA.rimR - floorR));
+          const bowlFrac = vcDist <= floorR ? 0.0 : Math.pow(wallSpan, 1.55);
           const bowlTargetY = MOUNT_CALDERA.floorY + (rimCrestY - MOUNT_CALDERA.floorY) * bowlFrac;
           y = bowlTargetY;
         }
@@ -3588,7 +3602,13 @@
       if (x > 16 && x < 86.5 && gorgeZDist < 18.5) {
         const halfBed = 3.2 + (1.0 - smoothstep(25.0, 80.0, x)) * 1.4;
         const chDist = Math.max(0.0, gorgeZDist - halfBed);
-        const zBlend = Math.pow(1.0 - gorgeZDist / 18.5, 1.25) * (x > 78.5 ? (1.0 - smoothstep(78.5, 86.5, x)) : 1.0);
+        // Closed basin: the gorge may cut only the western spill throat, never the lake bed itself.
+        let lakeHold = 1.0;
+        if (isInsideUplandLake(x, z, 0.2) && x > 74.0) {
+          const throat = Math.exp(-Math.pow(gorgeZDist / 3.5, 2.0));
+          lakeHold = throat * smoothstep(90.0, 80.0, x);
+        }
+        const zBlend = Math.pow(1.0 - gorgeZDist / 18.5, 1.25) * (x > 78.5 ? (1.0 - smoothstep(78.5, 86.5, x)) : 1.0) * lakeHold;
         const notchY = getWaterfallChannelY(x);
         const bankCrag = (chDist > 0.6 && chDist < 13.5)
           ? (ridged2(x * 0.085 + 2.3, z * 0.085 - 1.7, 2) * 1.05 + fbm2(x * 0.14, z * 0.14, 2) * 0.42) * Math.sin((chDist / 13.5) * Math.PI)
@@ -3636,9 +3656,16 @@
       if (z > 118.0 && z < 172.5 && hwGorgeXDist < 19.5) {
         const halfBed = 3.8 + (1.0 - smoothstep(126.0, 164.0, z)) * 1.8;
         const chDist = Math.max(0.0, hwGorgeXDist - halfBed);
+        // Same rule for the headwaters tarn: outlet throat only, basin stays a bowl.
+        let hwHold = 1.0;
+        if (isInsideHeadwatersLake(x, z, 0.2) && z > 156.0) {
+          const throat = Math.exp(-Math.pow(hwGorgeXDist / 3.8, 2.0));
+          hwHold = throat * smoothstep(178.0, 166.0, z);
+        }
         const xBlend = Math.pow(1.0 - hwGorgeXDist / 19.5, 1.25)
           * (z > 162.5 ? (1.0 - smoothstep(162.5, 172.5, z)) : 1.0)
-          * (z < 124.0 ? smoothstep(118.0, 124.0, z) : 1.0);
+          * (z < 124.0 ? smoothstep(118.0, 124.0, z) : 1.0)
+          * hwHold;
         const notchY = getHeadwatersChannelY(z);
         const bankCrag = (chDist > 0.6 && chDist < 14.5)
           ? (ridged2(x * 0.08 + 1.1, z * 0.08 - 2.4, 2) * 1.15 + fbm2(x * 0.13, z * 0.13, 2) * 0.45) * Math.sin((chDist / 14.5) * Math.PI)
@@ -3712,22 +3739,22 @@
             y = y * (1.0 - apronBlend) + pt.floorY * apronBlend;
           }
 
-          // Flanking cliff shoulders strictly outside the walkway lane (|perp| > halfW + 0.9)
-          if (distAlong > -2.5 && distAlong < 5.5 && perpPortal > (pt.halfW + 0.85) && perpPortal < 18.0) {
-            const sLon = smoothstep(-2.5, 0.8, distAlong) * (1.0 - smoothstep(2.6, 5.5, distAlong));
-            const sLat = smoothstep(pt.halfW + 0.85, pt.halfW + 2.4, perpPortal) * (1.0 - smoothstep(8.2, 18.0, perpPortal));
-            const shoulderY = pt.floorY + 6.5 + ridged2(x * 0.08, z * 0.08, 2) * 1.5;
+          // Cheeks overlap the collar (perp just outside the walk lane) and rise to the lintel so the arch is set into rock, not a hole.
+          if (distAlong > -1.6 && distAlong < 7.5 && perpPortal > (pt.halfW * 0.82) && perpPortal < 18.0) {
+            const sLon = smoothstep(-1.6, 0.4, distAlong) * (1.0 - smoothstep(3.4, 7.5, distAlong));
+            const sLat = smoothstep(pt.halfW * 0.82, pt.halfW + 1.6, perpPortal) * (1.0 - smoothstep(9.0, 18.0, perpPortal));
+            const shoulderY = pt.floorY + pt.ceilH + 1.6 + ridged2(x * 0.08, z * 0.08, 2) * 1.3;
             y = Math.max(y, y * (1.0 - sLon * sLat) + shoulderY * (sLon * sLat));
           }
 
-          // Enclosing hillside overburden starts behind the portal threshold (d >= +0.55m) so exterior quads never form a front wall
+          // Overburden starts 1.35m inside the mouth (the collar owns the threshold) and stays thick over the passage.
           const effLat = distAlong < 18.0 ? perpPortal : spineDist;
           const maxHoodLat = pt.halfW + 17.5;
-          if (distAlong > 0.55 && effLat < maxHoodLat) {
-            const hoodLat = 1.0 - smoothstep(pt.halfW + 3.2, maxHoodLat, effLat);
-            const hoodLon = smoothstep(0.55, 3.15, distAlong) * (1.0 - smoothstep(cv.length - 4.0, cv.length + 14.0, distAlong));
+          if (distAlong > 1.35 && effLat < maxHoodLat) {
+            const hoodLat = 1.0 - smoothstep(pt.halfW + 1.6, maxHoodLat, effLat);
+            const hoodLon = smoothstep(1.35, 4.4, distAlong) * (1.0 - smoothstep(cv.length - 4.0, cv.length + 14.0, distAlong));
             const hoodBlend = hoodLat * hoodLon;
-            const minHillY = pt.floorY + pt.ceilH + 4.8 + ridged2(x * 0.07, z * 0.07, 2) * 2.2;
+            const minHillY = pt.floorY + pt.ceilH + 7.4 + ridged2(x * 0.07, z * 0.07, 2) * 2.0;
             y = Math.max(y, y * (1.0 - hoodBlend) + Math.max(y, minHillY) * hoodBlend);
           }
         }
@@ -3925,23 +3952,19 @@
           for (let c = 0; c < caveMouthMeta.length; c++) {
             const m = caveMouthMeta[c];
             const cv = m.cv;
-            const d0 = (x0 - cv.px) * cv.dirX + (z0 - cv.pz) * cv.dirZ;
-            const d1 = (x1 - cv.px) * cv.dirX + (z1 - cv.pz) * cv.dirZ;
-            const d2 = (x2 - cv.px) * cv.dirX + (z2 - cv.pz) * cv.dirZ;
-            const maxD = Math.max(d0, d1, d2);
-            const minD = Math.min(d0, d1, d2);
-            if (maxD <= -0.15 || minD >= 15.0) continue;
-
-            const p0 = Math.abs((x0 - cv.px) * cv.perpX + (z0 - cv.pz) * cv.perpZ);
-            const p1 = Math.abs((x1 - cv.px) * cv.perpX + (z1 - cv.pz) * cv.perpZ);
-            const p2 = Math.abs((x2 - cv.px) * cv.perpX + (z2 - cv.pz) * cv.perpZ);
-            const minP = Math.min(p0, p1, p2);
-            if (minP >= m.halfW + 0.15) continue;
-
+            // Doorway slab only. A 15m-deep cut on a steep slope deletes the hillside and you can see through the mountain.
+            const cx = (x0 + x1 + x2) / 3.0;
+            const cy = (y0 + y1 + y2) / 3.0;
+            const cz = (z0 + z1 + z2) / 3.0;
+            const dC = (cx - cv.px) * cv.dirX + (cz - cv.pz) * cv.dirZ;
+            if (dC < -0.40 || dC > 2.35) continue;
+            const pC = Math.abs((cx - cv.px) * cv.perpX + (cz - cv.pz) * cv.perpZ);
+            const archHalf = m.halfW * 0.94;
+            if (pC >= archHalf) continue;
+            const archTop = cv.baseY + m.ceilH * Math.sqrt(Math.max(0.0, 1.0 - Math.pow(pC / archHalf, 2.0)));
             const minY = Math.min(y0, y1, y2);
             const maxY = Math.max(y0, y1, y2);
-            // Only remove triangles that rise vertically into the arch doorway (preserve flat ground & high ridge roof)
-            if (maxY > cv.baseY + 0.35 && minY < cv.baseY + m.ceilH + 2.6) {
+            if (cy > cv.baseY + 0.45 && cy < archTop - 0.05 && maxY > cv.baseY + 0.30 && minY < archTop + 0.4) {
               carveTri = true;
               break;
             }
@@ -4041,21 +4064,21 @@
           float dist1 = dot(d1, vec2(0.98338, 0.18155));
           float p1 = abs(dot(d1, vec2(-0.18155, 0.98338)));
           float archH1 = 2.4 + 4.95 * sqrt(max(0.0, 1.0 - pow(p1 / 4.45, 2.0)));
-          if (dist1 > -0.60 && dist1 < 16.0 && p1 < 4.30 && vWorldPos.y > 2.65 && vWorldPos.y < archH1) discard;
+          if (dist1 > -0.45 && dist1 < 2.55 && p1 < 4.30 && vWorldPos.y > 2.65 && vWorldPos.y < archH1) discard;
 
           // Cave 2 Portal at (-40.0, 88.0), unit dir = (-0.96972, 0.24423), baseY = 4.2
           vec2 d2 = vWorldPos.xz - vec2(-40.0, 88.0);
           float dist2 = dot(d2, vec2(-0.96972, 0.24423));
           float p2 = abs(dot(d2, vec2(-0.24423, -0.96972)));
           float archH2 = 4.2 + 4.85 * sqrt(max(0.0, 1.0 - pow(p2 / 4.35, 2.0)));
-          if (dist2 > -0.60 && dist2 < 16.0 && p2 < 4.20 && vWorldPos.y > 4.45 && vWorldPos.y < archH2) discard;
+          if (dist2 > -0.45 && dist2 < 2.55 && p2 < 4.20 && vWorldPos.y > 4.45 && vWorldPos.y < archH2) discard;
 
-          // Cave 3 (Volcanic Lava Tube) Portal at (46.0, -112.0), unit dir = (0.56653, -0.82404), baseY = 3.2
-          vec2 d3 = vWorldPos.xz - vec2(46.0, -112.0);
-          float dist3 = dot(d3, vec2(0.56653, -0.82404));
-          float p3 = abs(dot(d3, vec2(0.82404, 0.56653)));
-          float archH3 = 3.2 + 4.75 * sqrt(max(0.0, 1.0 - pow(p3 / 4.25, 2.0)));
-          if (dist3 > -0.60 && dist3 < 16.0 && p3 < 4.10 && vWorldPos.y > 3.45 && vWorldPos.y < archH3) discard;
+          // Cave 3 lava-tube portal on the east flank of Mount Caldera (-214.1, 68.4), dir (-0.99875, -0.04998), baseY 33
+          vec2 d3 = vWorldPos.xz - vec2(-214.1, 68.4);
+          float dist3 = dot(d3, vec2(-0.99875, -0.04998));
+          float p3 = abs(dot(d3, vec2(0.04998, -0.99875)));
+          float archH3 = 33.0 + 4.55 * sqrt(max(0.0, 1.0 - pow(p3 / 4.25, 2.0)));
+          if (dist3 > -0.45 && dist3 < 2.55 && p3 < 4.15 && vWorldPos.y > 33.35 && vWorldPos.y < archH3) discard;
         }
 
         // 1. Multi-Frequency World Coordinates (Macro, Mid-Scale Detail, and Crisp Micro-Grain)
@@ -4130,8 +4153,8 @@
         float bElder = 1.0 - smoothstep(45.0, 135.0, length(vWorldPos.xz - vec2(-165.0, 72.0)));
         float bMeadow = 1.0 - smoothstep(45.0, 145.0, length(vWorldPos.xz - vec2(55.0, 225.0)));
         float bKarst = 1.0 - smoothstep(40.0, 125.0, length(vWorldPos.xz - vec2(168.0, 28.0)));
-        float calderaDist = length(vWorldPos.xz - vec2(-124.0, 224.0));
-        float bCaldera = 1.0 - smoothstep(42.0, 118.0, calderaDist);
+        float calderaDist = length(vWorldPos.xz - vec2(-302.0, 64.0));
+        float bCaldera = 1.0 - smoothstep(40.0, 148.0, calderaDist);
 
         // Rich multi-frequency biome color variation
         float macroNoise = sin(vWorldPos.x * 0.035 + 0.5) * cos(vWorldPos.z * 0.032) * 0.5
@@ -4166,16 +4189,21 @@
         detailedCliff = mix(detailedCliff, vec3(0.20, 0.39, 0.15) * (0.8 + 0.4 * gMicro.g), ledgeMoss * 0.65);
         baseTerrain.rgb = mix(baseTerrain.rgb, detailedCliff, rockBlend);
 
-        // Volcanic Basalt Cone, Tephra Ash, Sulfur-Ochre Rim Striations & Inner Cauldron Magma Glow
+        // Dark scoria crest. Molten color stays in the crater pool; the rim is cooled basalt with hairline embers.
         if (bCaldera > 0.01) {
-          float ashBand = smoothstep(38.0, 74.0, elev) * bCaldera;
-          vec3 basaltScoria = mix(vec3(0.17, 0.15, 0.15), vec3(0.27, 0.23, 0.21), sMicro.r) * (0.85 + 0.30 * cX.g);
-          baseTerrain.rgb = mix(baseTerrain.rgb, basaltScoria, ashBand * 0.92);
-          float sulfurRim = smoothstep(82.0, 102.0, elev) * (1.0 - smoothstep(22.0, 42.0, calderaDist));
-          vec3 sulfurStain = mix(vec3(0.32, 0.24, 0.14), vec3(0.46, 0.31, 0.12), macroNoise);
-          baseTerrain.rgb = mix(baseTerrain.rgb, sulfurStain, sulfurRim * 0.42);
-          float magmaGlow = (1.0 - smoothstep(16.0, 26.5, calderaDist)) * (1.0 - smoothstep(85.0, 99.0, elev));
-          baseTerrain.rgb += vec3(0.95, 0.28, 0.04) * magmaGlow * (0.45 + 0.20 * sin(uTime * 2.2 + vWorldPos.x * 0.3));
+          float ashBand = smoothstep(28.0, 70.0, elev) * bCaldera;
+          vec3 basaltScoria = mix(vec3(0.11, 0.10, 0.10), vec3(0.20, 0.16, 0.14), sMicro.r);
+          baseTerrain.rgb = mix(baseTerrain.rgb, basaltScoria, ashBand * 0.94);
+          float crestBand = smoothstep(118.0, 146.0, elev) * (1.0 - smoothstep(30.0, 78.0, calderaDist));
+          vec3 darkLava = mix(vec3(0.045, 0.032, 0.028), vec3(0.12, 0.07, 0.05), macroNoise);
+          baseTerrain.rgb = mix(baseTerrain.rgb, darkLava, crestBand * 0.96);
+          float cracks = pow(clamp(sin(vWorldPos.x * 0.85 + vWorldPos.z * 0.62) * 0.5 + 0.5, 0.0, 1.0), 9.0);
+          baseTerrain.rgb += vec3(0.42, 0.06, 0.01) * cracks * crestBand * 0.28;
+          float sulfurRim = smoothstep(140.0, 162.0, elev) * (1.0 - smoothstep(28.0, 52.0, calderaDist));
+          vec3 sulfurStain = mix(vec3(0.24, 0.18, 0.10), vec3(0.36, 0.24, 0.10), macroNoise);
+          baseTerrain.rgb = mix(baseTerrain.rgb, sulfurStain, sulfurRim * 0.22);
+          float poolGlow = (1.0 - smoothstep(16.0, 30.0, calderaDist)) * (1.0 - smoothstep(130.0, 146.0, elev)) * smoothstep(118.0, 128.0, elev);
+          baseTerrain.rgb += vec3(0.42, 0.07, 0.012) * poolGlow * (0.35 + 0.12 * sin(uTime * 1.6 + vWorldPos.x * 0.25));
         }
 
         // Tree-canopy leaf-litter humus & fallen twig mosaic beneath forest groves
@@ -4690,12 +4718,12 @@
               }
             }
 
-            // Parabolic free-falling water arch over the steep cliff escarpment (x = 76.2 -> 62.5)
+            // Short lip peel only. The ribbon otherwise sits in the carved channel instead of hanging over the gorge.
             let cliffArchLift = 0.0;
-            if (wx > 62.0 && wx < 76.8) {
-              const cliffPhase = (76.8 - wx) / 14.8; // 0 at cliff lip, 1 at upper plunge pool
+            if (wx > 68.5 && wx < 76.6) {
+              const cliffPhase = (76.6 - wx) / 8.1;
               const archProfile = Math.sin(cliffPhase * Math.PI);
-              cliffArchLift = archProfile * (isCliffVeil ? 1.15 : 0.48) * (1.0 - absZ * 0.45);
+              cliffArchLift = archProfile * (isCliffVeil ? 0.38 : 0.14) * (1.0 - absZ * 0.55);
             }
 
             // Smoothly tuck under the Cliff-Top Lake water surface (33.6m) inside the spillway throat (x = 79.2 -> 75.5)
@@ -4806,8 +4834,8 @@
       wfGroup.add(foamCascade);
       if (yieldFn) await yieldFn();
 
-      // Dedicated Parabolic Over-Cliff Plunge Curtain (x=77.2 -> 60.5) so water visibly arcs off the steep cliff lip!
-      const cliffCurtain = await buildWaterfallRibbon(77.2, 60.5, 64, 22, 3.45, 0.22, foamMat, true);
+      // Lip veil only (77.2 -> 69.5). The main ribbon carries the cascade down the channel.
+      const cliffCurtain = await buildWaterfallRibbon(77.2, 69.5, 36, 18, 3.15, 0.10, foamMat, true);
       wfGroup.add(cliffCurtain);
       if (yieldFn) await yieldFn();
 
@@ -4906,16 +4934,12 @@
               }
             }
 
-            // Parabolic free-falling water arch over the steep southern headwaters cliff (z = 161.2 -> 146.5)
+            // Short lip peel, then the ribbon follows the headwaters channel. No airborne sheet over the lower river.
             let cliffArchLift = 0.0;
-            if (wz > 146.0 && wz < 161.5) {
-              const cliffPhase = (161.5 - wz) / 15.5;
+            if (wz > 154.0 && wz < 161.4) {
+              const cliffPhase = (161.4 - wz) / 7.4;
               const archProfile = Math.sin(cliffPhase * Math.PI);
-              cliffArchLift = archProfile * (isCliffVeil ? 1.28 : 0.54) * (1.0 - absX * 0.45);
-            }
-            if (wz > 126.5 && wz < 139.0) {
-              const lowerPhase = (139.0 - wz) / 12.5;
-              cliffArchLift += Math.sin(lowerPhase * Math.PI) * (isCliffVeil ? 0.92 : 0.38) * (1.0 - absX * 0.45);
+              cliffArchLift = archProfile * (isCliffVeil ? 0.36 : 0.12) * (1.0 - absX * 0.55);
             }
 
             // Smoothly tuck under the Grand Headwaters Lake water surface (26.6m) inside the spillway throat (z = 163.4 -> 159.8)
@@ -4966,7 +4990,7 @@
       const hwFoamCascade = await buildHeadwatersWaterfallRibbon(162.4, 123.6, 136, 24, 3.85, 0.15, foamMat, false);
       wfGroup.add(hwFoamCascade);
       if (yieldFn) await yieldFn();
-      const hwCliffCurtain = await buildHeadwatersWaterfallRibbon(161.6, 126.5, 90, 22, 3.95, 0.24, foamMat, true);
+      const hwCliffCurtain = await buildHeadwatersWaterfallRibbon(161.6, 154.2, 32, 18, 3.4, 0.10, foamMat, true);
       wfGroup.add(hwCliffCurtain);
       if (yieldFn) await yieldFn();
 
@@ -5094,7 +5118,9 @@
 
               const terrH = getTerrainHeight(wx, wz);
               const rawDepth = Math.max(0.0, (lakeCfg.waterY + vy) - terrH);
-              const wDepth = Math.max(rawDepth, outletCurrent * 1.45);
+              // A shore sample more than 2.2m above the bed, and not in the spill throat, is a sheet over the gorge. Hide it.
+              if (rawDepth > 2.2 && rf > 0.56 && outletCurrent < 0.28) spillFade = 0.0;
+              const wDepth = (spillFade <= 0.0) ? 0.0 : Math.max(rawDepth, outletCurrent * 1.45);
               lakePos.push(lx, vy, lz);
               lakeUvs.push(0.5 + (lx / (rxMax * 2.0)), 0.5 + (lz / (rzMax * 2.0)));
               lakeDataList.push(spillFade, outletCurrent, wDepth);
@@ -5115,7 +5141,8 @@
 
               const terrH = getTerrainHeight(wx, wz);
               const rawDepth = Math.max(0.0, (lakeCfg.waterY + vy) - terrH);
-              const wDepth = Math.max(rawDepth, outletCurrent * 1.45);
+              if (rawDepth > 2.2 && rf > 0.56 && outletCurrent < 0.28) spillFade = 0.0;
+              const wDepth = (spillFade <= 0.0) ? 0.0 : Math.max(rawDepth, outletCurrent * 1.45);
               lakePos.push(lx, vy, lz);
               lakeUvs.push(0.5 + (lx / (rxMax * 2.0)), 0.5 + (lz / (rzMax * 2.0)));
               lakeDataList.push(spillFade, outletCurrent, wDepth);
@@ -5181,9 +5208,11 @@
             const wz = lakeCfg.z + lz;
             const terrH = getTerrainHeight(wx, wz);
             const wDepth = Math.max(0.0, lakeCfg.waterY - terrH);
+            // Outer ring over a drop (the downstream river) is not a shore. Alpha 0; the river ribbon owns that water.
+            const unsupported = (wDepth > 2.3 && rf > 0.62) ? 0.0 : 1.0;
             lakePos.push(lx, 0.0, lz);
             lakeUvs.push(0.5 + (lx / (rxMax * 2.0)), 0.5 + (lz / (rzMax * 2.0)));
-            lakeDataList.push(1.0, 0.12, wDepth);
+            lakeDataList.push(unsupported, unsupported * 0.12, unsupported > 0.0 ? wDepth : 0.0);
           }
         }
         const ringStride = lakeSegs + 1;
@@ -5233,8 +5262,12 @@
             const lat = (u - 0.5) * 2.0 * p.w;
             const wx = p.x + perpX * lat;
             const wz = p.z + perpZ * lat;
-            const edgeFade = Math.pow(Math.sin(u * Math.PI), 0.72);
+            let edgeFade = Math.pow(Math.sin(u * Math.PI), 0.72);
             const dropSlope = i < pts.length - 1 ? Math.max(0.0, (p.y - pts[i + 1].y) * 0.45) : 0.1;
+            const terrBed = getTerrainHeight(wx, wz);
+            // Lakes and the valley pond own their polygons. A ribbon more than 3.2m above the bed is floating — drop it.
+            if (isInsideValleyPond(wx, wz, -0.4) || isInsideUplandLake(wx, wz, -0.4) || isInsideHeadwatersLake(wx, wz, -0.4)) edgeFade = 0.0;
+            if ((p.y + heightOffset) - terrBed > 3.2) edgeFade = 0.0;
             const wy = p.y + heightOffset - Math.abs(u - 0.5) * 0.14;
             positions.push(wx, wy, wz);
             uvs.push(u, cumDist * 0.14);
@@ -7101,10 +7134,10 @@
     function isInsideVolcanoExclusion(x, z, extraR = 0.0) {
       if (typeof MOUNT_CALDERA === 'undefined') return false;
       const d = Math.hypot(x - MOUNT_CALDERA.x, z - MOUNT_CALDERA.z);
-      if (d < 46.0 + extraR) return true;
-      if (d < 90.0 + extraR) {
+      if (d < MOUNT_CALDERA.rimR + 14.0 + extraR) return true;
+      if (d < MOUNT_CALDERA.baseR * 0.94 + extraR) {
         const y = getTerrainHeight(x, z);
-        if (y > 46.0) return true;
+        if (y > (MOUNT_CALDERA.footY || 12.0) + 16.0) return true;
       }
       return false;
     }
@@ -10067,8 +10100,9 @@
             const tCol = cr / collarRings;
             let distCol, radScale;
             if (cr <= 2) {
-              distCol = -0.35 + (cr / 2) * 0.55;
-              radScale = 1.66 - (cr / 2) * 0.66;
+              // Outer sleeve overlaps the hillside so the arch and the terrain share an edge.
+              distCol = -0.90 + (cr / 2) * 1.20;
+              radScale = 1.95 - (cr / 2) * 0.90;
             } else if (cr <= 8) {
               distCol = 0.20 + ((cr - 2) / 6) * 3.80;
               radScale = 1.0 + Math.sin(((cr - 2) / 6) * Math.PI) * 0.04;
