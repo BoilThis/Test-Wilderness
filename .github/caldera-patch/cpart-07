@@ -1,0 +1,70 @@
+             positions.push(wx, wy, wz);
+             uvs.push(u, cumDist * 0.14);
+@@ -7101,10 +7134,10 @@
+     function isInsideVolcanoExclusion(x, z, extraR = 0.0) {
+       if (typeof MOUNT_CALDERA === 'undefined') return false;
+       const d = Math.hypot(x - MOUNT_CALDERA.x, z - MOUNT_CALDERA.z);
+-      if (d < 46.0 + extraR) return true;
+-      if (d < 90.0 + extraR) {
++      if (d < MOUNT_CALDERA.rimR + 14.0 + extraR) return true;
++      if (d < MOUNT_CALDERA.baseR * 0.94 + extraR) {
+         const y = getTerrainHeight(x, z);
+-        if (y > 46.0) return true;
++        if (y > (MOUNT_CALDERA.footY || 12.0) + 16.0) return true;
+       }
+       return false;
+     }
+@@ -10067,8 +10100,9 @@
+             const tCol = cr / collarRings;
+             let distCol, radScale;
+             if (cr <= 2) {
+-              distCol = -0.35 + (cr / 2) * 0.55;
+-              radScale = 1.66 - (cr / 2) * 0.66;
++              // Outer sleeve overlaps the hillside so the arch and the terrain share an edge.
++              distCol = -0.90 + (cr / 2) * 1.20;
++              radScale = 1.95 - (cr / 2) * 0.90;
+             } else if (cr <= 8) {
+               distCol = 0.20 + ((cr - 2) / 6) * 3.80;
+               radScale = 1.0 + Math.sin(((cr - 2) / 6) * Math.PI) * 0.04;
+diff --git a/app/src/main/assets/wilderness/js/caldera_castaway.js b/app/src/main/assets/wilderness/js/caldera_castaway.js
+index ffeebbc..56576d0 100644
+--- a/app/src/main/assets/wilderness/js/caldera_castaway.js
++++ b/app/src/main/assets/wilderness/js/caldera_castaway.js
+@@ -1327,7 +1327,7 @@
+   // --- 5E. MOUNT CALDERA VOLCANO CRATER, WALL-TO-WALL MAGMA CAULDRON, PLUMES & OBSIDIAN NODES ---
+   function buildVolcanicCalderaBiome() {
+     const mc = window.MOUNT_CALDERA || {
+-      x: -124.0, z: 224.0, baseR: 96.0, rimR: 24.5, poolEdgeR: 18.8, rimY: 102.0, floorY: 81.0, lavaY: 86.5
++      x: -302.0, z: 64.0, baseR: 112.0, rimR: 36.0, poolEdgeR: 26.5, rimY: 168.0, floorY: 126.0, lavaY: 132.5, footY: 12.0
+     };
+     const vx = mc.x, vz = mc.z;
+     const lavaY = mc.lavaY || 86.5;
+@@ -1371,15 +1371,18 @@
+       return geo;
+     }
+ 
+-    const lavaGeo = createRadialMagmaGeometry(21.0, 12, 64);
++    const lavaRadius = (mc.poolEdgeR || 26.5) + 2.4;
++    const lavaGeo = createRadialMagmaGeometry(lavaRadius, 12, 64);
+     const lavaShaderMat = new THREE.ShaderMaterial({
+       uniforms: {
+         uTime: window.fireShaderTime || { value: 0.0 },
+         uCalderaCenter: { value: new THREE.Vector2(vx, vz) },
+-        uPoolEdgeR: { value: mc.poolEdgeR || 18.0 }
++        uPoolEdgeR: { value: mc.poolEdgeR || 26.5 },
++        uLavaRadius: { value: lavaRadius }
+       },
+       vertexShader: `
+         uniform float uTime;
++        uniform float uLavaRadius;
+         varying vec2 vUv;
+         varying vec3 vWorldPos;
+         varying float vRad;
+@@ -1388,7 +1391,7 @@
+           vec3 pos = position;
+           float rad = length(pos.xz);
+           vRad = rad;
+-          float rimDamp = 1.0 - smoothstep(13.0, 20.5, rad);
++          float rimDamp = 1.0 - smoothstep(uLavaRadius * 0.62, uLavaRadius * 0.96, rad);
+           float swell = (sin(pos.x * 0.34 + uTime * 1.45) * cos(pos.z * 0.34 - uTime * 1.15) * 0.28
+                       + sin(rad * 0.65 - uTime * 2.1) * 0.12) * rimDamp;
