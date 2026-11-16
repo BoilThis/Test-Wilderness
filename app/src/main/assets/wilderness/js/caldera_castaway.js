@@ -7486,17 +7486,19 @@
         <div class="cc-section-lbl">🔨 Modular Shelter Blueprints (Tap to Arm Hammer)</div>
         <div class="cc-recipe-grid" id="cc-build-grid"></div>
 
-        <div class="cc-section-lbl">🗺️ Quick Landmark Fast-Travel & Camera Tour</div>
+        <div class="cc-section-lbl">🗺️ Geological Watershed Map &amp; Quick Fast-Travel</div>
         <div style="display:flex;gap:6px;margin-bottom:6px;">
-          <button class="cc-btn-secondary" id="cc-tour-prev" style="margin-top:0;flex:1;">◀ Prev Tour View</button>
-          <button class="cc-btn-secondary" id="cc-tour-next" style="margin-top:0;flex:1;">▶ Next Tour View</button>
-          <button class="cc-btn-secondary" id="cc-tour-grid" style="margin-top:0;flex:1;">🖼️ 12 Shots</button>
+          <button class="cc-btn-secondary" id="cc-open-geo-map" style="margin-top:0;flex:1.4;background:rgba(0,188,212,0.22);border-color:#00e5ff;color:#80deea;">🗺️ Full Geological &amp; Hydrology Map</button>
+          <button class="cc-btn-secondary" id="cc-tour-prev" style="margin-top:0;flex:0.8;">◀ Prev</button>
+          <button class="cc-btn-secondary" id="cc-tour-next" style="margin-top:0;flex:0.8;">▶ Next</button>
+          <button class="cc-btn-secondary" id="cc-tour-grid" style="margin-top:0;flex:0.8;">🖼️ 12 Shots</button>
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:6px;">
           <button class="cc-btn-secondary" data-cctp="crash" style="margin-top:0;">✈️ Crash Cove</button>
           <button class="cc-btn-secondary" data-cctp="outpost" style="margin-top:0;">📡 Radio Outpost</button>
           <button class="cc-btn-secondary" data-cctp="volcano" style="margin-top:0;">🌋 Volcano Rim</button>
           <button class="cc-btn-secondary" data-cctp="lavatube" style="margin-top:0;">🔥 Lava Tube</button>
+          <button class="cc-btn-secondary" data-cctp="valley_pond" style="margin-top:0;">🌿 Valley Lagoon</button>
           <button class="cc-btn-secondary" data-cctp="ruins" style="margin-top:0;">🏛️ Sunken Ruins</button>
           <button class="cc-btn-secondary" data-cctp="bamboo" style="margin-top:0;">🎍 Bamboo Grove</button>
           <button class="cc-btn-secondary" data-cctp="swim_cay" style="margin-top:0;">🏖️ Reef Cay</button>
@@ -7505,6 +7507,17 @@
       </div>
     `;
     document.body.appendChild(craftModal);
+
+    const openGeoMapBtn = document.getElementById('cc-open-geo-map');
+    if (openGeoMapBtn) {
+      openGeoMapBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        craftModal.style.display = 'none';
+        if (typeof window.openSettings === 'function') {
+          window.openSettings('tab-world');
+        }
+      });
+    }
 
     craftModal.querySelectorAll('#cc-arsenal-grid .cc-tool-slot').forEach(slot => {
       slot.addEventListener('click', e => {
@@ -7646,7 +7659,7 @@
       lavatube:         { x: -206.1, z: 68.8, yaw: 1.52, pitch: -0.04, dive: false, label: '🔥 Teleported to Volcanic Lava Tube Trailhead!' },
       ruins:            { x: 412.0,  z: 268.0,  yOverride: -2.6, yaw: 1.45, pitch: -0.18, dive: true, label: '🏛️ Submerged into Coral Fan Cay Ruins & Isotope Trench!' },
       bamboo:           { x: -64.0,  z: -24.0,  yaw: 0.65,  pitch: 0.0,   dive: false, label: '🎍 Teleported to Emerald Bamboo Jungle & Mangrove Delta!' },
-      valley_pond:      { x: 82.0,   z: 238.0,  yaw: -1.57, pitch: -0.06, dive: false, label: '🌿 Teleported to Windward Valley Pond & Inland River!' },
+      valley_pond:      { x: 68.0,   z: 212.0,  yaw: -1.35, pitch: -0.06, dive: false, label: '🌿 Teleported to Windward Valley Lagoon (+6.8m) & S-Meander River!' },
       canyon_gorge:     { x: 215.0,  z: 42.0,   yaw: -1.57, pitch: -0.04, dive: false, label: '🪨 Teleported to Stratified Eastern Limestone Canyon!' },
       swim_cay:         { x: -294.0, z: 224.0,  yaw: 1.57,  pitch: -0.05, dive: false, label: '🏖️ Teleported to Sheltered Reef Cove (25m Swim to Cay)!' },
       outer_stronghold: { x: 742.0,  z: 715.0,  yaw: -0.78, pitch: -0.06, dive: false, label: '⛵ Teleported to Outer Deep Coral Stronghold (2400m Archipelago)!' }

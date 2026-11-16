@@ -1259,20 +1259,30 @@
       <!-- TAB 1: WORLD & FAST-TRAVEL WAYPOINTS -->
       <div class="tab-pane active" id="tab-world">
         <div class="section-desc">
-          Instant fast-travel across the 1200m central landmass, 2400m archipelago, highland lakes, twin rivers, waterfalls, canyons, and caverns.
+          Interactive Geological &amp; Fluvial Geomorphology Survey Map — Unified Dendritic Watershed, Multi-Lobe Basins, Bedrock Sill Weirs, Plunge Amphitheaters &amp; Spring Tributaries. Tap any feature on the map or cards below to fast-travel:
+        </div>
+        <div style="position:relative;margin-bottom:14px;border-radius:14px;overflow:hidden;border:1px solid rgba(102,252,241,0.35);background:#071824;box-shadow:0 8px 26px rgba(0,0,0,0.55);">
+          <canvas id="cc-world-hydrology-map" width="760" height="520" style="width:100%;height:auto;display:block;cursor:pointer;touch-action:manipulation;"></canvas>
+          <div style="display:flex;flex-wrap:wrap;gap:10px;padding:8px 12px;background:rgba(6,16,24,0.92);border-top:1px solid rgba(255,255,255,0.08);font-size:11px;color:#cfd8dc;align-items:center;justify-content:space-between;">
+            <span>🟦 <b>L1–L3</b> Multi-Lobe Lakes &amp; Littoral Shelves</span>
+            <span>🌊 <b>C1–C2</b> Sill Weirs &amp; Plunge Pools (-4.6m)</span>
+            <span>〰️ <b>R1–R2</b> Estuary &amp; Point-Bar Meander</span>
+            <span>💧 <b>T1–T4</b> Karst/Artesian Springs</span>
+            <span style="color:#66fcf1;font-weight:700;">📍 Tap map pin to teleport</span>
+          </div>
         </div>
         <div class="waypoint-grid">
           <button class="waypoint-card" data-tp="headwaters">
-            <div class="wp-title"><span>🏔️ Grand Headwaters Lake</span><span>↗</span></div>
-            <div class="wp-sub">44m deep alpine basin & 40m cliff waterfall</div>
+            <div class="wp-title"><span>🏔️ L2: Grand Headwaters Lake</span><span>↗</span></div>
+            <div class="wp-sub">+26.6m 3-lobe tarn, sill weir &amp; C2 plunge pool</div>
           </button>
           <button class="waypoint-card" data-tp="alpine">
-            <div class="wp-title"><span>🏞️ Cliff-Top Alpine Gorge</span><span>↗</span></div>
-            <div class="wp-sub">34m upper tarn & terraced cascade</div>
+            <div class="wp-title"><span>🏞️ L1: Cliff-Top Alpine Tarn</span><span>↗</span></div>
+            <div class="wp-sub">+33.6m perched caldera tarn &amp; C1 waterfall</div>
           </button>
           <button class="waypoint-card" data-tp="valley_pond">
-            <div class="wp-title"><span>🌿 Windward Valley Pond</span><span>↗</span></div>
-            <div class="wp-sub">Lowland freshwater basin & inland river</div>
+            <div class="wp-title"><span>🌿 L3: Windward Valley Lagoon</span><span>↗</span></div>
+            <div class="wp-sub">+6.8m lowland basin &amp; R2 S-meander river</div>
           </button>
           <button class="waypoint-card" data-tp="canyon_gorge">
             <div class="wp-title"><span>🪨 Stratified Limestone Canyon</span><span>↗</span></div>
@@ -1522,6 +1532,9 @@
         if (targetTab && typeof switchConfigTab === 'function') {
           switchConfigTab(targetTab);
         }
+        if (modal.classList.contains('open') && typeof window.renderInGameGeologicalMap === 'function') {
+          window.renderInGameGeologicalMap();
+        }
       }
     };
     window.openSettings = function(targetTab) {
@@ -1530,6 +1543,9 @@
         modal.classList.add('open');
         if (targetTab && typeof switchConfigTab === 'function') {
           switchConfigTab(targetTab);
+        }
+        if (typeof window.renderInGameGeologicalMap === 'function') {
+          window.renderInGameGeologicalMap();
         }
       }
     };
@@ -2524,63 +2540,122 @@
       return t * t * (3.0 - 2.0 * t);
     }
 
-    // Enlarged Contained Mountain Tarn Basins + New Lowland Windward Valley Pond
-    // Note: UPLAND_LAKE western lip (112 - 33 = 79) and HEADWATERS_LAKE northern lip (210 - 44 = 166) stay locked to waterfall notches
-    const UPLAND_LAKE = { x: 112.0, z: 2.0, radius: 34.0, radiusX: 33.0, radiusZ: 36.0, waterY: 33.6, bedY: 25.8 };
-    const HEADWATERS_LAKE = { x: -18.0, z: 210.0, radius: 44.0, radiusX: 46.0, radiusZ: 44.0, waterY: 26.6, bedY: 17.5 };
-    const VALLEY_POND = { x: 112.0, z: 238.0, radius: 32.0, radiusX: 34.0, radiusZ: 30.0, waterY: 3.8, bedY: -2.2 };
+    // Multi-Lobe Harmonic Mountain Tarn Basins + Sheltered Lowland Windward Valley Lagoon
+    // UPLAND_LAKE western lip (118 - 39 = 79) and HEADWATERS_LAKE northern lip (204 - 38 = 166) lock to bedrock sill weirs & waterfall notches
+    const UPLAND_LAKE = {
+      id: 'upland',
+      x: 118.0, z: 2.0,
+      radius: 38.0, radiusX: 39.0, radiusZ: 36.0,
+      waterY: 33.6, bedY: 26.8,
+      a2: 0.14, p2: 0.18, a3: 0.11, p3: -0.65, a4: 0.05, p4: 1.05,
+      spillAng: Math.PI
+    };
+    const HEADWATERS_LAKE = {
+      id: 'headwaters',
+      x: -18.0, z: 204.0,
+      radius: 36.0, radiusX: 38.0, radiusZ: 38.0,
+      waterY: 26.6, bedY: 20.4,
+      a2: -0.10, p2: Math.PI * 0.5, a3: 0.13, p3: 0.42, a4: 0.05, p4: -0.85,
+      spillAng: -Math.PI * 0.5
+    };
+    const VALLEY_POND = {
+      id: 'valley',
+      x: 88.0, z: 214.0,
+      radius: 29.0, radiusX: 31.0, radiusZ: 27.0,
+      waterY: 6.8, bedY: 3.2,
+      a2: 0.16, p2: -0.68, a3: 0.10, p3: 1.15, a4: 0.05, p4: 0.35,
+      spillAng: -2.356
+    };
     window.UPLAND_LAKE = UPLAND_LAKE;
     window.HEADWATERS_LAKE = HEADWATERS_LAKE;
     window.VALLEY_POND = VALLEY_POND;
 
+    // Evaluate multi-lobe harmonic radius scale R(theta)/r0 while pinning spillway throat to 1.0
+    function evalLakeLobeScale(lake, ang) {
+      const dSpill = Math.atan2(Math.sin(ang - (lake.spillAng || 0.0)), Math.cos(ang - (lake.spillAng || 0.0)));
+      const spillPin = 1.0 - Math.exp(-Math.pow(dSpill / 0.46, 2.0));
+      const harm = (lake.a2 || 0.0) * Math.cos(2.0 * (ang - (lake.p2 || 0.0)))
+                 + (lake.a3 || 0.0) * Math.cos(3.0 * (ang - (lake.p3 || 0.0)))
+                 + (lake.a4 || 0.0) * Math.sin(4.0 * (ang - (lake.p4 || 0.0)));
+      return Math.max(0.76, Math.min(1.24, 1.0 + harm * spillPin));
+    }
+    window.evalLakeLobeScale = evalLakeLobeScale;
+
+    function sampleLakeShorePt(lake, ang, radFrac = 1.0, extraPad = 0.0) {
+      const sc = evalLakeLobeScale(lake, ang);
+      const rx = (lake.radiusX * sc + extraPad) * radFrac;
+      const rz = (lake.radiusZ * sc + extraPad) * radFrac;
+      return {
+        x: lake.x + Math.cos(ang) * rx,
+        z: lake.z + Math.sin(ang) * rz,
+        lobeScale: sc
+      };
+    }
+    window.sampleLakeShorePt = sampleLakeShorePt;
+
+    function getLakeEffDistGeneric(lake, x, z) {
+      const dx = x - lake.x;
+      const dz = z - lake.z;
+      const ang = Math.atan2(dz, dx);
+      const sc = evalLakeLobeScale(lake, ang);
+      const nx = dx / (lake.radiusX * sc);
+      const nz = dz / (lake.radiusZ * sc);
+      return Math.hypot(nx, nz) * lake.radius;
+    }
+
+    function isInsideLakeGeneric(lake, x, z, pad = 0.0) {
+      const dx = x - lake.x;
+      const dz = z - lake.z;
+      const ang = Math.atan2(dz, dx);
+      const sc = evalLakeLobeScale(lake, ang);
+      const nx = dx / Math.max(2.0, lake.radiusX * sc + pad);
+      const nz = dz / Math.max(2.0, lake.radiusZ * sc + pad);
+      return Math.hypot(nx, nz) < 1.0;
+    }
+
     function getUplandLakeEffDist(x, z) {
-      const nx = (x - UPLAND_LAKE.x) / UPLAND_LAKE.radiusX;
-      const nz = (z - UPLAND_LAKE.z) / UPLAND_LAKE.radiusZ;
-      return Math.hypot(nx, nz) * UPLAND_LAKE.radius;
+      return getLakeEffDistGeneric(UPLAND_LAKE, x, z);
     }
-
     function isInsideUplandLake(x, z, pad = 0.0) {
-      const nx = (x - UPLAND_LAKE.x) / (UPLAND_LAKE.radiusX + pad);
-      const nz = (z - UPLAND_LAKE.z) / (UPLAND_LAKE.radiusZ + pad);
-      return Math.hypot(nx, nz) < 1.0;
+      return isInsideLakeGeneric(UPLAND_LAKE, x, z, pad);
     }
-
     function getHeadwatersLakeEffDist(x, z) {
-      const nx = (x - HEADWATERS_LAKE.x) / HEADWATERS_LAKE.radiusX;
-      const nz = (z - HEADWATERS_LAKE.z) / HEADWATERS_LAKE.radiusZ;
-      return Math.hypot(nx, nz) * HEADWATERS_LAKE.radius;
+      return getLakeEffDistGeneric(HEADWATERS_LAKE, x, z);
     }
-
     function isInsideHeadwatersLake(x, z, pad = 0.0) {
-      const nx = (x - HEADWATERS_LAKE.x) / (HEADWATERS_LAKE.radiusX + pad);
-      const nz = (z - HEADWATERS_LAKE.z) / (HEADWATERS_LAKE.radiusZ + pad);
-      return Math.hypot(nx, nz) < 1.0;
+      return isInsideLakeGeneric(HEADWATERS_LAKE, x, z, pad);
     }
-
     function getValleyPondEffDist(x, z) {
-      const nx = (x - VALLEY_POND.x) / VALLEY_POND.radiusX;
-      const nz = (z - VALLEY_POND.z) / VALLEY_POND.radiusZ;
-      return Math.hypot(nx, nz) * VALLEY_POND.radius;
+      return getLakeEffDistGeneric(VALLEY_POND, x, z);
     }
-
     function isInsideValleyPond(x, z, pad = 0.0) {
-      const nx = (x - VALLEY_POND.x) / (VALLEY_POND.radiusX + pad);
-      const nz = (z - VALLEY_POND.z) / (VALLEY_POND.radiusZ + pad);
-      return Math.hypot(nx, nz) < 1.0;
+      return isInsideLakeGeneric(VALLEY_POND, x, z, pad);
     }
 
-    // Dual Primary River #2: Inland Winding Valley River (Western Elderwood Foothills -> Valley Pond -> Southern Coast)
+    // Waterfall Plunge-Pool Scour Amphitheaters & Alluvial Boulder Fans (C1 Eastern Alpine & C2 Grand Headwaters)
+    const PLUNGE_AMPHITHEATERS = [
+      { id: 'eastern_plunge',    x: 21.5,  z: 2.0,   r: 12.5, depthY: -4.4, fanX: 14.5,  fanZ: 2.0,   fanR: 15.5 },
+      { id: 'headwaters_plunge', x: -14.5, z: 124.0, r: 14.0, depthY: -4.6, fanX: -14.0, fanZ: 116.5, fanR: 16.5 }
+    ];
+    window.PLUNGE_AMPHITHEATERS = PLUNGE_AMPHITHEATERS;
+
+    // 4 Physical Geological Spring Sources (Karst Resurgence, Perched Basalt Seep, Artesian Travertine Pool, Volcanic Contact Seep)
+    const SPRING_SOURCES = [
+      { id: 'karst_spring',    name: '🪨 Karst Resurgence Spring',      x: 192.0,  z: -20.0, y: 38.2, r: 4.8, dirX: -0.90, dirZ: 0.42 },
+      { id: 'basalt_seep',     name: '⛰️ Perched Basalt Saddle Seep',   x: -82.0,  z: 234.0, y: 31.8, r: 4.6, dirX: 0.85,  dirZ: -0.52 },
+      { id: 'artesian_pool',   name: '💧 Artesian Travertine Spring',   x: 152.0,  z: 244.0, y: 12.4, r: 5.8, dirX: -0.89, dirZ: -0.45 },
+      { id: 'volcanic_seep',   name: '🌋 Volcanic Contact Seepage',     x: -168.0, z: 62.0,  y: 14.2, r: 5.0, dirX: 0.99,  dirZ: -0.12 }
+    ];
+    window.SPRING_SOURCES = SPRING_SOURCES;
+
+    // Primary River #2: S-Meandering Valley River (Windward Valley Lagoon Weir -> Cutbanks/Point Bars -> Flared Estuary Delta at z=106)
     const INLAND_RIVER_CTRL = [
-      { x: -198, z: 18,  y: 12.2, w: 4.5 },
-      { x: -165, z: 68,  y: 9.6,  w: 5.5 },
-      { x: -132, z: 122, y: 7.4,  w: 6.4 },
-      { x: -78,  z: 162, y: 5.8,  w: 7.2 },
-      { x: -18,  z: 162, y: 5.2,  w: 7.5 },
-      { x: 42,   z: 188, y: 4.6,  w: 8.2 },
-      { x: 96,   z: 226, y: 3.85, w: 9.5 },
-      { x: 118,  z: 256, y: 3.55, w: 9.2 },
-      { x: 136,  z: 308, y: 1.9,  w: 10.5 },
-      { x: 158,  z: 378, y: 0.05, w: 12.5 }
+      { x: 76.0,  z: 202.0, y: 6.80, w: 5.2 },
+      { x: 46.0,  z: 192.0, y: 5.45, w: 5.8 },
+      { x: 50.0,  z: 162.0, y: 3.85, w: 6.4 },
+      { x: 16.0,  z: 144.0, y: 2.15, w: 7.2 },
+      { x: 8.0,   z: 118.0, y: 0.65, w: 8.6 },
+      { x: -11.5, z: 106.0, y: 0.05, w: 11.2 }
     ];
     function buildPolylineCache(ctrlPts, steps) {
       const curve = new THREE.CatmullRomCurve3(
@@ -2596,7 +2671,12 @@
         const frac = fIdx - i0;
         const halfW = ctrlPts[i0].w * (1.0 - frac) + ctrlPts[i0 + 1].w * frac;
         const tan = curve.getTangent(t);
-        pts.push({ x: v.x, y: v.y, z: v.z, w: halfW, dirX: tan.x, dirZ: tan.z, t });
+        const dt = 1.0 / steps;
+        const tanPrev = curve.getTangent(Math.max(0.0, t - dt));
+        const tanNext = curve.getTangent(Math.min(1.0, t + dt));
+        // Signed 2D planform curvature for cutbank vs. point-bar geomorphology
+        const curv = Math.max(-1.0, Math.min(1.0, (tanPrev.x * tanNext.z - tanPrev.z * tanNext.x) * 8.5));
+        pts.push({ x: v.x, y: v.y, z: v.z, w: halfW, dirX: tan.x, dirZ: tan.z, curv, t });
         if (v.x < minX) minX = v.x;
         if (v.x > maxX) maxX = v.x;
         if (v.z < minZ) minZ = v.z;
@@ -2605,6 +2685,8 @@
       return { pts, minX: minX - 28, maxX: maxX + 28, minZ: minZ - 28, maxZ: maxZ + 28, curve };
     }
     const INLAND_RIVER_CACHE = buildPolylineCache(INLAND_RIVER_CTRL, 84);
+    window.INLAND_RIVER_CTRL = INLAND_RIVER_CTRL;
+    window.INLAND_RIVER_CACHE = INLAND_RIVER_CACHE;
 
     function querySplineChannel(cache, x, z, maxMargin = 16.0) {
       if (x < cache.minX || x > cache.maxX || z < cache.minZ || z > cache.maxZ) return null;
@@ -2612,6 +2694,8 @@
       let bestDistSq = Infinity;
       let bestSeg = null;
       let bestFrac = 0;
+      let bestDx = 0;
+      let bestDz = 0;
       for (let i = 0; i < pts.length - 1; i++) {
         const a = pts[i], b = pts[i + 1];
         const abx = b.x - a.x, abz = b.z - a.z;
@@ -2626,6 +2710,8 @@
           bestDistSq = dSq;
           bestSeg = i;
           bestFrac = frac;
+          bestDx = dx;
+          bestDz = dz;
         }
       }
       const a = pts[bestSeg], b = pts[bestSeg + 1];
@@ -2635,14 +2721,20 @@
       if (dist > halfW + maxMargin) return null;
       const dirX = a.dirX + (b.dirX - a.dirX) * bestFrac;
       const dirZ = a.dirZ + (b.dirZ - a.dirZ) * bestFrac;
+      const curv = (a.curv || 0.0) + ((b.curv || 0.0) - (a.curv || 0.0)) * bestFrac;
       const dLen = Math.hypot(dirX, dirZ) || 1.0;
+      const ndx = dirX / dLen, ndz = dirZ / dLen;
+      const perpX = -ndz, perpZ = ndx;
+      const signedLat = bestDx * perpX + bestDz * perpZ;
       return {
         dist,
+        signedLat,
+        curv,
         halfW,
         waterY,
         t: a.t + (b.t - a.t) * bestFrac,
-        dirX: dirX / dLen,
-        dirZ: dirZ / dLen
+        dirX: ndx,
+        dirZ: ndz
       };
     }
 
@@ -2651,43 +2743,53 @@
     }
     window.getInlandRiverInfo = getInlandRiverInfo;
 
-    // 3 Organic Winding Streams Across Biomes (Elderwood Brook, Meadow Spring Runlet, North Ridge Creek)
+    // 4 Geologically Sourced Step-Pool Tributary Brooks (Zero collisions; each starts at a physical spring and joins a lake or main river)
     const WINDING_STREAMS = [
       {
-        id: 'elderwood_brook',
-        name: '🌿 Elderwood Moss Brook',
+        id: 'karst_spring_creek',
+        name: '🪨 Karst Resurgence Creek',
         ctrl: [
-          { x: -228, z: 96, y: 15.8, w: 2.2 },
-          { x: -182, z: 86, y: 12.8, w: 2.6 },
-          { x: -138, z: 74, y: 10.6, w: 2.8 },
-          { x: -98,  z: 58, y: 9.2,  w: 3.1 },
-          { x: -64,  z: 74, y: 7.4,  w: 3.4 }
+          { x: 192, z: -20, y: 38.2, w: 2.2 },
+          { x: 174, z: -14, y: 35.8, w: 2.6 },
+          { x: 158, z: -7,  y: 34.2, w: 3.1 },
+          { x: 146, z: -2,  y: 33.6, w: 3.6 }
         ]
       },
       {
-        id: 'meadow_runlet',
-        name: '🌱 Meadow Spring Runlet',
+        id: 'basalt_seep_brook',
+        name: '⛰️ Perched Basalt Brook',
         ctrl: [
-          { x: 24,  z: 170, y: 8.6, w: 2.2 },
-          { x: 52,  z: 194, y: 6.4, w: 2.6 },
-          { x: 76,  z: 215, y: 4.8, w: 3.0 },
-          { x: 96,  z: 229, y: 3.85, w: 3.6 }
+          { x: -82, z: 234, y: 31.8, w: 2.1 },
+          { x: -66, z: 224, y: 29.0, w: 2.5 },
+          { x: -52, z: 215, y: 27.2, w: 3.0 },
+          { x: -42, z: 209, y: 26.6, w: 3.5 }
         ]
       },
       {
-        id: 'north_ridge_creek',
-        name: '💧 North Ridge Creek',
+        id: 'artesian_meadow_runlet',
+        name: '💧 Artesian Spring Runlet',
         ctrl: [
-          { x: 186, z: -22, y: 37.8, w: 2.2 },
-          { x: 162, z: -12, y: 35.6, w: 2.6 },
-          { x: 142, z: -3,  y: 34.1, w: 3.1 },
-          { x: 126, z: 1,   y: 33.6, w: 3.6 }
+          { x: 152, z: 244, y: 12.4, w: 2.3 },
+          { x: 132, z: 234, y: 9.4,  w: 2.7 },
+          { x: 114, z: 225, y: 7.4,  w: 3.1 },
+          { x: 102, z: 219, y: 6.8,  w: 3.6 }
+        ]
+      },
+      {
+        id: 'volcanic_contact_brook',
+        name: '🌿 Volcanic Contact Brook',
+        ctrl: [
+          { x: -168, z: 62, y: 14.2, w: 2.2 },
+          { x: -118, z: 56, y: 9.4,  w: 2.6 },
+          { x: -66,  z: 50, y: 4.2,  w: 3.1 },
+          { x: -16,  z: 46, y: 0.08, w: 3.8 }
         ]
       }
     ].map(st => ({
       id: st.id,
       name: st.name,
-      cache: buildPolylineCache(st.ctrl, 36)
+      ctrl: st.ctrl,
+      cache: buildPolylineCache(st.ctrl, 40)
     }));
     window.WINDING_STREAMS = WINDING_STREAMS;
 
@@ -2748,12 +2850,14 @@
       return 2.0 + fade * (Math.sin(t * Math.PI * 2.2) * 3.4 + Math.cos(t * Math.PI * 1.1) * 1.4);
     }
 
-    // Steep Upper Cliff Waterfall Drop from Cliff-Top Lake (33.6m -> 17.2m) + Multi-Tier Gorge Cascades
+    // Steep Upper Cliff Waterfall Drop from Cliff-Top Lake (33.6m -> 17.2m) + Bedrock Sill Weir + Multi-Tier Gorge Cascades
     function getWaterfallChannelY(x) {
       if (x >= 76.2) {
-        return 32.3 + Math.min(0.35, (x - 76.2) * 0.03);
+        // Bedrock Sill Weir (-0.95m knickpoint lip at x = 78.5..81.5) impounding the deep alpine tarn
+        const weirBump = Math.exp(-Math.pow((x - 79.2) / 1.8, 2.0)) * 0.32;
+        return 32.35 + weirBump + Math.min(0.28, (x - 76.2) * 0.025);
       } else if (x >= 62.5) {
-        return 17.2 + Math.pow(smoothstep(62.5, 76.2, x), 1.32) * 15.1;
+        return 17.2 + Math.pow(smoothstep(62.5, 76.2, x), 1.32) * 15.15;
       } else if (x >= 55.0) {
         return 16.5 + smoothstep(55.0, 62.5, x) * 0.70;
       } else if (x >= 41.0) {
@@ -2761,9 +2865,9 @@
       } else if (x >= 34.0) {
         return 5.5 + smoothstep(34.0, 41.0, x) * 0.70;
       } else if (x >= 23.8) {
-        return -0.6 + smoothstep(23.8, 34.0, x) * 6.10;
+        return -0.8 + smoothstep(23.8, 34.0, x) * 6.30;
       }
-      return -3.2;
+      return -4.2;
     }
 
     // Grand River Headwaters Cataract centerline & elevation profile (z = 166 -> 124) linking HEADWATERS_LAKE to the Estuary River
@@ -2778,15 +2882,17 @@
 
     function getHeadwatersChannelY(z) {
       if (z >= 161.2) {
-        return 25.2 + Math.min(0.35, (z - 161.2) * 0.03);
+        // Bedrock Sill Weir (-0.95m knickpoint lip at z = 163.5..166.5) impounding the deep headwaters tarn
+        const weirBump = Math.exp(-Math.pow((z - 164.2) / 1.8, 2.0)) * 0.32;
+        return 25.25 + weirBump + Math.min(0.28, (z - 161.2) * 0.025);
       } else if (z >= 146.5) {
-        return 12.4 + Math.pow(smoothstep(146.5, 161.2, z), 1.30) * 12.80;
+        return 12.4 + Math.pow(smoothstep(146.5, 161.2, z), 1.30) * 12.85;
       } else if (z >= 139.0) {
         return 11.7 + smoothstep(139.0, 146.5, z) * 0.70;
       } else if (z >= 125.0) {
-        return -2.8 + Math.pow(smoothstep(125.0, 139.0, z), 1.25) * 14.50;
+        return -3.2 + Math.pow(smoothstep(125.0, 139.0, z), 1.25) * 14.90;
       }
-      return -3.2;
+      return -4.4;
     }
 
     // Multi-Level Branching Subterranean Cave Networks (~840m total passages across 3 karst & volcanic caverns)
@@ -3545,70 +3651,108 @@
         }
       }
 
-      // Winding Emerald Estuary River & Smooth Littoral Sandbar Banks (Primary River #1 -> Ocean)
+      // Winding Emerald Estuary River, Braided Tidal Sand-Spit Shoal & Smooth Littoral Sandbar Banks (Primary River #1 -> Ocean)
       const riverCenter = getEstuaryCenter(z);
       const distToRiver = Math.abs(x - riverCenter);
       const bankWobble = 1.0 + fbm2(x * 0.018, z * 0.018, 2) * 0.24;
       const riverHalfW = (14.5 + Math.max(0, (-z + 25) * 0.30)) * bankWobble;
-      if (z > -50 && z < 136 && distToRiver < riverHalfW * 1.68) {
+      if (z > -54 && z < 134 && distToRiver < riverHalfW * 1.68) {
         const t = distToRiver / (riverHalfW * 1.68);
         let bedTarget;
         if (t < 0.55) {
-          bedTarget = -3.4 + Math.pow(t / 0.55, 1.6) * 2.85;
+          bedTarget = -3.5 + Math.pow(t / 0.55, 1.6) * 2.90;
         } else if (t < 0.78) {
-          bedTarget = -0.55 + ((t - 0.55) / 0.23) * 1.20;
+          bedTarget = -0.60 + ((t - 0.55) / 0.23) * 1.25;
         } else {
           bedTarget = 0.65 + Math.pow((t - 0.78) / 0.22, 1.45) * 4.5;
         }
-        const headwaterFade = z > 122.0 ? (1.0 - smoothstep(122.0, 136.0, z)) : 1.0;
+        // Tidal Estuary Sand-Spit Shoal at Northern Fjord Mouth (x ~ -4, z ~ -26)
+        const shoalDist = Math.hypot((x - (-4.5)) / 14.0, (z - (-26.0)) / 18.0);
+        if (shoalDist < 1.0) {
+          const shoalW = Math.pow(1.0 - shoalDist, 1.5);
+          const shoalY = -0.95 + fbm2(x * 0.08, z * 0.08, 2) * 0.22;
+          bedTarget = bedTarget * (1.0 - shoalW * 0.78) + shoalY * (shoalW * 0.78);
+        }
+        const headwaterFade = z > 122.0 ? (1.0 - smoothstep(122.0, 134.0, z)) : 1.0;
         const blend = Math.pow(1.0 - t, 0.85) * headwaterFade;
         y = y * (1.0 - blend) + Math.min(y, bedTarget) * blend;
       }
 
-      // 1. Enlarged Contained Cliff-Top Alpine Lake Basin (center 112, 2.0)
+      // Waterfall Plunge-Pool Scour Amphitheaters & Alluvial Boulder Fans (C1 Eastern Alpine & C2 Grand Headwaters)
+      for (let pIdx = 0; pIdx < PLUNGE_AMPHITHEATERS.length; pIdx++) {
+        const pl = PLUNGE_AMPHITHEATERS[pIdx];
+        const pDist = Math.hypot(x - pl.x, z - pl.z);
+        if (pDist < pl.r + 6.5) {
+          const pNorm = pDist / pl.r;
+          const scourTarget = (pNorm < 0.78)
+            ? pl.depthY + Math.pow(pNorm / 0.78, 1.8) * (pl.depthY * -0.72)
+            : -1.25 + ((pNorm - 0.78) / 0.52) * 2.1;
+          const pBlend = 1.0 - smoothstep(pl.r - 1.5, pl.r + 6.5, pDist);
+          y = y * (1.0 - pBlend) + Math.min(y, scourTarget) * pBlend;
+        }
+        // Downstream Alluvial Boulder & Gravel Fan Bar where high-velocity cataract decelerates into the Estuary
+        const fDist = Math.hypot(x - pl.fanX, z - pl.fanZ);
+        if (fDist < pl.fanR && pDist > pl.r * 0.68) {
+          const fanRing = Math.sin(Math.min(1.0, fDist / pl.fanR) * Math.PI);
+          const cobbleNoise = ridged2(x * 0.14, z * 0.14, 2) * 0.38;
+          const fanTarget = -0.95 + fanRing * 0.65 + cobbleNoise;
+          const fBlend = (1.0 - smoothstep(pl.fanR * 0.55, pl.fanR, fDist)) * smoothstep(pl.r * 0.68, pl.r * 0.95, pDist) * 0.55;
+          y = y * (1.0 - fBlend) + Math.max(y, fanTarget) * fBlend;
+        }
+      }
+
+      // 1. Multi-Lobe Cliff-Top Alpine Tarn Basin (center 118, 2.0, waterY 33.6m) + Western Bedrock Sill Weir
       const lakeRawDist = getUplandLakeEffDist(x, z);
-      if (lakeRawDist < UPLAND_LAKE.radius + 14.0) {
-        const shoreNoise = fbm2(x * 0.05 + 2.1, z * 0.05 - 3.4, 2) * 1.4;
+      if (lakeRawDist < UPLAND_LAKE.radius + 15.0) {
+        const shoreNoise = fbm2(x * 0.05 + 2.1, z * 0.05 - 3.4, 2) * 0.85;
         const effLakeR = UPLAND_LAKE.radius + shoreNoise;
         const spillZDist = Math.abs(z - getWaterfallCenterZ(Math.min(86.0, Math.max(74.0, x))));
-        const spillWeight = (x < UPLAND_LAKE.x - 15.0 && x > 73.0)
+        const spillWeight = (x < UPLAND_LAKE.x - 16.0 && x > 73.0)
           ? Math.exp(-Math.pow(spillZDist / 4.2, 2.0)) * smoothstep(73.0, 76.2, x) * (1.0 - smoothstep(86.0, 95.0, x))
           : 0.0;
-        if (lakeRawDist > effLakeR - 2.5) {
-          const rimFactor = smoothstep(effLakeR - 2.5, effLakeR + 5.5, lakeRawDist)
-            * (1.0 - smoothstep(effLakeR + 5.5, UPLAND_LAKE.radius + 14.0, lakeRawDist))
+        // Guarantee full perimeter containment rim outside the spillway throat
+        if (lakeRawDist > effLakeR - 3.0) {
+          const rimFactor = smoothstep(effLakeR - 3.0, effLakeR + 5.0, lakeRawDist)
+            * (1.0 - smoothstep(effLakeR + 5.0, UPLAND_LAKE.radius + 15.0, lakeRawDist))
             * (1.0 - spillWeight);
-          y = Math.max(y, y * (1.0 - rimFactor) + (UPLAND_LAKE.waterY + 2.25) * rimFactor);
+          y = Math.max(y, y * (1.0 - rimFactor) + (UPLAND_LAKE.waterY + 2.35) * rimFactor);
         }
-        if (lakeRawDist < effLakeR + 4.5 || spillWeight > 0.01) {
-          const t = Math.min(1.2, lakeRawDist / Math.max(8.0, effLakeR));
+        if (lakeRawDist < effLakeR + 5.5 || spillWeight > 0.01) {
+          const t = Math.min(1.25, lakeRawDist / Math.max(8.0, effLakeR));
           let basinTarget;
-          if (t < 0.75) {
-            basinTarget = UPLAND_LAKE.bedY + Math.pow(t / 0.75, 1.75) * (UPLAND_LAKE.waterY - 1.15 - UPLAND_LAKE.bedY);
+          if (t < 0.70) {
+            // Profundal mud basin (26.8m -> 32.5m)
+            basinTarget = UPLAND_LAKE.bedY + Math.pow(t / 0.70, 1.75) * (UPLAND_LAKE.waterY - 1.10 - UPLAND_LAKE.bedY);
+          } else if (t < 1.0) {
+            // Graded wet sandy littoral shelf (32.5m -> 33.6m right at t=1.0 shoreline!)
+            basinTarget = (UPLAND_LAKE.waterY - 1.10) + ((t - 0.70) / 0.30) * 1.10;
           } else {
-            basinTarget = (UPLAND_LAKE.waterY - 1.15) + ((t - 0.75) / 0.25) * 2.40;
+            // Gentle dry beach berm rising above shoreline (33.6m -> 35.4m)
+            basinTarget = UPLAND_LAKE.waterY + ((t - 1.0) / 0.25) * 1.85;
           }
-          const deepSpillY = UPLAND_LAKE.waterY - 1.45;
-          basinTarget = basinTarget * (1.0 - spillWeight) + Math.min(basinTarget, deepSpillY) * spillWeight;
-          const basinBlend = 1.0 - smoothstep(effLakeR - 0.5, effLakeR + 4.5, lakeRawDist);
+          // Submerged Bedrock Sill Weir (-0.95m knickpoint lip at x = 78..82) impounding the lake basin
+          const weirCrest = Math.exp(-Math.pow((x - 79.2) / 2.1, 2.0)) * 0.42;
+          const sillSpillY = UPLAND_LAKE.waterY - 1.32 + weirCrest;
+          basinTarget = basinTarget * (1.0 - spillWeight) + Math.min(basinTarget, sillSpillY) * spillWeight;
+          const basinBlend = 1.0 - smoothstep(effLakeR + 0.5, effLakeR + 5.5, lakeRawDist);
           const blend = Math.max(basinBlend, spillWeight);
           y = y * (1.0 - blend) + Math.min(y, basinTarget) * blend;
         }
       }
 
-      // 2. Sculpted S-Curved Eastern Waterfall Gorge & Steep Cliff Spillway Chute (x=86.5 -> x=18)
+      // 2. Sculpted S-Curved Eastern Waterfall Gorge & Steep Cliff Spillway Chute (x=85.5 -> x=18)
       const wfCenter = getWaterfallCenterZ(x);
       const gorgeZDist = Math.abs(z - wfCenter);
-      if (x > 16 && x < 86.5 && gorgeZDist < 18.5) {
+      if (x > 16 && x < 85.5 && gorgeZDist < 18.5) {
         const halfBed = 3.2 + (1.0 - smoothstep(25.0, 80.0, x)) * 1.4;
         const chDist = Math.max(0.0, gorgeZDist - halfBed);
-        // Closed basin: the gorge may cut only the western spill throat, never the lake bed itself.
+        // Closed basin: the gorge may cut only up to the western bedrock sill weir (x <= 80.5), never the tarn bowl
         let lakeHold = 1.0;
         if (isInsideUplandLake(x, z, 0.2) && x > 74.0) {
           const throat = Math.exp(-Math.pow(gorgeZDist / 3.5, 2.0));
-          lakeHold = throat * smoothstep(90.0, 80.0, x);
+          lakeHold = throat * smoothstep(86.0, 78.5, x);
         }
-        const zBlend = Math.pow(1.0 - gorgeZDist / 18.5, 1.25) * (x > 78.5 ? (1.0 - smoothstep(78.5, 86.5, x)) : 1.0) * lakeHold;
+        const zBlend = Math.pow(1.0 - gorgeZDist / 18.5, 1.25) * (x > 78.0 ? (1.0 - smoothstep(78.0, 85.5, x)) : 1.0) * lakeHold;
         const notchY = getWaterfallChannelY(x);
         const bankCrag = (chDist > 0.6 && chDist < 13.5)
           ? (ridged2(x * 0.085 + 2.3, z * 0.085 - 1.7, 2) * 1.05 + fbm2(x * 0.14, z * 0.14, 2) * 0.42) * Math.sin((chDist / 13.5) * Math.PI)
@@ -3619,51 +3763,58 @@
         y = y * (1.0 - zBlend) + Math.min(y, floorTarget) * zBlend;
       }
 
-      // 3. Enlarged Contained Highland Headwaters Lake (center -18, 210)
+      // 3. Multi-Lobe Grand Headwaters Tarn (center -18, 204, waterY 26.6m; 65m N of sea cliff) + Northern Bedrock Sill Weir
       const hwLakeDist = getHeadwatersLakeEffDist(x, z);
-      if (hwLakeDist < HEADWATERS_LAKE.radius + 15.0) {
-        const hwShoreNoise = fbm2(x * 0.045 - 1.7, z * 0.045 + 2.9, 2) * 1.6;
+      if (hwLakeDist < HEADWATERS_LAKE.radius + 16.0) {
+        const hwShoreNoise = fbm2(x * 0.045 - 1.7, z * 0.045 + 2.9, 2) * 0.90;
         const effHwR = HEADWATERS_LAKE.radius + hwShoreNoise;
-        const spillXDist = Math.abs(x - getHeadwatersCenterX(Math.min(172.0, Math.max(158.0, z))));
-        const hwSpillWeight = (z < HEADWATERS_LAKE.z - 22.0 && z > 158.0)
-          ? Math.exp(-Math.pow(spillXDist / 4.6, 2.0)) * smoothstep(158.0, 161.2, z) * (1.0 - smoothstep(172.0, 183.0, z))
+        const spillXDist = Math.abs(x - getHeadwatersCenterX(Math.min(170.0, Math.max(158.0, z))));
+        const hwSpillWeight = (z < HEADWATERS_LAKE.z - 18.0 && z > 158.0)
+          ? Math.exp(-Math.pow(spillXDist / 4.5, 2.0)) * smoothstep(158.0, 161.2, z) * (1.0 - smoothstep(170.0, 179.0, z))
           : 0.0;
-        if (hwLakeDist > effHwR - 2.5) {
-          const rimFactor = smoothstep(effHwR - 2.5, effHwR + 6.0, hwLakeDist)
-            * (1.0 - smoothstep(effHwR + 6.0, HEADWATERS_LAKE.radius + 15.0, hwLakeDist))
+        // Guarantee full highland rim around the tarn so it never breaches any cliff
+        if (hwLakeDist > effHwR - 3.0) {
+          const rimFactor = smoothstep(effHwR - 3.0, effHwR + 5.5, hwLakeDist)
+            * (1.0 - smoothstep(effHwR + 5.5, HEADWATERS_LAKE.radius + 16.0, hwLakeDist))
             * (1.0 - hwSpillWeight);
-          y = Math.max(y, y * (1.0 - rimFactor) + (HEADWATERS_LAKE.waterY + 2.35) * rimFactor);
+          y = Math.max(y, y * (1.0 - rimFactor) + (HEADWATERS_LAKE.waterY + 2.45) * rimFactor);
         }
-        if (hwLakeDist < effHwR + 5.0 || hwSpillWeight > 0.01) {
-          const t = Math.min(1.2, hwLakeDist / Math.max(10.0, effHwR));
+        if (hwLakeDist < effHwR + 5.5 || hwSpillWeight > 0.01) {
+          const t = Math.min(1.25, hwLakeDist / Math.max(10.0, effHwR));
           let basinTarget;
-          if (t < 0.75) {
-            basinTarget = HEADWATERS_LAKE.bedY + Math.pow(t / 0.75, 1.8) * (HEADWATERS_LAKE.waterY - 1.20 - HEADWATERS_LAKE.bedY);
+          if (t < 0.70) {
+            // Profundal basin (20.4m -> 25.5m)
+            basinTarget = HEADWATERS_LAKE.bedY + Math.pow(t / 0.70, 1.8) * (HEADWATERS_LAKE.waterY - 1.10 - HEADWATERS_LAKE.bedY);
+          } else if (t < 1.0) {
+            // Graded sandy littoral shelf (25.5m -> 26.6m right at t=1.0 shoreline!)
+            basinTarget = (HEADWATERS_LAKE.waterY - 1.10) + ((t - 0.70) / 0.30) * 1.10;
           } else {
-            basinTarget = (HEADWATERS_LAKE.waterY - 1.20) + ((t - 0.75) / 0.25) * 2.50;
+            // Gentle dry highland shore berm (26.6m -> 28.5m)
+            basinTarget = HEADWATERS_LAKE.waterY + ((t - 1.0) / 0.25) * 1.90;
           }
-          const deepHwSpillY = HEADWATERS_LAKE.waterY - 1.55;
-          basinTarget = basinTarget * (1.0 - hwSpillWeight) + Math.min(basinTarget, deepHwSpillY) * hwSpillWeight;
-          const basinBlend = 1.0 - smoothstep(effHwR - 0.5, effHwR + 5.0, hwLakeDist);
+          // Submerged Bedrock Sill Weir (-0.95m knickpoint lip at z = 163..166)
+          const hwWeirCrest = Math.exp(-Math.pow((z - 164.2) / 2.1, 2.0)) * 0.42;
+          const sillHwSpillY = HEADWATERS_LAKE.waterY - 1.35 + hwWeirCrest;
+          basinTarget = basinTarget * (1.0 - hwSpillWeight) + Math.min(basinTarget, sillHwSpillY) * hwSpillWeight;
+          const basinBlend = 1.0 - smoothstep(effHwR + 0.5, effHwR + 5.5, hwLakeDist);
           const blend = Math.max(basinBlend, hwSpillWeight);
           y = y * (1.0 - blend) + Math.min(y, basinTarget) * blend;
         }
       }
 
-      // 4. Grand River Headwaters Cliff Waterfall Gorge & Plunge Pool (z = 172.5 -> z = 120)
+      // 4. Grand River Headwaters Cliff Waterfall Gorge & Plunge Pool (z = 170.5 -> z = 120)
       const hwWfCenter = getHeadwatersCenterX(z);
       const hwGorgeXDist = Math.abs(x - hwWfCenter);
-      if (z > 118.0 && z < 172.5 && hwGorgeXDist < 19.5) {
+      if (z > 118.0 && z < 170.5 && hwGorgeXDist < 19.5) {
         const halfBed = 3.8 + (1.0 - smoothstep(126.0, 164.0, z)) * 1.8;
         const chDist = Math.max(0.0, hwGorgeXDist - halfBed);
-        // Same rule for the headwaters tarn: outlet throat only, basin stays a bowl.
         let hwHold = 1.0;
         if (isInsideHeadwatersLake(x, z, 0.2) && z > 156.0) {
           const throat = Math.exp(-Math.pow(hwGorgeXDist / 3.8, 2.0));
-          hwHold = throat * smoothstep(178.0, 166.0, z);
+          hwHold = throat * smoothstep(174.0, 164.0, z);
         }
         const xBlend = Math.pow(1.0 - hwGorgeXDist / 19.5, 1.25)
-          * (z > 162.5 ? (1.0 - smoothstep(162.5, 172.5, z)) : 1.0)
+          * (z > 162.0 ? (1.0 - smoothstep(162.0, 170.5, z)) : 1.0)
           * (z < 124.0 ? smoothstep(118.0, 124.0, z) : 1.0)
           * hwHold;
         const notchY = getHeadwatersChannelY(z);
@@ -3675,44 +3826,88 @@
         y = y * (1.0 - xBlend) + Math.min(y, floorTarget) * xBlend;
       }
 
-      // 4B. Inland Winding Valley River (Primary River #2) & Windward Valley Pond
+      // 4B. Multi-Lobe Windward Valley Lagoon (center 88, 214, waterY 6.8m) & S-Meandering Valley River (R2)
       const valPondDist = getValleyPondEffDist(x, z);
       if (valPondDist < VALLEY_POND.radius + 14.0) {
-        const vpNoise = fbm2(x * 0.045 + 4.3, z * 0.045 - 2.1, 2) * 1.6;
+        const vpNoise = fbm2(x * 0.045 + 4.3, z * 0.045 - 2.1, 2) * 0.85;
         const effVpR = VALLEY_POND.radius + vpNoise;
-        if (valPondDist < effVpR + 8.0) {
-          const t = Math.min(1.2, valPondDist / Math.max(10.0, effVpR));
-          const pondTarget = (t < 0.72)
-            ? VALLEY_POND.bedY + Math.pow(t / 0.72, 1.7) * (VALLEY_POND.waterY - 0.9 - VALLEY_POND.bedY)
-            : (VALLEY_POND.waterY - 0.9) + ((t - 0.72) / 0.28) * 2.4;
-          const pondBlend = 1.0 - smoothstep(effVpR - 1.5, effVpR + 8.0, valPondDist);
+        // Ensure enclosing meadow berm holds the 6.8m lagoon cleanly
+        if (valPondDist > effVpR - 2.5) {
+          const vpRim = smoothstep(effVpR - 2.5, effVpR + 4.5, valPondDist)
+            * (1.0 - smoothstep(effVpR + 4.5, VALLEY_POND.radius + 14.0, valPondDist));
+          y = Math.max(y, y * (1.0 - vpRim) + (VALLEY_POND.waterY + 1.45) * vpRim);
+        }
+        if (valPondDist < effVpR + 5.5) {
+          const t = Math.min(1.25, valPondDist / Math.max(10.0, effVpR));
+          let pondTarget;
+          if (t < 0.70) {
+            pondTarget = VALLEY_POND.bedY + Math.pow(t / 0.70, 1.7) * (VALLEY_POND.waterY - 0.90 - VALLEY_POND.bedY);
+          } else if (t < 1.0) {
+            pondTarget = (VALLEY_POND.waterY - 0.90) + ((t - 0.70) / 0.30) * 0.90;
+          } else {
+            pondTarget = VALLEY_POND.waterY + ((t - 1.0) / 0.25) * 1.35;
+          }
+          const pondBlend = 1.0 - smoothstep(effVpR + 0.5, effVpR + 5.5, valPondDist);
           y = y * (1.0 - pondBlend) + Math.min(y, pondTarget) * pondBlend;
         }
       }
 
       const inRiv = getInlandRiverInfo(x, z);
       if (inRiv) {
-        const bankMax = inRiv.halfW + 11.0;
+        const bankMax = inRiv.halfW + 11.5;
         if (inRiv.dist < bankMax) {
+          // Asymmetric S-meander cross-section: outer cutbank (steep & deep) vs. inner sandy point bar (gentle & shallow)
+          const latSign = (inRiv.signedLat || 0.0) >= 0.0 ? 1.0 : -1.0;
+          const isOuterBend = Math.max(-1.0, Math.min(1.0, latSign * (inRiv.curv || 0.0) * 2.2));
           const chFrac = inRiv.dist / Math.max(1.0, inRiv.halfW);
-          const bedTarget = (chFrac < 0.85)
-            ? inRiv.waterY - 1.55 + Math.pow(chFrac / 0.85, 1.7) * 1.25
-            : inRiv.waterY - 0.30 + ((inRiv.dist - inRiv.halfW * 0.85) / 11.0) * 3.8;
-          const rBlend = (1.0 - smoothstep(inRiv.halfW * 0.65, bankMax, inRiv.dist)) * smoothstep(0.0, 0.04, inRiv.t);
+          const thalwegDepth = 1.65 + Math.max(0.0, isOuterBend) * 0.45 - Math.max(0.0, -isOuterBend) * 0.35;
+          const shelfExponent = 1.65 + isOuterBend * 0.55; // Higher exponent = steeper outer cutbank; lower = wider inner point bar
+          let bedTarget;
+          if (chFrac < 0.88) {
+            bedTarget = inRiv.waterY - thalwegDepth + Math.pow(chFrac / 0.88, Math.max(1.05, shelfExponent)) * (thalwegDepth - 0.22);
+          } else {
+            const bankSlope = 2.6 + Math.max(0.0, isOuterBend) * 1.4 - Math.max(0.0, -isOuterBend) * 0.85;
+            bedTarget = inRiv.waterY - 0.22 + ((inRiv.dist - inRiv.halfW * 0.88) / 11.5) * bankSlope;
+          }
+          // Guarantee valley banks outside chFrac > 1.05 sit above inRiv.waterY so the river never spills sideways
+          if (chFrac > 1.04 && chFrac < 1.85) {
+            const leveeW = Math.sin(((chFrac - 1.04) / 0.81) * Math.PI) * (1.0 - smoothstep(0.88, 1.0, inRiv.t));
+            y = Math.max(y, inRiv.waterY + 0.55 * leveeW);
+          }
+          const rBlend = (1.0 - smoothstep(inRiv.halfW * 0.72, bankMax, inRiv.dist)) * smoothstep(0.0, 0.03, inRiv.t);
           y = y * (1.0 - rBlend) + Math.min(y, bedTarget) * rBlend;
         }
       }
 
-      // 4C. 3 Organic Winding Streams (Elderwood Brook, Meadow Runlet, North Ridge Creek)
+      // 4C. 4 Physical Geological Spring Basins & Step-Pool Tributary Brooks (T1..T4)
+      for (let spIdx = 0; spIdx < SPRING_SOURCES.length; spIdx++) {
+        const sp = SPRING_SOURCES[spIdx];
+        const spDist = Math.hypot(x - sp.x, z - sp.z);
+        if (spDist < sp.r + 5.5) {
+          const spT = spDist / sp.r;
+          const poolTarget = (spT < 0.85)
+            ? sp.y - 0.68 + Math.pow(spT / 0.85, 1.6) * 0.58
+            : sp.y - 0.10 + ((spT - 0.85) / 0.95) * 1.45;
+          const spBlend = 1.0 - smoothstep(sp.r - 0.5, sp.r + 5.5, spDist);
+          y = y * (1.0 - spBlend * 0.90) + poolTarget * (spBlend * 0.90);
+        }
+      }
+
       const stInfo = getWindingStreamInfo(x, z);
       if (stInfo) {
         const sBankMax = stInfo.halfW + 5.5;
         if (stInfo.dist < sBankMax) {
           const chFrac = stInfo.dist / Math.max(0.8, stInfo.halfW);
-          const stTarget = (chFrac < 0.85)
-            ? stInfo.waterY - 0.68 + Math.pow(chFrac / 0.85, 1.6) * 0.58
-            : stInfo.waterY - 0.10 + ((stInfo.dist - stInfo.halfW * 0.85) / 5.5) * 1.85;
-          const sBlend = 1.0 - smoothstep(stInfo.halfW * 0.55, sBankMax, stInfo.dist);
+          // Longitudinal step-pool cobble riffle modulation along mountain brooks
+          const stepPoolWave = Math.sin(stInfo.t * Math.PI * 14.0) * 0.12;
+          const stTarget = (chFrac < 0.88)
+            ? stInfo.waterY - 0.68 + stepPoolWave + Math.pow(chFrac / 0.88, 1.6) * 0.58
+            : stInfo.waterY - 0.10 + ((stInfo.dist - stInfo.halfW * 0.88) / 5.5) * 1.65;
+          if (chFrac > 1.05 && chFrac < 1.95) {
+            const bankHold = Math.sin(((chFrac - 1.05) / 0.90) * Math.PI) * (1.0 - smoothstep(0.88, 1.0, stInfo.t));
+            y = Math.max(y, stInfo.waterY + 0.38 * bankHold);
+          }
+          const sBlend = 1.0 - smoothstep(stInfo.halfW * 0.62, sBankMax, stInfo.dist);
           y = y * (1.0 - sBlend * 0.92) + Math.min(y, stTarget) * (sBlend * 0.92);
         }
       }
@@ -5077,16 +5272,15 @@
       };
 
       function buildAlpineLakeMesh(lakeCfg, isNorthOutlet) {
-        const lakeRings = 32;
-        const lakeSegs = 88;
+        const lakeRings = 36;
+        const lakeSegs = 96;
         const centerDepth = Math.max(0.0, lakeCfg.waterY - getTerrainHeight(lakeCfg.x, lakeCfg.z));
         const lakePos = [0, 0, 0];
         const lakeUvs = [0.5, 0.5];
         const lakeDataList = [1.0, 0.0, centerDepth];
         const lakeIndices = [];
-        // Contained strictly inside the rocky mountain basin so lake water never overflows the cliff rim
-        const rxMax = lakeCfg.radiusX + 1.4;
-        const rzMax = lakeCfg.radiusZ + 1.4;
+        const uvSpanX = (lakeCfg.radiusX + 4.0) * 2.0;
+        const uvSpanZ = (lakeCfg.radiusZ + 4.0) * 2.0;
 
         for (let r = 1; r <= lakeRings; r++) {
           const rf = r / lakeRings;
@@ -5094,7 +5288,10 @@
             const ang = (s / lakeSegs) * Math.PI * 2.0;
             const cosA = Math.cos(ang);
             const sinA = Math.sin(ang);
-            // Compute smooth outer boundary (rf = 1.0) FIRST, then scale radially by rf so concentric rings NEVER fold or overlap!
+            // Match multi-lobe harmonic basin boundary R(theta) + 1.6m littoral tuck so shore feathers with zero polygon cutouts
+            const lobeScale = evalLakeLobeScale(lakeCfg, ang);
+            const rxMax = lakeCfg.radiusX * lobeScale + 1.6;
+            const rzMax = lakeCfg.radiusZ * lobeScale + 1.6;
             let outerWX = lakeCfg.x + cosA * rxMax;
             let outerWZ = lakeCfg.z + sinA * rzMax;
             let vy = 0.0;
@@ -5102,49 +5299,46 @@
             let spillFade = 1.0;
 
             if (!isNorthOutlet) {
-              // Eastern Cliff-Top Lake: smooth Gaussian spillway funnel reaching x = 76.2 at z = 2.0, while keeping rim >= 81.4m elsewhere
+              // Eastern Cliff-Top Tarn: western Bedrock Sill Weir & spillway funnel at x = 76.2, z = 2.0
               const wfLipZ = getWaterfallCenterZ(76.5);
-              const spillBell = (cosA < 0.0) ? Math.exp(-Math.pow((outerWZ - wfLipZ) / 3.4, 2.0)) : 0.0;
-              const minRimX = 81.4 - spillBell * 5.2;
+              const spillBell = (cosA < 0.0) ? Math.exp(-Math.pow((outerWZ - wfLipZ) / 3.6, 2.0)) : 0.0;
+              const minRimX = 78.8 - spillBell * 2.6;
               outerWX = Math.max(minRimX, outerWX);
               const lx = (outerWX - lakeCfg.x) * rf;
               const lz = (outerWZ - lakeCfg.z) * rf;
               const wx = lakeCfg.x + lx;
               const wz = lakeCfg.z + lz;
-              const lipProx = smoothstep(82.5, 76.2, wx) * spillBell;
-              vy = -lipProx * 0.08;
+              const lipProx = smoothstep(83.0, 76.2, wx) * spillBell;
+              vy = -lipProx * 0.07;
               outletCurrent = lipProx;
-              spillFade = 1.0 - smoothstep(77.5, 76.1, wx);
+              spillFade = 1.0 - smoothstep(77.4, 76.1, wx) * spillBell;
 
               const terrH = getTerrainHeight(wx, wz);
               const rawDepth = Math.max(0.0, (lakeCfg.waterY + vy) - terrH);
-              // A shore sample more than 2.2m above the bed, and not in the spill throat, is a sheet over the gorge. Hide it.
-              if (rawDepth > 2.2 && rf > 0.56 && outletCurrent < 0.28) spillFade = 0.0;
-              const wDepth = (spillFade <= 0.0) ? 0.0 : Math.max(rawDepth, outletCurrent * 1.45);
+              const wDepth = Math.max(rawDepth, outletCurrent * 1.35);
               lakePos.push(lx, vy, lz);
-              lakeUvs.push(0.5 + (lx / (rxMax * 2.0)), 0.5 + (lz / (rzMax * 2.0)));
+              lakeUvs.push(0.5 + (lx / uvSpanX), 0.5 + (lz / uvSpanZ));
               lakeDataList.push(spillFade, outletCurrent, wDepth);
             } else {
-              // Southern Headwaters Lake: smooth Gaussian spillway funnel reaching z = 161.2 at hwLipX, while keeping rim >= 165.6m elsewhere
+              // Southern Grand Headwaters Tarn: northern Bedrock Sill Weir & spillway funnel at z = 161.2
               const hwLipX = getHeadwatersCenterX(161.5);
               const spillBell = (sinA < 0.0) ? Math.exp(-Math.pow((outerWX - hwLipX) / 3.8, 2.0)) : 0.0;
-              const minRimZ = 165.6 - spillBell * 4.4;
+              const minRimZ = 165.0 - spillBell * 3.8;
               outerWZ = Math.max(minRimZ, outerWZ);
               const lx = (outerWX - lakeCfg.x) * rf;
               const lz = (outerWZ - lakeCfg.z) * rf;
               const wx = lakeCfg.x + lx;
               const wz = lakeCfg.z + lz;
-              const lipProx = smoothstep(167.0, 161.2, wz) * spillBell;
-              vy = -lipProx * 0.09;
+              const lipProx = smoothstep(168.0, 161.2, wz) * spillBell;
+              vy = -lipProx * 0.08;
               outletCurrent = lipProx;
-              spillFade = 1.0 - smoothstep(162.4, 161.1, wz);
+              spillFade = 1.0 - smoothstep(162.4, 161.1, wz) * spillBell;
 
               const terrH = getTerrainHeight(wx, wz);
               const rawDepth = Math.max(0.0, (lakeCfg.waterY + vy) - terrH);
-              if (rawDepth > 2.2 && rf > 0.56 && outletCurrent < 0.28) spillFade = 0.0;
-              const wDepth = (spillFade <= 0.0) ? 0.0 : Math.max(rawDepth, outletCurrent * 1.45);
+              const wDepth = Math.max(rawDepth, outletCurrent * 1.35);
               lakePos.push(lx, vy, lz);
-              lakeUvs.push(0.5 + (lx / (rxMax * 2.0)), 0.5 + (lz / (rzMax * 2.0)));
+              lakeUvs.push(0.5 + (lx / uvSpanX), 0.5 + (lz / uvSpanZ));
               lakeDataList.push(spillFade, outletCurrent, wDepth);
             }
           }
@@ -5186,33 +5380,38 @@
       window.uplandLakeNormals = lakeNormals;
       if (yieldFn) await yieldFn();
 
-      // Lowland Windward Valley Pond Water Surface (x = 112, z = 238, waterY = 3.8)
+      // Multi-Lobe Lowland Windward Valley Lagoon Water Surface (x = 88, z = 214, waterY = 6.8m)
       function buildSimplePondMesh(lakeCfg) {
-        const lakeRings = 28;
-        const lakeSegs = 72;
+        const lakeRings = 32;
+        const lakeSegs = 84;
         const centerDepth = Math.max(0.0, lakeCfg.waterY - getTerrainHeight(lakeCfg.x, lakeCfg.z));
         const lakePos = [0, 0, 0];
         const lakeUvs = [0.5, 0.5];
         const lakeDataList = [1.0, 0.0, centerDepth];
         const lakeIndices = [];
-        const rxMax = lakeCfg.radiusX + 1.8;
-        const rzMax = lakeCfg.radiusZ + 1.8;
+        const uvSpanX = (lakeCfg.radiusX + 4.0) * 2.0;
+        const uvSpanZ = (lakeCfg.radiusZ + 4.0) * 2.0;
 
         for (let r = 1; r <= lakeRings; r++) {
           const rf = r / lakeRings;
           for (let s = 0; s <= lakeSegs; s++) {
             const ang = (s / lakeSegs) * Math.PI * 2.0;
+            const lobeScale = evalLakeLobeScale(lakeCfg, ang);
+            const rxMax = lakeCfg.radiusX * lobeScale + 1.5;
+            const rzMax = lakeCfg.radiusZ * lobeScale + 1.5;
             const lx = Math.cos(ang) * rxMax * rf;
             const lz = Math.sin(ang) * rzMax * rf;
             const wx = lakeCfg.x + lx;
             const wz = lakeCfg.z + lz;
             const terrH = getTerrainHeight(wx, wz);
-            const wDepth = Math.max(0.0, lakeCfg.waterY - terrH);
-            // Outer ring over a drop (the downstream river) is not a shore. Alpha 0; the river ribbon owns that water.
-            const unsupported = (wDepth > 2.3 && rf > 0.62) ? 0.0 : 1.0;
+            const rawDepth = Math.max(0.0, lakeCfg.waterY - terrH);
+            // Smooth cobble weir outflow current toward S-Meandering Valley River head (76, 202)
+            const weirDist = Math.hypot(wx - 76.0, wz - 202.0);
+            const weirCur = Math.max(0.0, 1.0 - weirDist / 10.5) * 0.65;
+            const wDepth = Math.max(rawDepth, weirCur * 0.85);
             lakePos.push(lx, 0.0, lz);
-            lakeUvs.push(0.5 + (lx / (rxMax * 2.0)), 0.5 + (lz / (rzMax * 2.0)));
-            lakeDataList.push(unsupported, unsupported * 0.12, unsupported > 0.0 ? wDepth : 0.0);
+            lakeUvs.push(0.5 + (lx / uvSpanX), 0.5 + (lz / uvSpanZ));
+            lakeDataList.push(1.0, 0.10 + weirCur, wDepth);
           }
         }
         const ringStride = lakeSegs + 1;
@@ -5239,8 +5438,8 @@
       const valleyPondMesh = buildSimplePondMesh(VALLEY_POND);
       wfGroup.add(valleyPondMesh);
 
-      // Organic Flowing Spline River & Stream Ribbon Builder (Dual River #2 + 3 Winding Streams)
-      function buildSplineWaterRibbon(ptsCache, widthSegs = 10, heightOffset = 0.04, mat = wfMat) {
+      // Organic Flowing Spline River & Step-Pool Stream Ribbon Builder (S-Meandering River #2 + 4 Spring-Fed Tributaries)
+      function buildSplineWaterRibbon(ptsCache, widthSegs = 12, heightOffset = 0.04, mat = wfMat) {
         const pts = ptsCache.pts;
         const positions = [];
         const uvs = [];
@@ -5256,22 +5455,30 @@
           const perpX = -p.dirZ;
           const perpZ = p.dirX;
           const t = i / (pts.length - 1);
-          const headFade = smoothstep(0.0, 0.08, t) * (1.0 - smoothstep(0.94, 1.0, t));
+          const headFade = smoothstep(0.0, 0.05, t) * (1.0 - smoothstep(0.95, 1.0, t));
+          // Step-pool cobble riffle whitewater pulse + meander bend turbulence
+          const stepPoolRiffle = Math.max(0.0, Math.sin(t * Math.PI * 14.0)) * 0.36;
+          const bendChurn = Math.abs(p.curv || 0.0) * 0.32;
           for (let j = 0; j <= widthSegs; j++) {
             const u = j / widthSegs;
             const lat = (u - 0.5) * 2.0 * p.w;
             const wx = p.x + perpX * lat;
             const wz = p.z + perpZ * lat;
-            let edgeFade = Math.pow(Math.sin(u * Math.PI), 0.72);
+            let edgeFade = Math.pow(Math.sin(u * Math.PI), 0.68);
             const dropSlope = i < pts.length - 1 ? Math.max(0.0, (p.y - pts[i + 1].y) * 0.45) : 0.1;
             const terrBed = getTerrainHeight(wx, wz);
-            // Lakes and the valley pond own their polygons. A ribbon more than 3.2m above the bed is floating — drop it.
-            if (isInsideValleyPond(wx, wz, -0.4) || isInsideUplandLake(wx, wz, -0.4) || isInsideHeadwatersLake(wx, wz, -0.4)) edgeFade = 0.0;
-            if ((p.y + heightOffset) - terrBed > 3.2) edgeFade = 0.0;
-            const wy = p.y + heightOffset - Math.abs(u - 0.5) * 0.14;
+            // Smoothly feather ribbon where it merges into any lake or the main estuary
+            if (isInsideValleyPond(wx, wz, -1.2) || isInsideUplandLake(wx, wz, -1.2) || isInsideHeadwatersLake(wx, wz, -1.2)) {
+              edgeFade *= 0.15;
+            }
+            const bankClip = terrBed > p.y + 0.12 ? (1.0 - smoothstep(p.y + 0.12, p.y + 0.45, terrBed)) : 1.0;
+            edgeFade *= bankClip;
+            const wy = p.y + heightOffset - Math.abs(u - 0.5) * 0.10;
             positions.push(wx, wy, wz);
             uvs.push(u, cumDist * 0.14);
-            wfData.push(edgeFade, headFade, Math.min(0.65, 0.18 + dropSlope), 0.18);
+            const churn = Math.min(0.85, 0.22 + dropSlope + stepPoolRiffle + bendChurn);
+            const wake = Math.min(0.75, 0.18 + stepPoolRiffle * 0.65 + bendChurn * 0.5);
+            wfData.push(edgeFade, headFade, churn, wake);
           }
         }
         const stride = widthSegs + 1;
@@ -5290,19 +5497,21 @@
         return new THREE.Mesh(geo, mat);
       }
 
-      const inlandRiverMesh = buildSplineWaterRibbon(INLAND_RIVER_CACHE, 12, 0.05, wfMat);
+      const inlandRiverMesh = buildSplineWaterRibbon(INLAND_RIVER_CACHE, 14, 0.05, wfMat);
       wfGroup.add(inlandRiverMesh);
       for (let sIdx = 0; sIdx < WINDING_STREAMS.length; sIdx++) {
-        const sMesh = buildSplineWaterRibbon(WINDING_STREAMS[sIdx].cache, 8, 0.04, wfMat);
+        const sMesh = buildSplineWaterRibbon(WINDING_STREAMS[sIdx].cache, 10, 0.04, wfMat);
         wfGroup.add(sMesh);
       }
       if (yieldFn) await yieldFn();
 
-      // Triplanar-Textured Mossy & Wet Basalt Boulders framing Both Steep Cliff Waterfalls, Gorge Banks & Lake Shores
+      // Triplanar-Textured Mossy & Wet Basalt Boulders: Gorge Walls, Bedrock Sill Weirs, Plunge Alluvial Fans, Lake Shores & 4 Spring Alcoves
       const gorgeRocks = [
-        // Eastern Cliff-lip gateway monoliths flanking the lake spillway at the top of the steep cliff (x=76)
+        // Eastern Cliff-lip gateway monoliths & Bedrock Sill Weir stones (x=78..80)
         [76.5, z78 - 6.8, 3.2, getTerrainHeight(76.5, z78 - 6.8)],
         [76.5, z78 + 6.8, 3.4, getTerrainHeight(76.5, z78 + 6.8)],
+        [79.2, z78 - 3.6, 1.45, UPLAND_LAKE.waterY - 0.55],
+        [79.4, z78 + 3.5, 1.50, UPLAND_LAKE.waterY - 0.55],
         [71.0, z70 - 6.8, 2.5, getTerrainHeight(71.0, z70 - 6.8)],
         [71.0, z70 + 6.8, 2.6, getTerrainHeight(71.0, z70 + 6.8)],
         [62.0, z62 - 6.8, 2.8, getTerrainHeight(62.0, z62 - 6.8)],
@@ -5315,16 +5524,16 @@
         [36.5, z37 + 7.5, 2.5, getTerrainHeight(36.5, z37 + 7.5)],
         [27.0, z28 - 8.0, 2.8, getTerrainHeight(27.0, z28 - 8.0)],
         [27.0, z28 + 8.0, 2.7, getTerrainHeight(27.0, z28 + 8.0)],
-        // Scenic boulders around the Eastern Cliff-Top Alpine Lake shoreline
-        [92.0, -34.0, 3.1, getTerrainHeight(92.0, -34.0)],
-        [118.0, -41.0, 3.6, getTerrainHeight(118.0, -41.0)],
-        [144.0, -14.0, 3.8, getTerrainHeight(144.0, -14.0)],
-        [146.0, 18.0, 3.4, getTerrainHeight(146.0, 18.0)],
-        [120.0, 44.0, 3.5, getTerrainHeight(120.0, 44.0)],
-        [90.0, 36.0, 2.9, getTerrainHeight(90.0, 36.0)],
-        // Southern Grand Headwaters Cliff-lip gateway monoliths & cataract gorge walls (z = 161 -> 127)
+        // C1 Eastern Plunge Amphitheater Alluvial Boulder Fan Arc (x ~ 12..18, z ~ -9..+12)
+        [16.5, -8.5, 2.2, getTerrainHeight(16.5, -8.5) + 0.3],
+        [13.8, -5.2, 1.8, getTerrainHeight(13.8, -5.2) + 0.3],
+        [14.2,  6.4, 1.9, getTerrainHeight(14.2,  6.4) + 0.3],
+        [17.2,  9.8, 2.4, getTerrainHeight(17.2,  9.8) + 0.3],
+        // Southern Grand Headwaters Cliff-lip gateway monoliths, Bedrock Sill Weir & cataract gorge walls (z = 164 -> 127)
         [hwX160 - 7.8, 160.5, 3.5, getTerrainHeight(hwX160 - 7.8, 160.5)],
         [hwX160 + 7.8, 160.5, 3.6, getTerrainHeight(hwX160 + 7.8, 160.5)],
+        [hwX160 - 3.6, 164.2, 1.45, HEADWATERS_LAKE.waterY - 0.55],
+        [hwX160 + 3.6, 164.2, 1.50, HEADWATERS_LAKE.waterY - 0.55],
         [hwX152 - 7.5, 152.0, 2.9, getTerrainHeight(hwX152 - 7.5, 152.0)],
         [hwX152 + 7.5, 152.0, 2.8, getTerrainHeight(hwX152 + 7.5, 152.0)],
         [hwX143 - 8.2, 143.0, 3.1, getTerrainHeight(hwX143 - 8.2, 143.0)],
@@ -5333,12 +5542,28 @@
         [hwX134 + 8.0, 134.0, 2.9, getTerrainHeight(hwX134 + 8.0, 134.0)],
         [hwX127 - 8.8, 127.0, 3.2, getTerrainHeight(hwX127 - 8.8, 127.0)],
         [hwX127 + 8.8, 127.0, 3.1, getTerrainHeight(hwX127 + 8.8, 127.0)],
-        // Scenic boulders around the Grand Headwaters Lake shoreline
-        [-58.0, 195.0, 3.6, getTerrainHeight(-58.0, 195.0)],
-        [28.0, 198.0, 3.4, getTerrainHeight(28.0, 198.0)],
-        [-42.0, 246.0, 3.8, getTerrainHeight(-42.0, 246.0)],
-        [18.0, 244.0, 3.5, getTerrainHeight(18.0, 244.0)]
+        // C2 Headwaters Plunge Amphitheater Alluvial Boulder Fan Arc (x ~ -24..-5, z ~ 113..120)
+        [-23.5, 118.5, 2.4, getTerrainHeight(-23.5, 118.5) + 0.3],
+        [-19.2, 114.2, 1.9, getTerrainHeight(-19.2, 114.2) + 0.3],
+        [-9.4,  114.8, 1.8, getTerrainHeight(-9.4,  114.8) + 0.3],
+        [-5.2,  119.2, 2.3, getTerrainHeight(-5.2,  119.2) + 0.3]
       ];
+      // Multi-lobe shoreline headland boulders around all 3 lakes
+      [0.45, 1.35, 2.25, 4.15, 5.10].forEach(ang => {
+        const p1 = sampleLakeShorePt(UPLAND_LAKE, ang, 1.03);
+        gorgeRocks.push([p1.x, p1.z, 2.8, getTerrainHeight(p1.x, p1.z)]);
+        const p2 = sampleLakeShorePt(HEADWATERS_LAKE, ang + 0.4, 1.03);
+        gorgeRocks.push([p2.x, p2.z, 2.9, getTerrainHeight(p2.x, p2.z)]);
+      });
+      // Geological Spring Alcove Hood Boulders at all 4 Spring Sources (T1..T4)
+      SPRING_SOURCES.forEach(sp => {
+        const backX = sp.x - sp.dirX * (sp.r * 0.78);
+        const backZ = sp.z - sp.dirZ * (sp.r * 0.78);
+        const perpX = -sp.dirZ, perpZ = sp.dirX;
+        gorgeRocks.push([backX, backZ, 2.4, getTerrainHeight(backX, backZ) + 0.4]);
+        gorgeRocks.push([backX + perpX * 2.4, backZ + perpZ * 2.4, 1.8, getTerrainHeight(backX + perpX * 2.4, backZ + perpZ * 2.4) + 0.25]);
+        gorgeRocks.push([backX - perpX * 2.4, backZ - perpZ * 2.4, 1.9, getTerrainHeight(backX - perpX * 2.4, backZ - perpZ * 2.4) + 0.25]);
+      });
       midStreamRocks.forEach(([rx, rz, rr]) => {
         gorgeRocks.push([rx, rz, rr, getTerrainHeight(rx, rz) + 0.22]);
       });
@@ -5354,7 +5579,7 @@
       }
       if (yieldFn) await yieldFn();
 
-      // 2. Animated Expanding Whitewater Foam Rings in Plunge Pools & Step-Pools (Both Waterfalls)
+      // 2. Animated Expanding Whitewater Foam Rings in Plunge Amphitheaters, Step-Pools & 4 Geological Spring Boils
       const ringCanvas = document.createElement('canvas');
       ringCanvas.width = 128;
       ringCanvas.height = 128;
@@ -5374,19 +5599,21 @@
       ringGeo.rotateX(-Math.PI / 2);
 
       const foamRingCenters = [
-        // Eastern Waterfall Plunge & Step Pools
-        { x: 22.8, y: 0.12, z: 2.0, minS: 2.2, maxS: 10.5, speed: 0.45 },
-        { x: 23.4, y: 0.13, z: 1.2, minS: 1.8, maxS: 8.8,  speed: 0.52 },
-        { x: 23.4, y: 0.13, z: 2.9, minS: 1.8, maxS: 8.8,  speed: 0.39 },
+        // C1 Eastern Waterfall Plunge Amphitheater & Step Pools
+        { x: 21.8, y: 0.12, z: 2.0, minS: 2.5, maxS: 12.2, speed: 0.45 },
+        { x: 23.2, y: 0.13, z: 1.1, minS: 1.8, maxS: 9.2,  speed: 0.52 },
+        { x: 23.2, y: 0.13, z: 2.9, minS: 1.8, maxS: 9.2,  speed: 0.39 },
         { x: 36.8, y: getWaterfallChannelY(36.8) + 0.14, z: getWaterfallCenterZ(36.8), minS: 1.5, maxS: 5.4, speed: 0.62 },
         { x: 58.5, y: getWaterfallChannelY(58.5) + 0.16, z: getWaterfallCenterZ(58.5), minS: 2.0, maxS: 7.4, speed: 0.56 },
         { x: 61.5, y: getWaterfallChannelY(61.5) + 0.16, z: getWaterfallCenterZ(61.5), minS: 2.2, maxS: 8.0, speed: 0.64 },
-        // Southern Grand Headwaters Waterfall Plunge & Mid-Cliff Pools
-        { x: getHeadwatersCenterX(125.8), y: 0.13, z: 125.8, minS: 2.6, maxS: 11.8, speed: 0.46 },
-        { x: getHeadwatersCenterX(127.0) - 1.4, y: 0.14, z: 127.0, minS: 2.0, maxS: 9.5, speed: 0.54 },
-        { x: getHeadwatersCenterX(127.0) + 1.4, y: 0.14, z: 127.0, minS: 2.0, maxS: 9.5, speed: 0.41 },
+        // C2 Southern Grand Headwaters Waterfall Plunge Amphitheater & Mid-Cliff Pools
+        { x: getHeadwatersCenterX(125.0), y: 0.13, z: 125.0, minS: 2.8, maxS: 13.4, speed: 0.46 },
+        { x: getHeadwatersCenterX(126.8) - 1.5, y: 0.14, z: 126.8, minS: 2.0, maxS: 9.8, speed: 0.54 },
+        { x: getHeadwatersCenterX(126.8) + 1.5, y: 0.14, z: 126.8, minS: 2.0, maxS: 9.8, speed: 0.41 },
         { x: getHeadwatersCenterX(143.5), y: getHeadwatersChannelY(143.5) + 0.16, z: 143.5, minS: 2.2, maxS: 8.4, speed: 0.58 },
-        { x: getHeadwatersCenterX(146.2), y: getHeadwatersChannelY(146.2) + 0.16, z: 146.2, minS: 2.4, maxS: 8.8, speed: 0.63 }
+        { x: getHeadwatersCenterX(146.2), y: getHeadwatersChannelY(146.2) + 0.16, z: 146.2, minS: 2.4, maxS: 8.8, speed: 0.63 },
+        // 4 Physical Geological Spring Source Boils (T1..T4)
+        ...SPRING_SOURCES.map(sp => ({ x: sp.x, y: sp.y + 0.06, z: sp.z, minS: 0.9, maxS: 3.8, speed: 0.48 }))
       ];
       foamRingCenters.forEach((rc, idx) => {
         for (let Sub = 0; Sub < 2; Sub++) {
@@ -8680,9 +8907,10 @@
         let rx, rz;
         if (i < 800) {
           const ang = pseudoRand() * Math.PI * 2;
-          const j = 0.90 + pseudoRand() * 0.20;
-          rx = VALLEY_POND.x + Math.cos(ang) * VALLEY_POND.radiusX * j;
-          rz = VALLEY_POND.z + Math.sin(ang) * VALLEY_POND.radiusZ * j;
+          const j = 0.88 + pseudoRand() * 0.20;
+          const pt = sampleLakeShorePt(VALLEY_POND, ang, j);
+          rx = pt.x;
+          rz = pt.z;
         } else {
           rx = -315 + pseudoRand() * 55;
           rz = 195 + pseudoRand() * 58;
@@ -8824,28 +9052,24 @@
           }
         }
       }
-      // Scatter lakeside sedges around the Cliff-Top Alpine Lake, Grand Headwaters & Valley Pond
-      for (let i = 0; i < 2400 && placedReeds < 920; i++) {
+      // Scatter lakeside sedges in sheltered multi-lobe coves around Cliff-Top Tarn, Grand Headwaters Tarn & Windward Lagoon
+      const lakeListForReeds = [UPLAND_LAKE, HEADWATERS_LAKE, VALLEY_POND];
+      for (let i = 0; i < 2800 && placedReeds < 920; i++) {
+        const lk = lakeListForReeds[i % 3];
         const ang = pseudoRand() * Math.PI * 2;
-        const jitter = 0.94 + pseudoRand() * 0.18;
-        const pickLake = (i % 3);
-        let rx, rz, wY;
-        if (pickLake === 0) {
-          rx = UPLAND_LAKE.x + Math.cos(ang) * (UPLAND_LAKE.radiusX * jitter);
-          rz = UPLAND_LAKE.z + Math.sin(ang) * (UPLAND_LAKE.radiusZ * jitter);
-          wY = UPLAND_LAKE.waterY;
-          if (rx < 83.5 && Math.abs(rz - 2.0) < 9.5) continue;
-        } else if (pickLake === 1) {
-          rx = HEADWATERS_LAKE.x + Math.cos(ang) * (HEADWATERS_LAKE.radiusX * jitter);
-          rz = HEADWATERS_LAKE.z + Math.sin(ang) * (HEADWATERS_LAKE.radiusZ * jitter);
-          wY = HEADWATERS_LAKE.waterY;
-        } else {
-          rx = VALLEY_POND.x + Math.cos(ang) * (VALLEY_POND.radiusX * jitter);
-          rz = VALLEY_POND.z + Math.sin(ang) * (VALLEY_POND.radiusZ * jitter);
-          wY = VALLEY_POND.waterY;
-        }
+        // Exclude fast-flowing spillway throats and rocky headlands; cluster in sheltered coves
+        const dSpill = Math.abs(Math.atan2(Math.sin(ang - lk.spillAng), Math.cos(ang - lk.spillAng)));
+        if (dSpill < 0.45) continue;
+        const covePatch = Math.sin(ang * 3.0 + lk.p2) + Math.cos(ang * 5.0 - lk.p3);
+        if (covePatch < -0.20) continue;
+        const jitter = 0.88 + pseudoRand() * 0.16;
+        const pt = sampleLakeShorePt(lk, ang, jitter);
+        const rx = pt.x + (pseudoRand() - 0.5) * 2.2;
+        const rz = pt.z + (pseudoRand() - 0.5) * 2.2;
+        const wY = lk.waterY;
         const ry = sampleTerrainMeshHeight(rx, rz);
-        if (ry > wY - 0.42 && ry < wY + 1.35) {
+        const slope = Math.abs(sampleTerrainMeshHeight(rx + 1.2, rz) - ry) + Math.abs(sampleTerrainMeshHeight(rx, rz + 1.2) - ry);
+        if (ry > wY - 0.42 && ry < wY + 0.55 && slope < 0.75) {
           dummy.position.set(rx, ry - 0.05, rz);
           const rs = 0.76 + pseudoRand() * 0.48;
           dummy.scale.set(rs, rs, rs);
@@ -9302,12 +9526,13 @@
         const ang = geoRand() * Math.PI * 2;
         let rx, rz;
         if (isLake) {
-          const jitter = 0.92 + geoRand() * 0.16;
-          rx = UPLAND_LAKE.x + Math.cos(ang) * (UPLAND_LAKE.radiusX * jitter);
-          rz = UPLAND_LAKE.z + Math.sin(ang) * (UPLAND_LAKE.radiusZ * jitter);
+          const jitter = 0.90 + geoRand() * 0.16;
+          const pt = sampleLakeShorePt(UPLAND_LAKE, ang, jitter);
+          rx = pt.x;
+          rz = pt.z;
         } else {
           const rad = 6.5 + geoRand() * 6.5;
-          rx = 23.5 + Math.cos(ang) * rad;
+          rx = 21.5 + Math.cos(ang) * rad;
           rz = 2.0 + Math.sin(ang) * rad;
         }
         const ry = sampleTerrainMeshHeight(rx, rz);
@@ -10227,6 +10452,9 @@
       function getLocalWaterCeiling(x, z) {
         if (isInsideUplandLake(x, z, 0.5)) return UPLAND_LAKE.waterY;
         if (isInsideHeadwatersLake(x, z, 0.5)) return HEADWATERS_LAKE.waterY;
+        if (isInsideValleyPond(x, z, 0.5)) return VALLEY_POND.waterY;
+        const inRiv = getInlandRiverInfo(x, z);
+        if (inRiv && inRiv.dist <= inRiv.halfW) return inRiv.waterY;
         return 0.05;
       }
 
@@ -10321,23 +10549,26 @@
           kz = -45.0 + uwRand() * 177.0;
           kx = getEstuaryCenter(kz) + (uwRand() - 0.5) * 26.0;
         } else if (zone === 1) {
-          // Grand Headwaters Lake Basin
+          // Grand Headwaters Tarn Basin
           const ang = uwRand() * Math.PI * 2;
-          const rad = Math.sqrt(uwRand()) * 0.92;
-          kx = HEADWATERS_LAKE.x + Math.cos(ang) * HEADWATERS_LAKE.radiusX * rad;
-          kz = HEADWATERS_LAKE.z + Math.sin(ang) * HEADWATERS_LAKE.radiusZ * rad;
+          const rad = Math.sqrt(uwRand()) * 0.86;
+          const pt = sampleLakeShorePt(HEADWATERS_LAKE, ang, rad);
+          kx = pt.x;
+          kz = pt.z;
         } else if (zone === 2) {
-          // Cliff-Top Alpine Lake Basin
+          // Cliff-Top Alpine Tarn Basin
           const ang = uwRand() * Math.PI * 2;
-          const rad = Math.sqrt(uwRand()) * 0.92;
-          kx = UPLAND_LAKE.x + Math.cos(ang) * UPLAND_LAKE.radiusX * rad;
-          kz = UPLAND_LAKE.z + Math.sin(ang) * UPLAND_LAKE.radiusZ * rad;
+          const rad = Math.sqrt(uwRand()) * 0.86;
+          const pt = sampleLakeShorePt(UPLAND_LAKE, ang, rad);
+          kx = pt.x;
+          kz = pt.z;
         } else if (zone === 3) {
-          // Windward Valley Pond Basin
+          // Windward Valley Lagoon Basin
           const ang = uwRand() * Math.PI * 2;
-          const rad = Math.sqrt(uwRand()) * 0.92;
-          kx = VALLEY_POND.x + Math.cos(ang) * VALLEY_POND.radiusX * rad;
-          kz = VALLEY_POND.z + Math.sin(ang) * VALLEY_POND.radiusZ * rad;
+          const rad = Math.sqrt(uwRand()) * 0.86;
+          const pt = sampleLakeShorePt(VALLEY_POND, ang, rad);
+          kx = pt.x;
+          kz = pt.z;
         } else {
           // Expanded Coastal Reefs, Sheltered Swim Channel & Plunge Pools
           kx = -340.0 + uwRand() * 680.0;
@@ -10407,16 +10638,20 @@
           wz = -42.0 + uwRand() * 172.0;
           wx = getEstuaryCenter(wz) + (uwRand() - 0.5) * 25.0;
         } else if (zPick === 1) {
-          const ang = uwRand() * Math.PI * 2, rad = Math.sqrt(uwRand()) * 0.94;
-          wx = HEADWATERS_LAKE.x + Math.cos(ang) * HEADWATERS_LAKE.radiusX * rad;
-          wz = HEADWATERS_LAKE.z + Math.sin(ang) * HEADWATERS_LAKE.radiusZ * rad;
+          const ang = uwRand() * Math.PI * 2, rad = Math.sqrt(uwRand()) * 0.86;
+          const pt = sampleLakeShorePt(HEADWATERS_LAKE, ang, rad);
+          wx = pt.x;
+          wz = pt.z;
         } else if (zPick === 2) {
-          const ang = uwRand() * Math.PI * 2, rad = Math.sqrt(uwRand()) * 0.94;
-          wx = UPLAND_LAKE.x + Math.cos(ang) * UPLAND_LAKE.radiusX * rad;
-          wz = UPLAND_LAKE.z + Math.sin(ang) * UPLAND_LAKE.radiusZ * rad;
+          const ang = uwRand() * Math.PI * 2, rad = Math.sqrt(uwRand()) * 0.86;
+          const pt = sampleLakeShorePt(UPLAND_LAKE, ang, rad);
+          wx = pt.x;
+          wz = pt.z;
         } else {
-          wx = -120.0 + uwRand() * 240.0;
-          wz = -130.0 + uwRand() * 240.0;
+          const ang = uwRand() * Math.PI * 2, rad = Math.sqrt(uwRand()) * 0.86;
+          const pt = sampleLakeShorePt(VALLEY_POND, ang, rad);
+          wx = pt.x;
+          wz = pt.z;
         }
 
         const wy = sampleTerrainMeshHeight(wx, wz);
@@ -10461,29 +10696,33 @@
       const lilyMesh = new THREE.InstancedMesh(lilyGeo, lilyMat, lilyMax);
       let placedLilies = 0;
 
-      for (let i = 0; i < 4800 && placedLilies < lilyMax; i++) {
+      const lilyLakes = [UPLAND_LAKE, HEADWATERS_LAKE, VALLEY_POND];
+      for (let i = 0; i < 5600 && placedLilies < lilyMax; i++) {
         let lx, lz, waterY;
-        if (i % 3 === 0) {
+        const zonePick = i % 4;
+        if (zonePick < 3) {
+          const lk = lilyLakes[zonePick];
           const ang = uwRand() * Math.PI * 2;
-          const rad = 0.72 + uwRand() * 0.24;
-          lx = HEADWATERS_LAKE.x + Math.cos(ang) * HEADWATERS_LAKE.radiusX * rad;
-          lz = HEADWATERS_LAKE.z + Math.sin(ang) * HEADWATERS_LAKE.radiusZ * rad;
-          waterY = HEADWATERS_LAKE.waterY;
-        } else if (i % 3 === 1) {
-          const ang = uwRand() * Math.PI * 2;
-          const rad = 0.72 + uwRand() * 0.24;
-          lx = UPLAND_LAKE.x + Math.cos(ang) * UPLAND_LAKE.radiusX * rad;
-          lz = UPLAND_LAKE.z + Math.sin(ang) * UPLAND_LAKE.radiusZ * rad;
-          waterY = UPLAND_LAKE.waterY;
+          // Exclude fast-moving spillway throats & cluster in calm littoral coves (no circular rings!)
+          const dSpill = Math.abs(Math.atan2(Math.sin(ang - lk.spillAng), Math.cos(ang - lk.spillAng)));
+          if (dSpill < 0.52) continue;
+          const patchWeight = Math.sin(ang * 3.0 + lk.p2) + Math.cos(ang * 4.0 - lk.p3);
+          if (patchWeight < -0.15) continue;
+          const rad = 0.58 + uwRand() * 0.30;
+          const pt = sampleLakeShorePt(lk, ang, rad);
+          lx = pt.x + (uwRand() - 0.5) * 3.2;
+          lz = pt.z + (uwRand() - 0.5) * 3.2;
+          waterY = lk.waterY;
         } else {
-          lz = -15.0 + uwRand() * 130.0;
+          lz = -12.0 + uwRand() * 110.0;
           const side = uwRand() > 0.5 ? 1.0 : -1.0;
-          lx = getEstuaryCenter(lz) + side * (8.5 + uwRand() * 5.2);
+          lx = getEstuaryCenter(lz) + side * (8.5 + uwRand() * 4.8);
           waterY = 0.05;
         }
         const ly = sampleTerrainMeshHeight(lx, lz);
+        const slope = Math.abs(sampleTerrainMeshHeight(lx + 1.4, lz) - ly) + Math.abs(sampleTerrainMeshHeight(lx, lz + 1.4) - ly);
         const d = waterY - ly;
-        if (d > 0.22 && d < 2.2) {
+        if (d > 0.30 && d < 1.65 && slope < 0.68) {
           const sc = 0.65 + uwRand() * 0.85;
           dummy.position.set(lx, waterY + 0.015, lz);
           dummy.scale.set(sc, 1.0, sc);
@@ -11223,6 +11462,9 @@
           pane.classList.remove('active');
         }
       });
+      if (targetTabId === 'tab-world' && typeof window.renderInGameGeologicalMap === 'function') {
+        window.renderInGameGeologicalMap();
+      }
     }
 
     tabButtons.forEach(btn => {
@@ -11231,47 +11473,464 @@
 
     // Fast-Travel Waypoint Cards in World Tab
     const WAYPOINTS = {
-      headwaters:       { x: -24.0,  z: 112.0,  yaw: -0.32, pitch: -0.10, dive: false, label: "🏔️ Teleported to Grand Headwaters Lake & Cliff Waterfall!" },
-      alpine:           { x: 58.0,   z: 2.5,    yaw: -1.57, pitch: -0.08, dive: false, label: "🏞️ Teleported to Cliff-Top Alpine Lake & Gorge!" },
-      valley_pond:      { x: 82.0,   z: 238.0,  yaw: -1.57, pitch: -0.06, dive: false, label: "🌿 Teleported to Windward Valley Pond & Inland River!" },
+      headwaters:       { x: -24.0,  z: 162.0,  yaw: -0.25, pitch: -0.10, dive: false, label: "🏔️ Teleported to Grand Headwaters Lake (+26.6m) & Sill Weir!" },
+      alpine:           { x: 58.0,   z: 2.5,    yaw: -1.57, pitch: -0.08, dive: false, label: "🏞️ Teleported to Cliff-Top Alpine Tarn (+33.6m) & Gorge!" },
+      valley_pond:      { x: 68.0,   z: 212.0,  yaw: -1.35, pitch: -0.06, dive: false, label: "🌿 Teleported to Windward Valley Lagoon (+6.8m) & S-Meander River!" },
       canyon_gorge:     { x: 215.0,  z: 42.0,   yaw: -1.57, pitch: -0.04, dive: false, label: "🪨 Teleported to Stratified Eastern Limestone Canyon!" },
       swim_cay:         { x: -294.0, z: 224.0,  yaw: 1.57,  pitch: -0.05, dive: false, label: "🏖️ Teleported to Sheltered Reef Cove (25m Swim to Cay)!" },
       outer_stronghold: { x: 742.0,  z: 715.0,  yaw: -0.78, pitch: -0.06, dive: false, label: "⛵ Teleported to Outer Deep Coral Stronghold (2400m Archipelago)!" },
       ruins:            { x: 412.0,  z: 268.0,  yOverride: -2.6, yaw: 1.45, pitch: -0.18, dive: true, label: "🏛️ Submerged into Coral Fan Cay Ruins & Isotope Trench!" },
       cavern:           { x: 31.5,   z: 45.2,   yaw: -1.45, pitch: -0.02, dive: false, label: "🕳️ Teleported to Whispering Basalt Cave Entrance!" },
-      cenote:           { x: 215.0,  z: 68.0,   yaw: -1.45, pitch: -0.06, dive: false, caveInterior: true, label: "💎 Teleported inside Subterranean Cenote Chamber!" },
+      cenote:           { x: 215.0,  z: 68.0,   yaw: -1.45, pitch: -0.06, dive: false, caveInterior: true, label: "💎 Teleported inside Subterranean Karst Cenote (+12.4m Aquifer)!" },
       grotto:           { x: -33.5,  z: 85.8,   yaw: 1.25,  pitch: -0.02, dive: false, label: "🌊 Teleported to Cataract Echo Grotto Entrance!" },
       elderwood:        { x: -54.0,  z: 26.0,   yaw: 0.65,  pitch: 0.0,   dive: false, label: "🌲 Teleported to Ancient Elderwood Sanctuary!" },
       overlook:         { x: -22.0,  z: 24.0,   yaw: -0.52, pitch: -0.04, dive: false, label: "🌺 Teleported to Sunlit Coral Overlook Base Camp!" },
       dive:             { x: 4.5,    z: 14.0,   yOverride: -2.2, yaw: 0.0, pitch: -0.15, dive: true, label: "🤿 Submerged into Deep River Kelp Trench!" }
     };
 
+    function teleportToWaypointKey(key) {
+      const wp = WAYPOINTS[key];
+      if (!wp) return;
+      if (window.campaign) window.campaign.onRaft = false;
+      player.pos.x = wp.x;
+      player.pos.z = wp.z;
+      player.vel.set(0, 0, 0);
+      if (wp.yOverride !== undefined) {
+        player.pos.y = wp.yOverride;
+      } else if (wp.caveInterior) {
+        const cInfo = getCaveNavigationInfo(wp.x, wp.z, 20.0);
+        player.pos.y = cInfo ? cInfo.floorY + 0.15 : getTerrainHeight(wp.x, wp.z);
+      } else {
+        player.pos.y = getTerrainHeight(wp.x, wp.z) + 0.15;
+      }
+      player.yaw = wp.yaw;
+      player.pitch = wp.pitch;
+      player.isDivingUnderwater = !!wp.dive;
+      if (window.ArchipelagoChunkManager) window.ArchipelagoChunkManager.update(player.pos.x, player.pos.z);
+      if (btnDive) btnDive.classList.toggle('active', player.isDivingUnderwater);
+      const modal = document.getElementById('env-modal');
+      if (modal) modal.classList.remove('open');
+      showToast(wp.label);
+    }
+
     document.querySelectorAll('.waypoint-card[data-tp]').forEach(card => {
-      addTapListener(card, () => {
-        const key = card.dataset.tp;
-        const wp = WAYPOINTS[key];
-        if (!wp) return;
-        player.pos.x = wp.x;
-        player.pos.z = wp.z;
-        player.vel.set(0, 0, 0);
-        if (wp.yOverride !== undefined) {
-          player.pos.y = wp.yOverride;
-        } else if (wp.caveInterior) {
-          const cInfo = getCaveNavigationInfo(wp.x, wp.z, 20.0);
-          player.pos.y = cInfo ? cInfo.floorY + 0.15 : getTerrainHeight(wp.x, wp.z);
-        } else {
-          player.pos.y = getTerrainHeight(wp.x, wp.z) + 0.15;
-        }
-        player.yaw = wp.yaw;
-        player.pitch = wp.pitch;
-        player.isDivingUnderwater = !!wp.dive;
-        if (window.ArchipelagoChunkManager) window.ArchipelagoChunkManager.update(player.pos.x, player.pos.z);
-        if (btnDive) btnDive.classList.toggle('active', player.isDivingUnderwater);
-        const modal = document.getElementById('env-modal');
-        if (modal) modal.classList.remove('open');
-        showToast(wp.label);
-      });
+      addTapListener(card, () => teleportToWaypointKey(card.dataset.tp));
     });
+
+    // --- INTERACTIVE GEOLOGICAL & FLUVIAL GEOMORPHOLOGY SURVEY MAP RENDERER ---
+    (function setupGeologicalSurveyMap() {
+      const mapCanvas = document.getElementById('cc-world-hydrology-map');
+      if (!mapCanvas) return;
+      const ctx = mapCanvas.getContext('2d');
+      let cachedBgImageData = null;
+
+      // Map world coordinate domain: X in [-340, 340], Z in [-290, 290] (North -Z at top, South +Z at bottom)
+      const X_MIN = -340, X_MAX = 340;
+      const Z_MIN = -280, Z_MAX = 290;
+      function wxToPx(x, W) { return ((x - X_MIN) / (X_MAX - X_MIN)) * W; }
+      function wzToPy(z, H) { return ((z - Z_MIN) / (Z_MAX - Z_MIN)) * H; }
+      function pxToWx(px, W) { return X_MIN + (px / W) * (X_MAX - X_MIN); }
+      function pyToWz(py, H) { return Z_MIN + (py / H) * (Z_MAX - Z_MIN); }
+
+      const MAP_PINS = [
+        { key: 'alpine',      x: 118,  z: 2,    code: 'L1', title: 'Cliff-Top Tarn (+33.6m)', color: '#4fc3f7' },
+        { key: 'headwaters',  x: -18,  z: 204,  code: 'L2', title: 'Headwaters Lake (+26.6m)', color: '#4fc3f7' },
+        { key: 'valley_pond', x: 88,   z: 214,  code: 'L3', title: 'Valley Lagoon (+6.8m)', color: '#26c6da' },
+        { key: 'overlook',    x: 21.5, z: 2.0,  code: 'C1', title: 'East Gorge Falls & Plunge (-4.4m)', color: '#80deea' },
+        { key: 'grotto',      x: -14.5,z: 124.0,code: 'C2', title: 'Headwaters Falls & Plunge (-4.6m)', color: '#80deea' },
+        { key: 'dive',        x: -2.0, z: 42.0, code: 'R1', title: 'Emerald Estuary & Sand-Spit', color: '#00e5ff' },
+        { key: 'cenote',      x: 218,  z: 72,   code: 'K1', title: 'Karst Cenote Aquifer (+12.4m)', color: '#b388ff' },
+        { key: 'volcano',     x: -145, z: 78,   code: 'MT', title: 'Mt. Caldera Peak (+168m)', color: '#ff7043' },
+        { key: 'canyon_gorge',x: 215,  z: 42,   code: 'CY', title: 'Stratified Limestone Canyon', color: '#ffb74d' },
+        { key: 'crash',       x: -16,  z: -40,  code: 'AP', title: 'Crash Cove & Tidal Shoal', color: '#ffd54f' }
+      ];
+
+      function buildBaseTerrainImage(W, H) {
+        const img = ctx.createImageData(W, H);
+        const data = img.data;
+        const step = 2; // 2x2 pixel block sampling for instant opening
+        for (let py = 0; py < H; py += step) {
+          const wz = pyToWz(py, H);
+          for (let px = 0; px < W; px += step) {
+            const wx = pxToWx(px, W);
+            const h = getTerrainHeight(wx, wz);
+            const hx = getTerrainHeight(wx + 3.5, wz);
+            const hz = getTerrainHeight(wx, wz + 3.5);
+            const nx = hx - h, nz = hz - h;
+            const shade = Math.max(0.68, Math.min(1.22, 1.0 - (nx * 0.14 + nz * 0.11)));
+
+            let r = 10, g = 34, b = 54;
+            if (h < -4.2) {
+              // Deep ocean & plunge scour pools
+              const t = Math.max(0, Math.min(1, (h + 16.0) / 11.8));
+              r = 7 + t * 8; g = 30 + t * 36; b = 56 + t * 48;
+            } else if (h < 0.0) {
+              // Turquoise coral lagoon & littoral shelves
+              const t = (h + 4.2) / 4.2;
+              r = 16 + t * 38; g = 78 + t * 92; b = 108 + t * 72;
+            } else if (h < 2.6) {
+              // Graded sandy littoral beaches & point bars
+              r = 214; g = 196; b = 148;
+            } else if (h < 14.0) {
+              // Lowland tropical emerald floodplain
+              const t = (h - 2.6) / 11.4;
+              r = 52 + t * 24; g = 118 + t * 22; b = 62 + t * 10;
+            } else if (h < 32.0) {
+              // Mid-elevation rainforest & limestone plateau
+              const t = (h - 14.0) / 18.0;
+              r = 82 + t * 38; g = 136 - t * 8; b = 74 - t * 6;
+            } else if (h < 62.0) {
+              // Alpine highland ridges
+              const t = (h - 32.0) / 30.0;
+              r = 128 + t * 34; g = 124 - t * 18; b = 76 + t * 12;
+            } else if (h < 118.0) {
+              // Sub-alpine volcanic basalt slopes
+              const t = (h - 62.0) / 56.0;
+              r = 112 - t * 34; g = 96 - t * 32; b = 86 - t * 26;
+            } else {
+              // Mount Caldera high volcanic cone & cauldron rim
+              const dCrater = Math.hypot(wx - (-145), wz - 78);
+              if (dCrater < 24.0) {
+                r = 235; g = 86; b = 28;
+              } else {
+                r = 76; g = 62; b = 58;
+              }
+            }
+
+            // Topographic contour lines every 12m above sea level
+            if (h > 1.5) {
+              const cMod = Math.abs((h % 12.0) - 6.0);
+              if (cMod < 0.42) {
+                r *= 0.78; g *= 0.78; b *= 0.78;
+              }
+            }
+
+            r = Math.min(255, Math.max(0, Math.round(r * shade)));
+            g = Math.min(255, Math.max(0, Math.round(g * shade)));
+            b = Math.min(255, Math.max(0, Math.round(b * shade)));
+
+            for (let dy = 0; dy < step && (py + dy) < H; dy++) {
+              for (let dx = 0; dx < step && (px + dx) < W; dx++) {
+                const idx = ((py + dy) * W + (px + dx)) * 4;
+                data[idx] = r; data[idx + 1] = g; data[idx + 2] = b; data[idx + 3] = 255;
+              }
+            }
+          }
+        }
+        return img;
+      }
+
+      function drawArrowhead(x, y, angle, size, color) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(angle);
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(size, 0);
+        ctx.lineTo(-size * 0.8, -size * 0.65);
+        ctx.lineTo(-size * 0.4, 0);
+        ctx.lineTo(-size * 0.8, size * 0.65);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+
+      window.renderInGameGeologicalMap = function() {
+        if (!mapCanvas || typeof getTerrainHeight !== 'function') return;
+        const W = mapCanvas.width, H = mapCanvas.height;
+        if (!cachedBgImageData) {
+          cachedBgImageData = buildBaseTerrainImage(W, H);
+        }
+        ctx.putImageData(cachedBgImageData, 0, 0);
+
+        // 1. Draw Main Emerald Estuary & Tidal Channel (R1)
+        ctx.save();
+        ctx.beginPath();
+        for (let z = 148; z >= -145; z -= 4) {
+          const cx = getEstuaryCenter(z);
+          const px = wxToPx(cx, W), py = wzToPy(z, H);
+          if (z === 148) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.strokeStyle = 'rgba(0, 229, 255, 0.45)';
+        ctx.lineWidth = 15;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+        ctx.strokeStyle = '#00bcd4';
+        ctx.lineWidth = 8;
+        ctx.stroke();
+
+        // Flow arrows along Main Estuary R1 (flowing North toward -Z fjord mouth)
+        for (let z = 110; z >= -90; z -= 45) {
+          const cx = getEstuaryCenter(z);
+          const cx2 = getEstuaryCenter(z - 6);
+          const ang = Math.atan2(wzToPy(z - 6, H) - wzToPy(z, H), wxToPx(cx2, W) - wxToPx(cx, W));
+          drawArrowhead(wxToPx(cx, W), wzToPy(z, H), ang, 5.5, '#e0f7fa');
+        }
+
+        // Tidal Sand-Spit Shoal at (-4.5, -26)
+        ctx.fillStyle = 'rgba(238, 214, 154, 0.88)';
+        ctx.beginPath();
+        ctx.ellipse(wxToPx(-4.5, W), wzToPy(-26.0, H), 12, 6, -0.25, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+
+        // 2. Draw S-Meandering Windward Valley River (R2) + Point Bars
+        if (INLAND_RIVER_CACHE && INLAND_RIVER_CACHE.pts) {
+          const pts = INLAND_RIVER_CACHE.pts;
+          // Point bars on inner convex bends
+          ctx.fillStyle = 'rgba(235, 212, 152, 0.85)';
+          [[46, 178], [16, 156], [-11, 108]].forEach(([bx, bz]) => {
+            ctx.beginPath();
+            ctx.arc(wxToPx(bx, W), wzToPy(bz, H), 6.5, 0, Math.PI * 2);
+            ctx.fill();
+          });
+
+          ctx.beginPath();
+          pts.forEach((p, idx) => {
+            const px = wxToPx(p.x, W), py = wzToPy(p.z, H);
+            if (idx === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          });
+          ctx.strokeStyle = 'rgba(38, 198, 218, 0.88)';
+          ctx.lineWidth = 6.5;
+          ctx.stroke();
+          ctx.strokeStyle = '#80deea';
+          ctx.lineWidth = 3.0;
+          ctx.stroke();
+
+          // Flow arrow along R2
+          drawArrowhead(wxToPx(31, W), wzToPy(167, H), Math.atan2(wzToPy(154, H) - wzToPy(180, H), wxToPx(14, W) - wxToPx(48, W)), 5, '#ffffff');
+          drawArrowhead(wxToPx(-1, W), wzToPy(132, H), Math.atan2(wzToPy(106, H) - wzToPy(154, H), wxToPx(-11.5, W) - wxToPx(14, W)), 5, '#ffffff');
+        }
+
+        // 3. Draw Waterfall Channels (C1 & C2) + Plunge-Pool Scour Amphitheaters
+        // C1: Eastern Gorge Waterfall (x: 101 -> 21.5)
+        ctx.beginPath();
+        for (let x = 101; x >= 21.5; x -= 4) {
+          const z = getWaterfallCenterZ(x);
+          const px = wxToPx(x, W), py = wzToPy(z, H);
+          if (x === 101) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.strokeStyle = '#b2ebf2';
+        ctx.lineWidth = 5.5;
+        ctx.stroke();
+        drawArrowhead(wxToPx(62, W), wzToPy(getWaterfallCenterZ(62), H), Math.PI, 5.5, '#ffffff');
+
+        // C2: Headwaters Waterfall (z: 177 -> 124)
+        ctx.beginPath();
+        for (let z = 177; z >= 124; z -= 4) {
+          const x = getHeadwatersCenterX(z);
+          const px = wxToPx(x, W), py = wzToPy(z, H);
+          if (z === 177) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.strokeStyle = '#b2ebf2';
+        ctx.lineWidth = 6.0;
+        ctx.stroke();
+        drawArrowhead(wxToPx(getHeadwatersCenterX(152), W), wzToPy(152, H), -Math.PI * 0.5, 5.5, '#ffffff');
+
+        // Plunge-Pool Scour Amphitheaters & Boulder Fans
+        if (typeof PLUNGE_AMPHITHEATERS !== 'undefined') {
+          PLUNGE_AMPHITHEATERS.forEach(pa => {
+            const px = wxToPx(pa.x, W), py = wzToPy(pa.z, H);
+            const pr = (pa.r / (X_MAX - X_MIN)) * W;
+            ctx.fillStyle = 'rgba(6, 58, 94, 0.92)';
+            ctx.strokeStyle = '#80deea';
+            ctx.lineWidth = 1.8;
+            ctx.beginPath();
+            ctx.arc(px, py, pr * 1.15, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+          });
+        }
+
+        // 4. Draw Multi-Lobe Lake Basins (L1, L2, L3) with Littoral Shelf & Profundal Zone
+        [UPLAND_LAKE, HEADWATERS_LAKE, VALLEY_POND].forEach(lake => {
+          if (!lake) return;
+          // Outer Sandy Littoral Shelf
+          ctx.beginPath();
+          for (let i = 0; i <= 48; i++) {
+            const ang = (i / 48) * Math.PI * 2;
+            const pt = sampleLakeShorePt(lake, ang, 1.08, 0);
+            const px = wxToPx(pt.x, W), py = wzToPy(pt.z, H);
+            if (i === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          }
+          ctx.closePath();
+          ctx.fillStyle = 'rgba(222, 202, 152, 0.85)';
+          ctx.fill();
+
+          // Turquoise Water Surface (t = 1.0)
+          ctx.beginPath();
+          for (let i = 0; i <= 48; i++) {
+            const ang = (i / 48) * Math.PI * 2;
+            const pt = sampleLakeShorePt(lake, ang, 1.0, 0);
+            const px = wxToPx(pt.x, W), py = wzToPy(pt.z, H);
+            if (i === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          }
+          ctx.closePath();
+          ctx.fillStyle = '#189ab4';
+          ctx.fill();
+          ctx.strokeStyle = '#80deea';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+
+          // Deep Profundal Basin (t = 0.68)
+          ctx.beginPath();
+          for (let i = 0; i <= 36; i++) {
+            const ang = (i / 36) * Math.PI * 2;
+            const pt = sampleLakeShorePt(lake, ang, 0.68, 0);
+            const px = wxToPx(pt.x, W), py = wzToPy(pt.z, H);
+            if (i === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          }
+          ctx.closePath();
+          ctx.fillStyle = '#074f6e';
+          ctx.fill();
+        });
+
+        // 5. Draw 4 Spring-Fed Step-Pool Tributaries (T1-T4) & Geological Spring Heads
+        if (WINDING_STREAMS) {
+          WINDING_STREAMS.forEach(st => {
+            if (!st.cache || !st.cache.pts) return;
+            ctx.beginPath();
+            st.cache.pts.forEach((p, i) => {
+              const px = wxToPx(p.x, W), py = wzToPy(p.z, H);
+              if (i === 0) ctx.moveTo(px, py);
+              else ctx.lineTo(px, py);
+            });
+            ctx.strokeStyle = '#4dd0e1';
+            ctx.lineWidth = 2.6;
+            ctx.stroke();
+
+            const midIdx = Math.floor(st.cache.pts.length * 0.55);
+            const p0 = st.cache.pts[midIdx - 1], p1 = st.cache.pts[midIdx];
+            if (p0 && p1) {
+              const ang = Math.atan2(wzToPy(p1.z, H) - wzToPy(p0.z, H), wxToPx(p1.x, W) - wxToPx(p0.x, W));
+              drawArrowhead(wxToPx(p1.x, W), wzToPy(p1.z, H), ang, 4.2, '#b2ebf2');
+            }
+          });
+        }
+        if (typeof SPRING_SOURCES !== 'undefined') {
+          SPRING_SOURCES.forEach((sp, idx) => {
+            const px = wxToPx(sp.x, W), py = wzToPy(sp.z, H);
+            ctx.fillStyle = '#00e5ff';
+            ctx.strokeStyle = '#071824';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(px, py, 4.2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = '#b2ebf2';
+            ctx.font = 'bold 9px sans-serif';
+            ctx.fillText(`T${idx + 1}`, px + 6, py + 3);
+          });
+        }
+
+        // 6. Draw Subterranean Karst Aquifer Siphon (L1 -> Cenote)
+        ctx.save();
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = '#b388ff';
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.moveTo(wxToPx(138, W), wzToPy(12, H));
+        ctx.lineTo(wxToPx(218, W), wzToPy(72, H));
+        ctx.stroke();
+        ctx.restore();
+
+        // 7. Draw Landmark & Water Feature Callout Pins
+        MAP_PINS.forEach(pin => {
+          const px = wxToPx(pin.x, W), py = wzToPy(pin.z, H);
+          ctx.fillStyle = 'rgba(7, 24, 36, 0.86)';
+          ctx.strokeStyle = pin.color;
+          ctx.lineWidth = 1.8;
+          ctx.beginPath();
+          ctx.arc(px, py, 9, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 9px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(pin.code, px, py);
+
+          // Label pill
+          ctx.font = 'bold 10px sans-serif';
+          const tw = ctx.measureText(pin.title).width;
+          const lx = Math.max(tw * 0.5 + 6, Math.min(W - tw * 0.5 - 6, px));
+          const ly = py - 16;
+          ctx.fillStyle = 'rgba(5, 16, 26, 0.82)';
+          ctx.fillRect(lx - tw * 0.5 - 4, ly - 7, tw + 8, 14);
+          ctx.fillStyle = pin.color;
+          ctx.fillText(pin.title, lx, ly);
+        });
+
+        // 8. Draw Live Player Position & Heading Arrow
+        if (player && player.pos) {
+          const ppx = wxToPx(player.pos.x, W), ppy = wzToPy(player.pos.z, H);
+          if (ppx >= 0 && ppx <= W && ppy >= 0 && ppy <= H) {
+            ctx.save();
+            ctx.translate(ppx, ppy);
+            ctx.fillStyle = 'rgba(255, 23, 68, 0.32)';
+            ctx.beginPath();
+            ctx.arc(0, 0, 13, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.rotate(-player.yaw - Math.PI * 0.5);
+            ctx.fillStyle = '#ff1744';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1.8;
+            ctx.beginPath();
+            ctx.moveTo(9, 0);
+            ctx.lineTo(-6, -6);
+            ctx.lineTo(-3, 0);
+            ctx.lineTo(-6, 6);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+          }
+        }
+
+        // 9. Title Banner & Scale Bar
+        ctx.fillStyle = 'rgba(5, 15, 24, 0.84)';
+        ctx.fillRect(10, 10, 290, 42);
+        ctx.strokeStyle = 'rgba(102, 252, 241, 0.45)';
+        ctx.strokeRect(10, 10, 290, 42);
+        ctx.fillStyle = '#66fcf1';
+        ctx.textAlign = 'left';
+        ctx.font = 'bold 12px sans-serif';
+        ctx.fillText('GEOLOGICAL & WATERSHED SURVEY MAP', 18, 26);
+        ctx.fillStyle = '#b0bec5';
+        ctx.font = '10px sans-serif';
+        ctx.fillText('10m Contours • Multi-Lobe Bathymetry • Flow Vectors', 18, 42);
+      };
+
+      // Tap / Click on Map Pin to Fast-Travel
+      addTapListener(mapCanvas, evt => {
+        const rect = mapCanvas.getBoundingClientRect();
+        const clientX = (evt.changedTouches && evt.changedTouches[0]) ? evt.changedTouches[0].clientX : evt.clientX;
+        const clientY = (evt.changedTouches && evt.changedTouches[0]) ? evt.changedTouches[0].clientY : evt.clientY;
+        if (clientX === undefined || clientY === undefined) return;
+        const px = ((clientX - rect.left) / rect.width) * mapCanvas.width;
+        const py = ((clientY - rect.top) / rect.height) * mapCanvas.height;
+
+        let bestPin = null, bestDist = 28.0;
+        MAP_PINS.forEach(pin => {
+          const d = Math.hypot(px - wxToPx(pin.x, mapCanvas.width), py - wzToPy(pin.z, mapCanvas.height));
+          if (d < bestDist) {
+            bestDist = d;
+            bestPin = pin;
+          }
+        });
+        if (bestPin && WAYPOINTS[bestPin.key]) {
+          teleportToWaypointKey(bestPin.key);
+        }
+      });
+    })();
 
     // Debug Menu & UX Ergonomics Controls
     const btnToggleHudMinimal = document.getElementById('btn-toggle-hud-minimal');
@@ -13098,6 +13757,7 @@
           scene, camera, renderer, player,
           getTerrainHeight, sampleTerrainMeshHeight, getWaterInfo, getEstuaryCenter, getWaterfallCenterZ, getHeadwatersCenterX,
           getCaveNavigationInfo, CAVE_SYSTEMS, UPLAND_LAKE, HEADWATERS_LAKE, VALLEY_POND, getInlandRiverInfo, WINDING_STREAMS,
+          PLUNGE_AMPHITHEATERS, SPRING_SOURCES, evalLakeLobeScale, sampleLakeShorePt,
           BIOME_SYSTEM, getBiomeWeights, ArchipelagoChunkManager, archipelagoIslets, WAYPOINTS,
           getForestTrailMask, getGameTrailMask, activeEZTrees,
           interactiveTargets, treeFootprints, buoyantObjects, spawnBuoyantLog, createCampfire, getCampfireVFXAssets,
