@@ -1,0 +1,70 @@
++        float calderaDist = length(vWorldPos.xz - vec2(-302.0, 64.0));
++        float bCaldera = 1.0 - smoothstep(40.0, 148.0, calderaDist);
+ 
+         // Rich multi-frequency biome color variation
+         float macroNoise = sin(vWorldPos.x * 0.035 + 0.5) * cos(vWorldPos.z * 0.032) * 0.5
+@@ -4166,16 +4189,21 @@
+         detailedCliff = mix(detailedCliff, vec3(0.20, 0.39, 0.15) * (0.8 + 0.4 * gMicro.g), ledgeMoss * 0.65);
+         baseTerrain.rgb = mix(baseTerrain.rgb, detailedCliff, rockBlend);
+ 
+-        // Volcanic Basalt Cone, Tephra Ash, Sulfur-Ochre Rim Striations & Inner Cauldron Magma Glow
++        // Dark scoria crest. Molten color stays in the crater pool; the rim is cooled basalt with hairline embers.
+         if (bCaldera > 0.01) {
+-          float ashBand = smoothstep(38.0, 74.0, elev) * bCaldera;
+-          vec3 basaltScoria = mix(vec3(0.17, 0.15, 0.15), vec3(0.27, 0.23, 0.21), sMicro.r) * (0.85 + 0.30 * cX.g);
+-          baseTerrain.rgb = mix(baseTerrain.rgb, basaltScoria, ashBand * 0.92);
+-          float sulfurRim = smoothstep(82.0, 102.0, elev) * (1.0 - smoothstep(22.0, 42.0, calderaDist));
+-          vec3 sulfurStain = mix(vec3(0.32, 0.24, 0.14), vec3(0.46, 0.31, 0.12), macroNoise);
+-          baseTerrain.rgb = mix(baseTerrain.rgb, sulfurStain, sulfurRim * 0.42);
+-          float magmaGlow = (1.0 - smoothstep(16.0, 26.5, calderaDist)) * (1.0 - smoothstep(85.0, 99.0, elev));
+-          baseTerrain.rgb += vec3(0.95, 0.28, 0.04) * magmaGlow * (0.45 + 0.20 * sin(uTime * 2.2 + vWorldPos.x * 0.3));
++          float ashBand = smoothstep(28.0, 70.0, elev) * bCaldera;
++          vec3 basaltScoria = mix(vec3(0.11, 0.10, 0.10), vec3(0.20, 0.16, 0.14), sMicro.r);
++          baseTerrain.rgb = mix(baseTerrain.rgb, basaltScoria, ashBand * 0.94);
++          float crestBand = smoothstep(118.0, 146.0, elev) * (1.0 - smoothstep(30.0, 78.0, calderaDist));
++          vec3 darkLava = mix(vec3(0.045, 0.032, 0.028), vec3(0.12, 0.07, 0.05), macroNoise);
++          baseTerrain.rgb = mix(baseTerrain.rgb, darkLava, crestBand * 0.96);
++          float cracks = pow(clamp(sin(vWorldPos.x * 0.85 + vWorldPos.z * 0.62) * 0.5 + 0.5, 0.0, 1.0), 9.0);
++          baseTerrain.rgb += vec3(0.42, 0.06, 0.01) * cracks * crestBand * 0.28;
++          float sulfurRim = smoothstep(140.0, 162.0, elev) * (1.0 - smoothstep(28.0, 52.0, calderaDist));
++          vec3 sulfurStain = mix(vec3(0.24, 0.18, 0.10), vec3(0.36, 0.24, 0.10), macroNoise);
++          baseTerrain.rgb = mix(baseTerrain.rgb, sulfurStain, sulfurRim * 0.22);
++          float poolGlow = (1.0 - smoothstep(16.0, 30.0, calderaDist)) * (1.0 - smoothstep(130.0, 146.0, elev)) * smoothstep(118.0, 128.0, elev);
++          baseTerrain.rgb += vec3(0.42, 0.07, 0.012) * poolGlow * (0.35 + 0.12 * sin(uTime * 1.6 + vWorldPos.x * 0.25));
+         }
+ 
+         // Tree-canopy leaf-litter humus & fallen twig mosaic beneath forest groves
+@@ -4690,12 +4718,12 @@
+               }
+             }
+ 
+-            // Parabolic free-falling water arch over the steep cliff escarpment (x = 76.2 -> 62.5)
++            // Short lip peel only. The ribbon otherwise sits in the carved channel instead of hanging over the gorge.
+             let cliffArchLift = 0.0;
+-            if (wx > 62.0 && wx < 76.8) {
+-              const cliffPhase = (76.8 - wx) / 14.8; // 0 at cliff lip, 1 at upper plunge pool
++            if (wx > 68.5 && wx < 76.6) {
++              const cliffPhase = (76.6 - wx) / 8.1;
+               const archProfile = Math.sin(cliffPhase * Math.PI);
+-              cliffArchLift = archProfile * (isCliffVeil ? 1.15 : 0.48) * (1.0 - absZ * 0.45);
++              cliffArchLift = archProfile * (isCliffVeil ? 0.38 : 0.14) * (1.0 - absZ * 0.55);
+             }
+ 
+             // Smoothly tuck under the Cliff-Top Lake water surface (33.6m) inside the spillway throat (x = 79.2 -> 75.5)
+@@ -4806,8 +4834,8 @@
+       wfGroup.add(foamCascade);
+       if (yieldFn) await yieldFn();
+ 
+-      // Dedicated Parabolic Over-Cliff Plunge Curtain (x=77.2 -> 60.5) so water visibly arcs off the steep cliff lip!
+-      const cliffCurtain = await buildWaterfallRibbon(77.2, 60.5, 64, 22, 3.45, 0.22, foamMat, true);
++      // Lip veil only (77.2 -> 69.5). The main ribbon carries the cascade down the channel.
++      const cliffCurtain = await buildWaterfallRibbon(77.2, 69.5, 36, 18, 3.15, 0.10, foamMat, true);
+       wfGroup.add(cliffCurtain);
+       if (yieldFn) await yieldFn();
+ 
+@@ -4906,16 +4934,12 @@
+               }
+             }
+ 
+-            // Parabolic free-falling water arch over the steep southern headwaters cliff (z = 161.2 -> 146.5)
++            // Short lip peel, then the ribbon follows the headwaters channel. No airborne sheet over the lower river.
