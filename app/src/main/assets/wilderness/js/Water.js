@@ -199,6 +199,13 @@
 					return noise * 0.5 - 1.0;
 				}
 
+				vec4 getNoiseFar( vec2 uv ) {
+					vec2 uv0 = ( uv / 103.0 ) + vec2(time / 17.0, time / 29.0);
+					vec2 uv2 = uv / vec2( 8907.0, 9803.0 ) + vec2( time / 101.0, time / 97.0 );
+					vec4 noise = ( texture2D( normalSampler, uv0 ) + texture2D( normalSampler, uv2 ) ) * 2.0;
+					return noise * 0.5 - 1.0;
+				}
+
 				void sunLight( const vec3 surfaceNormal, const vec3 eyeDirection, float shiny, float spec, float diffuse, inout vec3 diffuseColor, inout vec3 specularColor ) {
 					vec3 reflection = normalize( reflect( -sunDirection, surfaceNormal ) );
 					float direction = max( 0.0, dot( eyeDirection, reflection ) );
@@ -218,30 +225,35 @@
 				void main() {
 
 					#include <logdepthbuf_fragment>
-					vec4 noise = getNoise( worldPosition.xz * size );
-					vec3 surfaceNormal = normalize( noise.xzy * vec3( 1.5, 1.0, 1.5 ) + vec3( -vWaveSlope.x * 4.5, 0.0, -vWaveSlope.y * 4.5 ) );
+					vec3 worldToEye = eye - worldPosition.xyz;
+					float camDist = length(worldToEye);
+					vec3 eyeDirection = worldToEye / max(0.0001, camDist);
 
-					// Interactive expanding impact ripple rings
-					float rippleNormal = 0.0;
-					for (int r = 0; r < 8; r++) {
-						if (uRipples[r].w > 0.01) {
-							float d = distance(worldPosition.xz, uRipples[r].xy);
-							float ring = sin((d - uRipples[r].z) * 9.0) * exp(-abs(d - uRipples[r].z) * 2.2) * uRipples[r].w;
-							rippleNormal += ring;
+					// Attenuate high-frequency normal noise beyond 110m & drop to 2-tap macro swells for distant ocean pixels
+					float nearDetailFade = 1.0 - smoothstep( 85.0, 220.0, camDist );
+					vec4 noise = ( camDist < 110.0 ) ? getNoise( worldPosition.xz * size ) : getNoiseFar( worldPosition.xz * size );
+					vec3 surfaceNormal = normalize( noise.xzy * vec3( 1.5 * (0.45 + 0.55 * nearDetailFade), 1.0, 1.5 * (0.45 + 0.55 * nearDetailFade) ) + vec3( -vWaveSlope.x * 4.5, 0.0, -vWaveSlope.y * 4.5 ) );
+
+					// Interactive expanding impact ripple rings (evaluated within 65m near-field)
+					if ( camDist < 65.0 ) {
+						float rippleNormal = 0.0;
+						for (int r = 0; r < 8; r++) {
+							if (uRipples[r].w > 0.01) {
+								float d = distance(worldPosition.xz, uRipples[r].xy);
+								float ring = sin((d - uRipples[r].z) * 9.0) * exp(-abs(d - uRipples[r].z) * 2.2) * uRipples[r].w;
+								rippleNormal += ring;
+							}
+						}
+						if (abs(rippleNormal) > 0.001) {
+							surfaceNormal = normalize(surfaceNormal + vec3(rippleNormal * 0.45, 0.0, rippleNormal * 0.45));
 						}
 					}
-					if (abs(rippleNormal) > 0.001) {
-						surfaceNormal = normalize(surfaceNormal + vec3(rippleNormal * 0.45, 0.0, rippleNormal * 0.45));
-					}
 
-					// Dynamic rain droplet ripples
-					if (uRainIntensity > 0.01) {
-						float rainWave = sin(worldPosition.x * 22.0 + time * 12.0) * cos(worldPosition.z * 22.0 + time * 14.0) * 0.22 * uRainIntensity;
+					// Dynamic rain droplet ripples (near-field within 85m)
+					if (uRainIntensity > 0.01 && camDist < 85.0) {
+						float rainWave = sin(worldPosition.x * 22.0 + time * 12.0) * cos(worldPosition.z * 22.0 + time * 14.0) * 0.22 * uRainIntensity * (1.0 - camDist / 85.0);
 						surfaceNormal = normalize(surfaceNormal + vec3(rainWave, 0.0, rainWave));
 					}
-
-					vec3 worldToEye = eye - worldPosition.xyz;
-					vec3 eyeDirection = normalize( worldToEye );
 
 					// Underwater view looking up at the surface: Snell's Window & shimmering subsurface refraction
 					if ( !gl_FrontFacing ) {
@@ -264,9 +276,7 @@
 					vec3 specularLight = vec3(0.0);
 					sunLight( surfaceNormal, eyeDirection, 100.0, 2.0, 0.5, diffuseLight, specularLight );
 
-					float distance = length(worldToEye);
-
-					vec2 distortion = surfaceNormal.xz * ( 0.001 + 1.0 / distance ) * distortionScale;
+					vec2 distortion = surfaceNormal.xz * ( 0.001 + 1.0 / camDist ) * distortionScale;
 					float safeMirrorW = max( 0.35, mirrorCoord.w );
 					vec2 projMirrorUV = clamp( mirrorCoord.xy / safeMirrorW + distortion, 0.002, 0.998 );
 					vec3 reflectionSample = vec3( texture2D( mirrorSampler, projMirrorUV ) );
@@ -344,32 +354,100 @@
 			material.uniforms[ 'eye' ].value = eye;
 			material.uniforms[ 'uWaveAmp' ].value = options.waveAmp !== undefined ? options.waveAmp : 1.0;
 			scope.material = material;
+			scope.renderTarget = renderTarget;
+
+			let _currentRTSize = textureWidth;
+			scope.setReflectionResolution = function ( res ) {
+				const clamped = Math.max( 128, Math.min( 512, res | 0 ) );
+				if ( clamped !== _currentRTSize ) {
+					_currentRTSize = clamped;
+					renderTarget.setSize( clamped, clamped );
+					renderTarget.texture.generateMipmaps = false;
+				}
+			};
 
 			let _waterMirrorFrame = 0;
+			let _hasRenderedOnce = false;
 			let _lastCamX = -99999, _lastCamY = -99999, _lastCamZ = -99999, _lastLookX = 0, _lastLookY = 0, _lastLookZ = -1;
 			mirrorCamera.layers.set( 0 );
+			window._waterReflStats = { rendered: false, res: _currentRTSize, stride: 3, skipped: false, reason: 'init' };
 
 			scope.onBeforeRender = function ( renderer, scene, camera ) {
 
 				mirrorWorldPosition.setFromMatrixPosition( scope.matrixWorld );
 				cameraWorldPosition.setFromMatrixPosition( camera.matrixWorld );
 				eye.setFromMatrixPosition( camera.matrixWorld );
-				if ( window._playerInsideCave ) return;
-				// Skip planar reflection pass when camera is underwater or at grazing wave-crest height (< 0.85m above water plane)
-				if ( cameraWorldPosition.y < mirrorWorldPosition.y + 0.85 ) return;
+
+				// 1. Skip planar reflection pass completely when inside caves, submerged underwater, or flagged by governor
+				if ( window._playerInsideCave || ( window.caveDarknessFactor || 0 ) > 0.45 ) {
+					window._waterReflStats.rendered = false;
+					window._waterReflStats.skipped = true;
+					window._waterReflStats.reason = 'cave';
+					return;
+				}
+				const camHeightAboveWater = cameraWorldPosition.y - mirrorWorldPosition.y;
+				if ( camHeightAboveWater < -0.08 ) {
+					window._waterReflStats.rendered = false;
+					window._waterReflStats.skipped = true;
+					window._waterReflStats.reason = 'submerged';
+					return;
+				}
+				if ( _hasRenderedOnce && window._skipWaterReflectionPass ) {
+					window._waterReflStats.rendered = false;
+					window._waterReflStats.skipped = true;
+					window._waterReflStats.reason = 'budget';
+					return;
+				}
+
 				_waterMirrorFrame = ( _waterMirrorFrame + 1 ) | 0;
 				rotationMatrix.extractRotation( camera.matrixWorld );
 				lookAtPosition.set( 0, 0, - 1 );
 				lookAtPosition.applyMatrix4( rotationMatrix );
-				const camMoved = Math.abs( cameraWorldPosition.x - _lastCamX ) + Math.abs( cameraWorldPosition.y - _lastCamY ) + Math.abs( cameraWorldPosition.z - _lastCamZ ) > 0.25;
-				const camTurned = Math.abs( lookAtPosition.x - _lastLookX ) + Math.abs( lookAtPosition.y - _lastLookY ) + Math.abs( lookAtPosition.z - _lastLookZ ) > 0.018;
-				if ( _waterMirrorFrame > 2 ) {
-					if ( camMoved || camTurned ) {
-						if ( ( _waterMirrorFrame & 3 ) !== 2 ) return;
-					} else {
-						if ( ( _waterMirrorFrame & 7 ) !== 2 ) return;
-					}
+
+				// If camera is looking steeply upward into the sky (lookAtPosition.y > 0.58) and high above water, skip reflection
+				if ( _hasRenderedOnce && lookAtPosition.y > 0.58 && camHeightAboveWater > 8.0 ) {
+					window._waterReflStats.rendered = false;
+					window._waterReflStats.skipped = true;
+					window._waterReflStats.reason = 'sky-view';
+					return;
 				}
+
+				const camMoveDelta = Math.abs( cameraWorldPosition.x - _lastCamX ) + Math.abs( cameraWorldPosition.y - _lastCamY ) + Math.abs( cameraWorldPosition.z - _lastCamZ );
+				const camTurnDelta = Math.abs( lookAtPosition.x - _lastLookX ) + Math.abs( lookAtPosition.y - _lastLookY ) + Math.abs( lookAtPosition.z - _lastLookZ );
+				const camMoved = camMoveDelta > 0.22;
+				const camTurned = camTurnDelta > 0.016;
+				const fastMotion = camMoveDelta > 0.95 || camTurnDelta > 0.085;
+
+				// 2. Query Adaptive Frame-Budget Governor for base resolution & update stride
+				const gov = window.AdaptiveGovernor;
+				const baseRes = ( gov && gov.waterReflRes ) ? gov.waterReflRes : 288;
+				const baseStride = ( gov && gov.waterReflStride ) ? gov.waterReflStride : 3;
+
+				// Throttle reflection cadence based on motion, altitude & governor stride
+				const activeStride = ( camMoved || camTurned )
+					? ( camHeightAboveWater > 35.0 ? Math.max( baseStride, 5 ) : baseStride )
+					: Math.max( baseStride * 2, 6 );
+
+				window._waterReflStats.stride = activeStride;
+				window._waterReflStats.skipped = false;
+
+				if ( _hasRenderedOnce && ( _waterMirrorFrame % activeStride ) !== 0 ) {
+					window._waterReflStats.rendered = false;
+					window._waterReflStats.reason = 'throttled';
+					return;
+				}
+				_hasRenderedOnce = true;
+
+				// Resize RT only on frames that immediately render into it so the texture is never left blank
+				let targetRes = baseRes;
+				if ( fastMotion || camHeightAboveWater > 42.0 ) {
+					targetRes = Math.min( baseRes, 192 );
+				} else if ( camMoved || camTurned || camHeightAboveWater > 22.0 ) {
+					targetRes = Math.min( baseRes, 256 );
+				}
+				scope.setReflectionResolution( targetRes );
+				window._waterReflStats.res = _currentRTSize;
+
 				_lastCamX = cameraWorldPosition.x; _lastCamY = cameraWorldPosition.y; _lastCamZ = cameraWorldPosition.z;
 				_lastLookX = lookAtPosition.x; _lastLookY = lookAtPosition.y; _lastLookZ = lookAtPosition.z;
 
@@ -393,15 +471,14 @@
 				mirrorCamera.up.applyMatrix4( rotationMatrix );
 				mirrorCamera.up.reflect( normal );
 				mirrorCamera.lookAt( target );
-				mirrorCamera.far = Math.min( camera.far, 420.0 ); // Used in WebGLBackground
+				mirrorCamera.far = Math.min( camera.far, ( gov && gov.reflFar ) ? gov.reflFar : 360.0 );
 
 				mirrorCamera.updateMatrixWorld();
-				mirrorCamera.projectionMatrix.copy( camera.projectionMatrix ); // Update the texture matrix
+				mirrorCamera.projectionMatrix.copy( camera.projectionMatrix );
 
 				textureMatrix.set( 0.5, 0.0, 0.0, 0.5, 0.0, 0.5, 0.0, 0.5, 0.0, 0.0, 0.5, 0.5, 0.0, 0.0, 0.0, 1.0 );
 				textureMatrix.multiply( mirrorCamera.projectionMatrix );
-				textureMatrix.multiply( mirrorCamera.matrixWorldInverse ); // Now update projection matrix with new clip plane, implementing code from: http://www.terathon.com/code/oblique.html
-				// Paper explaining this technique: http://www.terathon.com/lengyel/Lengyel-Oblique.pdf
+				textureMatrix.multiply( mirrorCamera.matrixWorldInverse );
 
 				mirrorPlane.setFromNormalAndCoplanarPoint( normal, mirrorWorldPosition );
 				mirrorPlane.applyMatrix4( mirrorCamera.matrixWorldInverse );
@@ -410,42 +487,39 @@
 				q.x = ( Math.sign( clipPlane.x ) + projectionMatrix.elements[ 8 ] ) / projectionMatrix.elements[ 0 ];
 				q.y = ( Math.sign( clipPlane.y ) + projectionMatrix.elements[ 9 ] ) / projectionMatrix.elements[ 5 ];
 				q.z = - 1.0;
-				q.w = ( 1.0 + projectionMatrix.elements[ 10 ] ) / projectionMatrix.elements[ 14 ]; // Calculate the scaled plane vector
+				q.w = ( 1.0 + projectionMatrix.elements[ 10 ] ) / projectionMatrix.elements[ 14 ];
 
-				clipPlane.multiplyScalar( 2.0 / clipPlane.dot( q ) ); // Replacing the third row of the projection matrix
+				clipPlane.multiplyScalar( 2.0 / clipPlane.dot( q ) );
 
 				projectionMatrix.elements[ 2 ] = clipPlane.x;
 				projectionMatrix.elements[ 6 ] = clipPlane.y;
 				projectionMatrix.elements[ 10 ] = clipPlane.z + 1.0 - clipBias;
 				projectionMatrix.elements[ 14 ] = clipPlane.w;
-				eye.setFromMatrixPosition( camera.matrixWorld ); // Render
+				eye.setFromMatrixPosition( camera.matrixWorld );
 
 				const currentRenderTarget = renderer.getRenderTarget();
 				const currentXrEnabled = renderer.xr.enabled;
 				const currentShadowAutoUpdate = renderer.shadowMap.autoUpdate;
 				scope.visible = false;
-				renderer.xr.enabled = false; // Avoid camera modification and recursion
-
-				renderer.shadowMap.autoUpdate = false; // Avoid re-computing shadows
+				renderer.xr.enabled = false;
+				renderer.shadowMap.autoUpdate = false;
 
 				renderer.setRenderTarget( renderTarget );
-				renderer.state.buffers.depth.setMask( true ); // make sure the depth buffer is writable so it can be properly cleared, see #18897
+				renderer.state.buffers.depth.setMask( true );
 
 				if ( renderer.autoClear === false ) renderer.clear();
 				renderer.render( scene, mirrorCamera );
+				window._waterReflStats.rendered = true;
+				window._waterReflStats.reason = 'active';
 				scope.visible = true;
 				renderer.xr.enabled = currentXrEnabled;
 				renderer.shadowMap.autoUpdate = currentShadowAutoUpdate;
-				renderer.setRenderTarget( currentRenderTarget ); // Restore viewport
+				renderer.setRenderTarget( currentRenderTarget );
 
 				const viewport = camera.viewport;
-
 				if ( viewport !== undefined ) {
-
 					renderer.state.viewport( viewport );
-
 				}
-
 			};
 
 		}

@@ -1324,26 +1324,73 @@
     }
   }
 
-  // --- 5E. MOUNT CALDERA VOLCANO CRATER, 3D FBM CRUSTED MAGMA SHADER & OBSIDIAN NODES (X: 68, Z: -144) ---
+  // --- 5E. MOUNT CALDERA VOLCANO CRATER, WALL-TO-WALL MAGMA CAULDRON, PLUMES & OBSIDIAN NODES ---
   function buildVolcanicCalderaBiome() {
-    const vx = 68.0, vz = -144.0;
-    const craterY = getTerrainHeight(vx, vz);
+    const mc = window.MOUNT_CALDERA || {
+      x: -124.0, z: 224.0, baseR: 96.0, rimR: 24.5, poolEdgeR: 18.8, rimY: 102.0, floorY: 81.0, lavaY: 86.5
+    };
+    const vx = mc.x, vz = mc.z;
+    const lavaY = mc.lavaY || 86.5;
 
-    const lavaGeo = new THREE.CircleGeometry(10.8, 48);
-    lavaGeo.rotateX(-Math.PI / 2);
+    // Build subdivided concentric radial magma disc (12 radial rings x 64 angular segments)
+    // Radius = 21.0m embeds cleanly 2m+ into the 16.4–17.4m sloped basalt cauldron wall around 360° -> zero gaps!
+    function createRadialMagmaGeometry(radius, rings, segs) {
+      const positions = [0, 0, 0];
+      const uvs = [0.5, 0.5];
+      const indices = [];
+      for (let r = 1; r <= rings; r++) {
+        const rad = (r / rings) * radius;
+        for (let s = 0; s <= segs; s++) {
+          const ang = (s / segs) * Math.PI * 2.0;
+          const x = Math.cos(ang) * rad;
+          const z = Math.sin(ang) * rad;
+          positions.push(x, 0, z);
+          uvs.push(0.5 + (x / (radius * 2.0)), 0.5 + (z / (radius * 2.0)));
+        }
+      }
+      const ringStride = segs + 1;
+      // Inner fan around center vertex 0
+      for (let s = 0; s < segs; s++) {
+        indices.push(0, 1 + s + 1, 1 + s);
+      }
+      // Outer concentric quad rings
+      for (let r = 1; r < rings; r++) {
+        const rowA = 1 + (r - 1) * ringStride;
+        const rowB = 1 + r * ringStride;
+        for (let s = 0; s < segs; s++) {
+          const a = rowA + s, b = rowA + s + 1;
+          const c = rowB + s, d = rowB + s + 1;
+          indices.push(a, b, c, b, d, c);
+        }
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+      geo.setIndex(indices);
+      geo.computeVertexNormals();
+      return geo;
+    }
+
+    const lavaGeo = createRadialMagmaGeometry(21.0, 12, 64);
     const lavaShaderMat = new THREE.ShaderMaterial({
       uniforms: {
-        uTime: window.fireShaderTime || { value: 0.0 }
+        uTime: window.fireShaderTime || { value: 0.0 },
+        uCalderaCenter: { value: new THREE.Vector2(vx, vz) },
+        uPoolEdgeR: { value: mc.poolEdgeR || 18.0 }
       },
       vertexShader: `
         uniform float uTime;
         varying vec2 vUv;
         varying vec3 vWorldPos;
+        varying float vRad;
         void main() {
           vUv = uv;
           vec3 pos = position;
-          // Convective magma swell
-          float swell = sin(pos.x * 0.45 + uTime * 1.6) * cos(pos.z * 0.45 - uTime * 1.3) * 0.18;
+          float rad = length(pos.xz);
+          vRad = rad;
+          float rimDamp = 1.0 - smoothstep(13.0, 20.5, rad);
+          float swell = (sin(pos.x * 0.34 + uTime * 1.45) * cos(pos.z * 0.34 - uTime * 1.15) * 0.28
+                      + sin(rad * 0.65 - uTime * 2.1) * 0.12) * rimDamp;
           pos.y += swell;
           vec4 wp = modelMatrix * vec4(pos, 1.0);
           vWorldPos = wp.xyz;
@@ -1352,8 +1399,11 @@
       `,
       fragmentShader: `
         uniform float uTime;
+        uniform vec2 uCalderaCenter;
+        uniform float uPoolEdgeR;
         varying vec2 vUv;
         varying vec3 vWorldPos;
+        varying float vRad;
         float hash21(vec2 p) {
           p = fract(p * vec2(234.12, 789.45));
           p += dot(p, p + 34.56);
@@ -1377,34 +1427,264 @@
           return v;
         }
         void main() {
-          vec2 uv = vWorldPos.xz * 0.22;
-          float n1 = fbmMagma(uv + vec2(uTime * 0.12, -uTime * 0.09));
-          float n2 = fbmMagma(uv * 1.8 - vec2(uTime * 0.16, uTime * 0.14));
-          float magma = smoothstep(0.32, 0.78, n1 * 0.62 + n2 * 0.38);
-          // Dark basalt cooling crust islands vs incandescent lava fissures
-          vec3 crustCol = vec3(0.09, 0.05, 0.04);
-          vec3 orangeLava = vec3(1.00, 0.26, 0.02);
-          vec3 yellowCore = vec3(1.00, 0.92, 0.42);
-          vec3 col = mix(crustCol, orangeLava, smoothstep(0.22, 0.65, magma));
-          col = mix(col, yellowCore, smoothstep(0.68, 0.95, magma));
-          gl_FragColor = vec4(col * 1.35, 1.0);
+          vec2 relXZ = vWorldPos.xz - uCalderaCenter;
+          vec2 uv = relXZ * 0.16;
+          float warpX = fbmMagma(uv * 0.8 + vec2(uTime * 0.06, 0.0));
+          float warpZ = fbmMagma(uv * 0.8 + vec2(0.0, -uTime * 0.05));
+          vec2 warped = uv + vec2(warpX, warpZ) * 0.65;
+          float n1 = fbmMagma(warped + vec2(uTime * 0.09, -uTime * 0.07));
+          float n2 = fbmMagma(warped * 1.9 - vec2(uTime * 0.13, uTime * 0.11));
+          float rNorm = clamp(length(relXZ) / max(1.0, uPoolEdgeR), 0.0, 1.2);
+          float rimCool = smoothstep(0.62, 1.02, rNorm);
+          float fissures = 1.0 - abs(n1 * 2.0 - 1.0);
+          float magma = smoothstep(0.28, 0.78, mix(n1 * 0.58 + n2 * 0.42, fissures * 0.75, 0.35) - rimCool * 0.24);
+          // Shore ember ring against the dark basalt cauldron wall
+          float wallEmber = smoothstep(0.76, 0.96, rNorm) * (1.0 - smoothstep(0.96, 1.08, rNorm)) * smoothstep(0.35, 0.75, n2);
+          vec3 crustCol = vec3(0.07, 0.04, 0.035);
+          vec3 deepRed  = vec3(0.68, 0.10, 0.01);
+          vec3 orangeLava = vec3(1.00, 0.30, 0.03);
+          vec3 yellowCore = vec3(1.00, 0.94, 0.46);
+          vec3 col = mix(crustCol, deepRed, smoothstep(0.16, 0.38, magma));
+          col = mix(col, orangeLava, smoothstep(0.36, 0.72, magma));
+          col = mix(col, yellowCore, smoothstep(0.74, 0.96, magma));
+          col += orangeLava * wallEmber * 0.85;
+          gl_FragColor = vec4(col * 1.42, 1.0);
         }
       `
     });
     const lavaPool = new THREE.Mesh(lavaGeo, lavaShaderMat);
-    lavaPool.position.set(vx, craterY + 1.4, vz);
+    lavaPool.position.set(vx, lavaY, vz);
     worldLandmarksGroup.add(lavaPool);
 
-    const calderaLight = new THREE.PointLight(0xff4500, 3.4, 58.0);
-    calderaLight.position.set(vx, craterY + 6.5, vz);
+    const calderaLight = new THREE.PointLight(0xff4d0a, 3.8, 72.0);
+    calderaLight.position.set(vx, lavaY + 9.5, vz);
     worldLandmarksGroup.add(calderaLight);
-    registerManagedLight(calderaLight, 68.0);
+    registerManagedLight(calderaLight, 78.0);
+
+    // Jagged Basalt & Obsidian Crater Rim Monoliths (clear of NE Overlook Saddle at -0.62 rad)
+    const rimAngs = [0.25, 1.15, 2.05, 3.05, 4.05, 4.95];
+    rimAngs.forEach((ra, rIdx) => {
+      const rx = vx + Math.cos(ra) * 25.4;
+      const rz = vz + Math.sin(ra) * 25.4;
+      const ry = getTerrainHeight(rx, rz);
+      const spire = new THREE.Mesh(
+        new THREE.ConeGeometry(1.8 + (rIdx % 2) * 0.65, 5.2 + (rIdx % 3) * 1.6, 5),
+        matObsidianGlass
+      );
+      spire.position.set(rx, ry + 1.4, rz);
+      spire.rotation.set((rIdx % 2 === 0 ? 0.14 : -0.10), ra + 0.4, -0.12);
+      spire.castShadow = true;
+      spire.raycast = () => {};
+      worldLandmarksGroup.add(spire);
+    });
+
+    // --- Volcanic Rising Ash Smoke Column, White Rim Fumarole Steam & Cauldron Embers ---
+    const vfx = window.getCampfireVFXAssets ? window.getCampfireVFXAssets() : null;
+    let updateVolcanoPlumeFn = null;
+    if (vfx && vfx.sharedSmokeTex) {
+      const plumeGroup = new THREE.Group();
+      plumeGroup.position.set(vx, lavaY + 1.5, vz);
+      worldLandmarksGroup.add(plumeGroup);
+
+      // Layer A: Towering Dark Volcanic Ash & Sulfur Smoke Column (26 billboard puffs rising up to +84m above cauldron)
+      const ashPuffs = [];
+      const ashCount = 26;
+      for (let i = 0; i < ashCount; i++) {
+        const aMat = new THREE.SpriteMaterial({
+          map: vfx.sharedSmokeTex,
+          color: 0x3b383d,
+          transparent: true,
+          opacity: 0.0,
+          depthWrite: false
+        });
+        const sp = new THREE.Sprite(aMat);
+        sp.raycast = () => {};
+        plumeGroup.add(sp);
+        ashPuffs.push({
+          sprite: sp,
+          mat: aMat,
+          phase: i / ashCount,
+          speed: 0.055 + (i % 5) * 0.008,
+          angle: (i * 2.39996),
+          radialJitter: 0.25 + (i % 4) * 0.22,
+          rotOff: (i * 1.17) % (Math.PI * 2),
+          rotSpeed: ((i % 2 === 0 ? 1 : -1) * (0.14 + (i % 3) * 0.06))
+        });
+      }
+
+      // Layer B: White Hydrothermal Rim Fumarole Steam Vents (5 fissures around rim crevices x 4 wisps = 20 sprites)
+      const steamGroup = new THREE.Group();
+      worldLandmarksGroup.add(steamGroup);
+      const rimVentAngles = [0.42, 1.48, 2.55, 3.65, 4.78];
+      const steamPuffs = [];
+      rimVentAngles.forEach((va, vIdx) => {
+        const vRad = 22.8 + (vIdx % 2) * 1.0;
+        const svx = vx + Math.cos(va) * vRad;
+        const svz = vz + Math.sin(va) * vRad;
+        const svy = getTerrainHeight(svx, svz) + 0.4;
+        for (let k = 0; k < 4; k++) {
+          const stMat = new THREE.SpriteMaterial({
+            map: vfx.sharedSmokeTex,
+            color: 0xeef4f8,
+            transparent: true,
+            opacity: 0.0,
+            depthWrite: false
+          });
+          const stSp = new THREE.Sprite(stMat);
+          stSp.raycast = () => {};
+          steamGroup.add(stSp);
+          steamPuffs.push({
+            sprite: stSp,
+            mat: stMat,
+            bx: svx, by: svy, bz: svz,
+            phase: (k / 4 + vIdx * 0.19) % 1.0,
+            speed: 0.22 + (k % 3) * 0.04,
+            ang: va + (k - 1.5) * 0.35
+          });
+        }
+      });
+
+      // Layer C: Rising Incandescent Magma Cinders inside cauldron throat (44 sparks)
+      let cinderPoints = null;
+      let cinderPos = null;
+      let cinderData = null;
+      const cinderCount = 44;
+      if (vfx.sharedSparkTex) {
+        const cGeo = new THREE.BufferGeometry();
+        cinderPos = new Float32Array(cinderCount * 3);
+        cinderData = new Array(cinderCount);
+        function initCinder(idx, randAge) {
+          const ang = Math.random() * Math.PI * 2;
+          const rad = Math.sqrt(Math.random()) * 13.5;
+          const maxLife = 1.6 + Math.random() * 1.9;
+          const age = randAge ? Math.random() * maxLife : 0.0;
+          const vy = 4.2 + Math.random() * 4.8;
+          const vxVel = (Math.random() - 0.5) * 1.2;
+          const vzVel = (Math.random() - 0.5) * 1.2;
+          cinderData[idx] = { age, maxLife, vx: vxVel, vy, vz: vzVel, phase: Math.random() * 6.28 };
+          const i3 = idx * 3;
+          cinderPos[i3]     = Math.cos(ang) * rad + vxVel * age;
+          cinderPos[i3 + 1] = 0.5 + vy * age;
+          cinderPos[i3 + 2] = Math.sin(ang) * rad + vzVel * age;
+        }
+        for (let i = 0; i < cinderCount; i++) initCinder(i, true);
+        cGeo.setAttribute('position', new THREE.BufferAttribute(cinderPos, 3));
+        const cMat = new THREE.PointsMaterial({
+          map: vfx.sharedSparkTex,
+          color: 0xffaa33,
+          size: 0.65,
+          transparent: true,
+          opacity: 0.92,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false
+        });
+        cinderPoints = new THREE.Points(cGeo, cMat);
+        cinderPoints.raycast = () => {};
+        plumeGroup.add(cinderPoints);
+        cinderPoints.userData.respawn = initCinder;
+      }
+
+      const _colThroat = new THREE.Color(0x883b1e);
+      const _colAsh    = new THREE.Color(0x343136);
+      const _colHigh   = new THREE.Color(0x6d6a70);
+
+      updateVolcanoPlumeFn = function (dt, timeSec, camPos, windMult, partScale) {
+        if (window._playerInsideCave) {
+          plumeGroup.visible = false;
+          steamGroup.visible = false;
+          return;
+        }
+        const dx = camPos.x - vx, dz = camPos.z - vz;
+        const distSq = dx * dx + dz * dz;
+        // Ash smoke column visible up to 740m across the island; rim steam within 180m; cinders within 115m
+        const showAsh = distSq < 547600.0;
+        plumeGroup.visible = showAsh;
+        if (showAsh) {
+          const farFactor = distSq > 67600.0 ? 0.50 : 1.0; // beyond 260m use half sprites
+          const activeAsh = Math.max(8, Math.round(ashCount * partScale * farFactor));
+          const wDrift = windMult * 18.0;
+          for (let i = 0; i < ashPuffs.length; i++) {
+            const p = ashPuffs[i];
+            if (i >= activeAsh) {
+              p.sprite.visible = false;
+              continue;
+            }
+            p.sprite.visible = true;
+            p.phase = (p.phase + dt * p.speed) % 1.0;
+            const t = p.phase;
+            const riseY = t * 82.0;
+            const spread = 5.0 + Math.pow(t, 1.15) * 14.5;
+            const px = Math.cos(p.angle + t * 2.6 + timeSec * 0.18) * spread * p.radialJitter + t * wDrift;
+            const pz = Math.sin(p.angle + t * 2.3 + timeSec * 0.15) * spread * p.radialJitter - t * wDrift * 0.32;
+            p.sprite.position.set(px, riseY, pz);
+            const sz = 7.8 + Math.pow(t, 0.85) * 24.0;
+            p.sprite.scale.set(sz, sz * 0.88, 1.0);
+            p.mat.rotation = p.rotOff + t * p.rotSpeed * 4.5;
+            if (t < 0.22) {
+              p.mat.color.lerpColors(_colThroat, _colAsh, t / 0.22);
+            } else {
+              p.mat.color.lerpColors(_colAsh, _colHigh, Math.min(1.0, (t - 0.22) / 0.65));
+            }
+            const env = Math.sin(Math.pow(t, 0.62) * Math.PI);
+            p.mat.opacity = env * (0.42 - t * 0.16);
+          }
+
+          if (cinderPoints && cinderPos && cinderData) {
+            const showCinders = distSq < 13225.0; // within 115m
+            cinderPoints.visible = showCinders;
+            if (showCinders) {
+              const activeSparks = Math.max(10, Math.floor(cinderCount * partScale));
+              cinderPoints.geometry.setDrawRange(0, activeSparks);
+              for (let i = 0; i < activeSparks; i++) {
+                const cd = cinderData[i];
+                cd.age += dt;
+                if (cd.age >= cd.maxLife || cinderPos[i * 3 + 1] > 23.0) {
+                  cinderPoints.userData.respawn(i, false);
+                } else {
+                  const i3 = i * 3;
+                  const swirl = Math.cos(timeSec * 2.4 + cd.phase) * 1.4;
+                  cinderPos[i3]     += (cd.vx + swirl + windMult * 0.6) * dt;
+                  cinderPos[i3 + 1] += cd.vy * dt;
+                  cinderPos[i3 + 2] += (cd.vz - swirl * 0.7) * dt;
+                }
+              }
+              cinderPoints.geometry.attributes.position.needsUpdate = true;
+            }
+          }
+        }
+
+        const showSteam = distSq < 32400.0; // within 180m
+        steamGroup.visible = showSteam;
+        if (showSteam) {
+          const activeSteam = Math.max(6, Math.round(steamPuffs.length * partScale));
+          for (let s = 0; s < steamPuffs.length; s++) {
+            const st = steamPuffs[s];
+            if (s >= activeSteam) {
+              st.sprite.visible = false;
+              continue;
+            }
+            st.sprite.visible = true;
+            st.phase = (st.phase + dt * st.speed) % 1.0;
+            const t = st.phase;
+            const sy = st.by + t * 12.5;
+            const sx = st.bx + Math.cos(st.ang) * (t * 2.8) + t * windMult * 2.4;
+            const sz = st.bz + Math.sin(st.ang) * (t * 2.8) - t * windMult * 0.8;
+            st.sprite.position.set(sx, sy, sz);
+            const sc = 1.8 + Math.pow(t, 0.8) * 4.6;
+            st.sprite.scale.set(sc, sc * 0.88, 1.0);
+            st.mat.rotation = st.ang + t * 2.2;
+            st.mat.opacity = Math.sin(t * Math.PI) * 0.34;
+          }
+        }
+      };
+    }
+    window.updateVolcanoPlume = updateVolcanoPlumeFn;
 
     const obsProxyGeo = new THREE.CylinderGeometry(0.75, 0.75, 1.85, 8);
     obsProxyGeo.translate(0, 0.85, 0);
     const obsidianCoords = [
-      // Mount Caldera Volcanic Island
-      [52, -118], [58, -128], [74, -130], [80, -142], [62, -154], [48, -136], [78, -156], [63, -112],
+      // Relocated Mount Caldera Inland Volcano Slopes, Trailhead & Rim Overlook
+      [-78, 276], [-92, 266], [-146, 268], [-168, 226], [-152, 182], [-118, 174], [-92, 186], [-101, 204],
       // Cinder Cone Islet (NE Volcanic Arc)
       [530, -412], [548, -426], [522, -432],
       // Magma Trench Bastion (NE Raft Stronghold)
@@ -2723,8 +3003,8 @@
   function buildRareExpeditionCaches() {
     const cave1 = (window.CAVE_SYSTEMS && window.CAVE_SYSTEMS[1]) ? window.CAVE_SYSTEMS[1] : null;
     const cave2 = (window.CAVE_SYSTEMS && window.CAVE_SYSTEMS[2]) ? window.CAVE_SYSTEMS[2] : null;
-    const cave1Pt = cave1 && cave1.curve ? cave1.curve.getPoint(0.76) : { x: 245, y: 12, z: -26 };
-    const cave2Pt = cave2 && cave2.curve ? cave2.curve.getPoint(0.72) : { x: 46, y: 20, z: -124 };
+    const cave1Pt = cave1 && cave1.getPoint ? cave1.getPoint(0.76) : { x: -165, floorY: 2.0, z: 120 };
+    const cave2Pt = cave2 && cave2.getPoint ? cave2.getPoint(0.72) : { x: -112, floorY: 28.0, z: 242 };
 
     const specs = [
       {
@@ -2751,14 +3031,14 @@
       {
         id: 'karst_miner_cache',
         name: 'Deep Karst Blasting Tin (Subterranean Vault)',
-        x: cave1Pt.x, z: cave1Pt.z, yOverride: cave1Pt.y - 1.15,
+        x: cave1Pt.x, z: cave1Pt.z, yOverride: (cave1Pt.floorY !== undefined ? cave1Pt.floorY : (cave1Pt.y || 2.0)) + 0.05,
         loot: { dynamite: 2, rifleAmmo: 3, flares: 3 },
         desc: 'Recovered Deep Cavern 2 Dynamite Sticks, 3 Rifle Rounds & 3 Flares!'
       },
       {
         id: 'lavatube_hunter_pack',
         name: 'Lava Tube Hunter Field Pack',
-        x: cave2Pt.x, z: cave2Pt.z, yOverride: cave2Pt.y - 1.15,
+        x: cave2Pt.x, z: cave2Pt.z, yOverride: (cave2Pt.floorY !== undefined ? cave2Pt.floorY : (cave2Pt.y || 28.0)) + 0.05,
         loot: { unlock: 'bow', arrows: 8, sinew: 2, pistolAmmo: 2 },
         desc: 'Recovered Recurve Hunting Bow, 8 Feather Arrows & 2 Pistol Rounds!'
       }
@@ -4401,7 +4681,7 @@
       createQuadruped('boar', boarCoords[i][0], boarCoords[i][1]);
       if (i % 2 === 1) await yieldFrame();
     }
-    const wolfCoords = [[38, 82], [62, 74], [-28, 96], [56, -118], [-25, 31]];
+    const wolfCoords = [[38, 82], [62, 74], [-28, 96], [-94, 178], [-25, 31]];
     for (let i = 0; i < wolfCoords.length; i++) {
       createQuadruped('wolf', wolfCoords[i][0], wolfCoords[i][1]);
       await yieldFrame();
@@ -7359,8 +7639,8 @@
     const NEW_WAYPOINTS = {
       crash:            { x: -16.0,  z: -40.0,  yaw: -0.25, pitch: -0.05, dive: false, label: '✈️ Teleported to Flight 409 Seaplane Crash Cove!' },
       outpost:          { x: 46.0,   z: 88.0,   yaw: -0.45, pitch: 0.05,  dive: false, label: '📡 Teleported to Abandoned Radio Outpost & Weather Station!' },
-      volcano:          { x: 58.0,   z: -124.0, yaw: -0.35, pitch: 0.08,  dive: false, label: '🌋 Teleported to Mount Caldera Volcano & Obsidian Ridge!' },
-      lavatube:         { x: 43.0,   z: -106.0, yaw: -2.75, pitch: -0.04, dive: false, label: '🔥 Teleported to Volcanic Lava Tube Entrance!' },
+      volcano:          { x: -103.5, z: 209.5, yaw: 2.18, pitch: -0.34, dive: false, label: '🌋 Teleported to Mount Caldera Crater Rim Overlook (+98m ASL)!' },
+      lavatube:         { x: -65.0,  z: 290.0, yaw: 0.72, pitch: -0.02, dive: false, label: '🔥 Teleported to Volcanic Lava Tube Trailhead!' },
       ruins:            { x: 412.0,  z: 268.0,  yOverride: -2.6, yaw: 1.45, pitch: -0.18, dive: true, label: '🏛️ Submerged into Coral Fan Cay Ruins & Isotope Trench!' },
       bamboo:           { x: -64.0,  z: -24.0,  yaw: 0.65,  pitch: 0.0,   dive: false, label: '🎍 Teleported to Emerald Bamboo Jungle & Mangrove Delta!' },
       valley_pond:      { x: 82.0,   z: 238.0,  yaw: -1.57, pitch: -0.06, dive: false, label: '🌿 Teleported to Windward Valley Pond & Inland River!' },
@@ -7447,8 +7727,8 @@
       },
       {
         title: '10/12 ⛰️ Mount Caldera Crater & Molten Lava Lake',
-        desc: 'Smoking volcanic caldera rim, glowing molten lava pool & Signal Flare Gun in hand.',
-        x: 63.5, z: -128.0, tx: 68.0, tz: -144.0, pitch: -0.18, dive: false, tool: 'flare'
+        desc: 'Towering 102m inland stratovolcano rim overlook, wall-to-wall boiling lava cauldron, rising ash smoke & fumarole steam.',
+        x: -102.5, z: 208.5, tx: -124.0, tz: 224.0, pitch: -0.38, dive: false, tool: 'flare'
       },
       {
         title: '11/12 📡 Abandoned Radio Outpost & 22m Tower',
@@ -8858,10 +9138,13 @@
       }
     }
 
-    if (rainLines.visible) {
+    if (rainLines.visible && !window._playerInsideCave) {
       rainLines.position.set(px, Math.max(0, py - 6.0), pz);
+      const pBudget = (window.AdaptiveGovernor && window.AdaptiveGovernor.particleBudgetScale) ? window.AdaptiveGovernor.particleBudgetScale : 1.0;
+      const activeRainCount = Math.max(180, Math.floor(rainCount * pBudget));
+      rainGeo.setDrawRange(0, activeRainCount * 2);
       const rArr = rainGeo.attributes.position.array;
-      for (let i = 0; i < rainCount; i++) {
+      for (let i = 0; i < activeRainCount; i++) {
         const i6 = i * 6;
         rArr[i6 + 1] -= 26.0 * dt;
         rArr[i6 + 4] -= 26.0 * dt;

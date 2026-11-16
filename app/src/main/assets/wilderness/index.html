@@ -1175,6 +1175,9 @@
 
   <div id="debug-telemetry-pill">
     <div class="dbg-row"><span>FPS / Frame</span><span class="dbg-val"><span id="dbg-fps">60</span> FPS (<span id="dbg-ms">16.6</span>ms)</span></div>
+    <div class="dbg-row"><span>Draws / Tris</span><span class="dbg-val" id="dbg-draws">0 / 0k</span></div>
+    <div class="dbg-row"><span>Water Refl</span><span class="dbg-val" id="dbg-water-refl">288px (1/3)</span></div>
+    <div class="dbg-row"><span>Governor / Chunks</span><span class="dbg-val" id="dbg-gov">Balanced • 0 isl</span></div>
     <div class="dbg-row"><span>Coords</span><span class="dbg-val" id="dbg-pos">0, 18, 0</span></div>
     <div class="dbg-row"><span>Medium</span><span class="dbg-val" id="dbg-depth">Surface (+16.4m)</span></div>
   </div>
@@ -2399,7 +2402,20 @@
       return (f + s) * stepH;
     }
 
-    // 6 Ecologically Distinct Biomes >= 158m Apart Between Centers with 12m FBM-Warped + Moisture/Altitude Transitions
+    // Mount Caldera Inland Stratovolcano Spec (Southern Interior Mountain Ridge: Highest Peak on Map)
+    const MOUNT_CALDERA = {
+      x: -124.0,
+      z: 224.0,
+      baseR: 96.0,
+      rimR: 24.5,
+      poolEdgeR: 18.8,
+      rimY: 102.0,
+      floorY: 81.0,
+      lavaY: 86.5
+    };
+    window.MOUNT_CALDERA = MOUNT_CALDERA;
+
+    // 6 Ecologically Distinct Biomes >= 150m Apart Between Centers with 12m FBM-Warped + Moisture/Altitude Transitions
     const BIOME_SYSTEM = {
       transitionWidth: 12.0,
       centers: [
@@ -2408,7 +2424,7 @@
         { id: 'windward_meadows',     name: '🌾 Windward Valley Meadows',   x: 55.0,   z: 225.0,  moisture: 0.56 },
         { id: 'karst_canyon',         name: '🪨 Stratified Karst Canyon',   x: 168.0,  z: 28.0,   moisture: 0.34 },
         { id: 'bamboo_mangrove',      name: '🎍 Emerald Bamboo Wetlands',   x: -124.0, z: -136.0, moisture: 0.94 },
-        { id: 'caldera_volcano',      name: '🌋 Caldera Volcanic Slopes',   x: 96.0,   z: -144.0, moisture: 0.22 }
+        { id: 'caldera_volcano',      name: '🌋 Mount Caldera Volcano',     x: -124.0, z: 224.0,  moisture: 0.22 }
       ]
     };
     window.BIOME_SYSTEM = BIOME_SYSTEM;
@@ -2427,6 +2443,7 @@
         if (yHint !== null) {
           if (centers[i].id === 'karst_canyon' && yHint > 24.0) d -= 14.0;
           if (centers[i].id === 'windward_meadows' && yHint > 1.5 && yHint < 16.0) d -= 8.0;
+          if (centers[i].id === 'caldera_volcano' && yHint > 52.0) d -= 26.0;
         }
         dists[i] = d;
         if (d < minD) { minD = d; minIdx = i; }
@@ -2458,7 +2475,7 @@
     const archipelagoIslets = [
       // Close Starter Ring (k = 0..4 — pre-populated at boot)
       { x: -52,  z: -120, r: 42, h: 15, name: "Sunken Ruins Atoll", arc: "inner_north" },
-      { x:  68,  z: -144, r: 62, h: 42, isVolcano: true, name: "Mount Caldera Volcano Island", arc: "inner_north" },
+      { x:  68,  z: -144, r: 28, h: 12.5, isBasalt: true, name: "Caldera Cinder Cay", arc: "inner_north" },
       { x: -12,  z: -198, r: 54, h: 18, name: "Outer Sentinel Island", arc: "inner_north" },
       { x: 118,  z: -98,  r: 44, h: 22, name: "Obsidian Spire Islet", arc: "inner_north" },
       { x: -102, z: -142, r: 58, h: 16, isBamboo: true, name: "Emerald Bamboo & Mangrove Island", arc: "inner_north" },
@@ -2897,19 +2914,19 @@
       {
         id: 'caldera_lava_tube',
         name: "🌋 Caldera Obsidian Lava Tube",
-        startX: 46.0, startZ: -112.0,
-        px: 46.0, pz: -112.0,
-        vecX: 70.8, vecZ: -103.0,
-        dirX: 44.0 / Math.hypot(44.0, -64.0),
-        dirZ: -64.0 / Math.hypot(44.0, -64.0),
-        perpX: 64.0 / Math.hypot(44.0, -64.0),
-        perpZ: 44.0 / Math.hypot(44.0, -64.0),
-        swayAmp: 9.0, swayFreq: 2.0,
-        wiggle1: 7.5, wiggle2: 2.5,
-        baseY: 3.2, drop: -1.6,
+        startX: -72.0, startZ: 282.0,
+        px: -72.0, pz: 282.0,
+        vecX: -124.0, vecZ: 224.0,
+        dirX: -52.0 / Math.hypot(-52.0, -58.0),
+        dirZ: -58.0 / Math.hypot(-52.0, -58.0),
+        perpX: 58.0 / Math.hypot(-52.0, -58.0),
+        perpZ: -52.0 / Math.hypot(-52.0, -58.0),
+        swayAmp: 8.5, swayFreq: 2.0,
+        wiggle1: 6.5, wiggle2: 2.2,
+        baseY: 27.0, drop: -1.8,
         hasCenote: false,
         isLavaTube: true,
-        length: 125.0,
+        length: 115.0,
         getPoint(s) {
           const distM = s * this.length;
           const sC = Math.max(0.0, s);
@@ -3422,6 +3439,58 @@
           const barW = (1.0 - smoothstep(12.0, 28.0, barZDist)) * smoothstep(-338.0, -320.0, x) * (1.0 - smoothstep(-272.0, -250.0, x));
           const calmSandbarY = -1.35 + fbm2(x * 0.04, z * 0.04, 2) * 0.25;
           y = Math.max(y, y * (1.0 - barW) + calmSandbarY * barW);
+        }
+      }
+
+      // Inland Mount Caldera Stratovolcano Massif (Southern Interior Mountain Ridge: -124, 224, Peak ~102–107m ASL)
+      const vcDx = x - MOUNT_CALDERA.x;
+      const vcDz = z - MOUNT_CALDERA.z;
+      const vcDist = Math.hypot(vcDx, vcDz);
+      if (vcDist < MOUNT_CALDERA.baseR + 10.0) {
+        const ang = Math.atan2(vcDz, vcDx);
+        const coneT = Math.max(0.0, Math.min(1.0, (vcDist - MOUNT_CALDERA.rimR) / (MOUNT_CALDERA.baseR - MOUNT_CALDERA.rimR)));
+        const profile = Math.pow(1.0 - coneT, 1.48);
+
+        // Radial basalt lava ribs & stratified ash shoulders (zero ribs inside cauldron)
+        const outerMask = smoothstep(0.02, 0.24, coneT) * (1.0 - smoothstep(0.76, 1.0, coneT));
+        const ribWave = Math.sin(ang * 7.0 + fbm2(Math.cos(ang) * 2.2, Math.sin(ang) * 2.2, 2) * 1.55) * 0.5 + 0.5;
+        const ribs = (ribWave * 3.6 + ridged2(x * 0.032 + 1.4, z * 0.032 - 2.1, 2) * 3.2 + fbm2(x * 0.018, z * 0.018, 2) * 2.2) * outerMask;
+
+        // Jagged volcanic crater rim crest (~102..107m ASL) + NE Caldera Overlook Notch (-0.62 rad -> ~97.8m ASL)
+        const rimBelt = Math.exp(-Math.pow(coneT / 0.14, 2.0));
+        const rimJagged = (Math.sin(ang * 5.0 + 0.7) * 2.0 + Math.cos(ang * 9.0 - 1.2) * 1.2 + ridged2(Math.cos(ang) * 2.1, Math.sin(ang) * 2.1, 2) * 1.6) * rimBelt;
+        const dAngOverlook = Math.atan2(Math.sin(ang - (-0.62)), Math.cos(ang - (-0.62)));
+        const overlookDip = Math.exp(-Math.pow(dAngOverlook / 0.34, 2.0)) * 4.2 * Math.exp(-Math.pow(coneT / 0.22, 2.0));
+
+        const rimCrestY = MOUNT_CALDERA.rimY + rimJagged - overlookDip;
+        let volcH = 24.0 + profile * (MOUNT_CALDERA.rimY - 24.0) + ribs + rimJagged - overlookDip;
+
+        // Walkable spiraling ash trail ascending from SE Lava Tube trailhead (-72, 282) around S->W->N to NE Overlook (-0.62 rad)
+        if (vcDist >= MOUNT_CALDERA.rimR - 1.0 && vcDist <= 84.0) {
+          let uAng = ang - 0.84;
+          if (uAng < 0.0) uAng += Math.PI * 2.0;
+          const totalSweep = 4.823; // 0.84 -> +5.663 (= -0.62 rad)
+          if (uAng <= totalSweep + 0.28) {
+            const sTrail = Math.max(0.0, Math.min(1.0, uAng / totalSweep));
+            const rTrail = 78.0 - sTrail * (78.0 - 25.0);
+            const rDiff = Math.abs(vcDist - rTrail);
+            if (rDiff < 5.8) {
+              const trailBlend = (1.0 - smoothstep(2.1, 5.8, rDiff)) * smoothstep(0.0, 0.06, sTrail) * (1.0 - smoothstep(0.95, 1.0, sTrail) * 0.25);
+              const trailTargetY = 27.5 + sTrail * 70.3;
+              volcH = volcH * (1.0 - trailBlend * 0.88) + trailTargetY * (trailBlend * 0.88);
+            }
+          }
+        }
+
+        const skirtW = smoothstep(MOUNT_CALDERA.baseR + 8.0, MOUNT_CALDERA.baseR - 20.0, vcDist);
+        y = y * (1.0 - skirtW) + Math.max(y, volcH) * skirtW;
+
+        // Concave Volcanic Cauldron Bowl inside rimR = 24.5m dropping cleanly down to recessed 81m floor (86.5m lava level)
+        if (vcDist < MOUNT_CALDERA.rimR) {
+          const wallSpan = Math.max(0.01, (vcDist - 10.0) / (MOUNT_CALDERA.rimR - 10.0));
+          const bowlFrac = vcDist <= 10.0 ? 0.0 : Math.pow(wallSpan, 1.65);
+          const bowlTargetY = MOUNT_CALDERA.floorY + (rimCrestY - MOUNT_CALDERA.floorY) * bowlFrac;
+          y = bowlTargetY;
         }
       }
 
@@ -4061,7 +4130,8 @@
         float bElder = 1.0 - smoothstep(45.0, 135.0, length(vWorldPos.xz - vec2(-165.0, 72.0)));
         float bMeadow = 1.0 - smoothstep(45.0, 145.0, length(vWorldPos.xz - vec2(55.0, 225.0)));
         float bKarst = 1.0 - smoothstep(40.0, 125.0, length(vWorldPos.xz - vec2(168.0, 28.0)));
-        float bCaldera = 1.0 - smoothstep(35.0, 115.0, length(vWorldPos.xz - vec2(96.0, -144.0)));
+        float calderaDist = length(vWorldPos.xz - vec2(-124.0, 224.0));
+        float bCaldera = 1.0 - smoothstep(42.0, 118.0, calderaDist);
 
         // Rich multi-frequency biome color variation
         float macroNoise = sin(vWorldPos.x * 0.035 + 0.5) * cos(vWorldPos.z * 0.032) * 0.5
@@ -4088,13 +4158,25 @@
         vec3 limestoneBand = mix(vec3(0.62, 0.54, 0.44), vec3(0.36, 0.33, 0.31), strataWave * 0.7 + strataFine * 0.3);
         float strataMix = clamp(bKarst * 0.78 + smoothstep(3.0, 28.0, elev) * 0.42, 0.0, 0.85);
         vec3 cliffSurface = mix(cliffCol.rgb, cliffCol.rgb * limestoneBand * 1.65, strataMix);
-        cliffSurface = mix(cliffSurface, cliffCol.rgb * vec3(0.46, 0.42, 0.40), bCaldera * 0.65);
+        cliffSurface = mix(cliffSurface, cliffCol.rgb * vec3(0.38, 0.34, 0.33), bCaldera * 0.78);
 
         float seepStreak = pow(clamp(sin(vWorldPos.x * 0.45 + vWorldPos.z * 0.38 + cX.r * 3.0) * 0.5 + 0.5, 0.0, 1.0), 4.0);
         vec3 detailedCliff = cliffSurface * (1.0 - seepStreak * 0.28 * rockBlend);
-        float ledgeMoss = smoothstep(0.56, 0.82, slope + (gMicro.g - 0.45) * 0.35) * rockBlend;
+        float ledgeMoss = smoothstep(0.56, 0.82, slope + (gMicro.g - 0.45) * 0.35) * rockBlend * (1.0 - bCaldera * 0.92);
         detailedCliff = mix(detailedCliff, vec3(0.20, 0.39, 0.15) * (0.8 + 0.4 * gMicro.g), ledgeMoss * 0.65);
         baseTerrain.rgb = mix(baseTerrain.rgb, detailedCliff, rockBlend);
+
+        // Volcanic Basalt Cone, Tephra Ash, Sulfur-Ochre Rim Striations & Inner Cauldron Magma Glow
+        if (bCaldera > 0.01) {
+          float ashBand = smoothstep(38.0, 74.0, elev) * bCaldera;
+          vec3 basaltScoria = mix(vec3(0.17, 0.15, 0.15), vec3(0.27, 0.23, 0.21), sMicro.r) * (0.85 + 0.30 * cX.g);
+          baseTerrain.rgb = mix(baseTerrain.rgb, basaltScoria, ashBand * 0.92);
+          float sulfurRim = smoothstep(82.0, 102.0, elev) * (1.0 - smoothstep(22.0, 42.0, calderaDist));
+          vec3 sulfurStain = mix(vec3(0.32, 0.24, 0.14), vec3(0.46, 0.31, 0.12), macroNoise);
+          baseTerrain.rgb = mix(baseTerrain.rgb, sulfurStain, sulfurRim * 0.42);
+          float magmaGlow = (1.0 - smoothstep(16.0, 26.5, calderaDist)) * (1.0 - smoothstep(85.0, 99.0, elev));
+          baseTerrain.rgb += vec3(0.95, 0.28, 0.04) * magmaGlow * (0.45 + 0.20 * sin(uTime * 2.2 + vWorldPos.x * 0.3));
+        }
 
         // Tree-canopy leaf-litter humus & fallen twig mosaic beneath forest groves
         vec3 forestHumus = mix(vec3(0.22, 0.24, 0.11), vec3(0.34, 0.23, 0.12), sMicro.g) * (0.85 + 0.3 * gMicro.g);
@@ -4147,22 +4229,31 @@
         '#include <normal_fragment_begin>',
         `
         #include <normal_fragment_begin>
-        vec2 gN = (texture2D(uGroundNorm, microUV).xy * 2.0 - 1.0) * 0.95
-                + (texture2D(uGroundNorm, midUV).xy * 2.0 - 1.0) * 0.45;
-        vec2 sN = (texture2D(uSandNorm, microUV * 0.75).xy * 2.0 - 1.0) * 1.05;
-        vec3 topPerturb = mix(vec3(gN.x, 0.0, -gN.y), vec3(sN.x, 0.0, -sN.y), shoreFactor);
+        float camDistTerrain = length(cameraPosition - vWorldPos);
+        float nearNormFade = 1.0 - smoothstep(42.0, 95.0, camDistTerrain);
+        if (nearNormFade > 0.01) {
+          vec2 gN = (texture2D(uGroundNorm, microUV).xy * 2.0 - 1.0) * 0.95;
+          if (camDistTerrain < 48.0) {
+            gN += (texture2D(uGroundNorm, midUV).xy * 2.0 - 1.0) * 0.45;
+          }
+          vec2 sN = (texture2D(uSandNorm, microUV * 0.75).xy * 2.0 - 1.0) * 1.05;
+          vec3 topPerturb = mix(vec3(gN.x, 0.0, -gN.y), vec3(sN.x, 0.0, -sN.y), shoreFactor);
 
-        vec2 cNX = texture2D(uCliffNorm, sideMicro_X).xy * 2.0 - 1.0;
-        vec2 cNZ = texture2D(uCliffNorm, sideMicro_Z).xy * 2.0 - 1.0;
-        vec2 cNY = texture2D(uCliffNorm, microUV * 0.95).xy * 2.0 - 1.0;
-        vec3 rockPerturb = vec3(0.0, -cNX.y, cNX.x) * blendWeights.x
-                         + vec3(cNY.x, 0.0, -cNY.y) * blendWeights.y
-                         + vec3(cNZ.x, -cNZ.y, 0.0) * blendWeights.z;
+          vec3 rockPerturb = vec3(0.0);
+          float rockNormWeight = clamp(rockBlend + channelMask * 0.85, 0.0, 1.0);
+          if (rockNormWeight > 0.02) {
+            vec2 cNX = texture2D(uCliffNorm, sideMicro_X).xy * 2.0 - 1.0;
+            vec2 cNZ = texture2D(uCliffNorm, sideMicro_Z).xy * 2.0 - 1.0;
+            vec2 cNY = (camDistTerrain < 52.0) ? (texture2D(uCliffNorm, microUV * 0.95).xy * 2.0 - 1.0) : vec2(0.0);
+            rockPerturb = vec3(0.0, -cNX.y, cNX.x) * blendWeights.x
+                        + vec3(cNY.x, 0.0, -cNY.y) * blendWeights.y
+                        + vec3(cNZ.x, -cNZ.y, 0.0) * blendWeights.z;
+          }
 
-        float rockNormWeight = clamp(rockBlend + channelMask * 0.85, 0.0, 1.0);
-        vec3 worldPerturb = mix(topPerturb, rockPerturb * 1.35, rockNormWeight);
-        vec3 viewPerturb = (viewMatrix * vec4(worldPerturb, 0.0)).xyz;
-        normal = normalize(normal + viewPerturb * 0.66);
+          vec3 worldPerturb = mix(topPerturb, rockPerturb * 1.35, rockNormWeight);
+          vec3 viewPerturb = (viewMatrix * vec4(worldPerturb, 0.0)).xyz;
+          normal = normalize(normal + viewPerturb * (0.66 * nearNormFade));
+        }
         `
       );
     };
@@ -4222,14 +4313,23 @@
           vec3 rWeights = pow(abs(faceNorm), vec3(3.2));
           rWeights /= max(0.0001, rWeights.x + rWeights.y + rWeights.z);
           float uvScale = (uIsCave > 0.5) ? 0.34 : 0.28;
-          vec4 rX = texture2D(uRockTex, vRockWPos.zy * uvScale);
-          vec4 rY = texture2D(uRockTex, vRockWPos.xz * uvScale);
-          vec4 rZ = texture2D(uRockTex, vRockWPos.xy * uvScale);
-          vec3 triRock = (rX.rgb * rWeights.x + rY.rgb * rWeights.y + rZ.rgb * rWeights.z);
+          float rockCamDist = length(cameraPosition - vRockWPos);
+          vec3 triRock;
+          if (rockCamDist < 58.0 || uIsCave > 0.5) {
+            vec4 rX = texture2D(uRockTex, vRockWPos.zy * uvScale);
+            vec4 rY = texture2D(uRockTex, vRockWPos.xz * uvScale);
+            vec4 rZ = texture2D(uRockTex, vRockWPos.xy * uvScale);
+            triRock = (rX.rgb * rWeights.x + rY.rgb * rWeights.y + rZ.rgb * rWeights.z);
+          } else {
+            // Distance-simplified single planar rock fetch beyond 58m
+            triRock = texture2D(uRockTex, (vRockWPos.xz + vec2(vRockWPos.y * 0.5)) * uvScale).rgb;
+          }
 
           float strataBand = sin(vRockWPos.y * 4.8 + triRock.r * 5.5) * 0.5 + 0.5;
           vec3 baseStone = mix(triRock * vec3(0.62, 0.65, 0.68), triRock * vec3(0.94, 0.92, 0.88), strataBand);
-          vec3 mossSample = texture2D(uMossTex, vRockWPos.xz * 0.45).rgb * vec3(0.68, 1.05, 0.58);
+          vec3 mossSample = (rockCamDist < 65.0)
+            ? texture2D(uMossTex, vRockWPos.xz * 0.45).rgb * vec3(0.68, 1.05, 0.58)
+            : vec3(0.32, 0.48, 0.24);
 
           if (uIsCave > 0.5) {
             // Varied eroded karst limestone, dark damp basalt, calcite flowstone bands & wet seepage stains
@@ -5747,35 +5847,75 @@
         if (baseLeafMat.map) window.applyMaxAnisotropy(baseLeafMat.map);
       }
 
-      // Bake 3D Spherical Canopy Ambient Occlusion into leafGeo vertex colors (0 FPS cost, lush 3D crown depth)
-      if (leafGeo && leafGeo.attributes && leafGeo.attributes.position && !leafGeo.attributes.color) {
-        leafGeo.computeBoundingBox();
-        const bb = leafGeo.boundingBox;
-        const cx = (bb.min.x + bb.max.x) * 0.5;
-        const cy = bb.min.y + (bb.max.y - bb.min.y) * 0.42;
-        const cz = (bb.min.z + bb.max.z) * 0.5;
-        const maxR = Math.max(1.0, Math.hypot(bb.max.x - cx, bb.max.y - cy, bb.max.z - cz));
-        const posAttr = leafGeo.attributes.position;
-        const colArr = new Float32Array(posAttr.count * 3);
-        for (let i = 0; i < posAttr.count; i++) {
-          const lx = posAttr.getX(i) - cx;
-          const ly = posAttr.getY(i) - cy;
-          const lz = posAttr.getZ(i) - cz;
-          const radialRatio = Math.min(1.0, Math.hypot(lx, ly, lz) / (maxR * 0.78));
-          const heightRatio = Math.max(0.0, Math.min(1.0, (posAttr.getY(i) - bb.min.y) / Math.max(1.0, bb.max.y - bb.min.y)));
-          // Deep interior foliage self-shadowing (0.62) -> bright sunlit outer crown tips (1.06)
-          const ao = 0.62 + 0.44 * (radialRatio * 0.65 + heightRatio * 0.35);
-          colArr[i * 3]     = ao * 0.96;
-          colArr[i * 3 + 1] = ao * 1.02;
-          colArr[i * 3 + 2] = ao * 0.92;
+      const bakeCanopyVertexAO = function(targetLeafGeo) {
+        if (targetLeafGeo && targetLeafGeo.attributes && targetLeafGeo.attributes.position && !targetLeafGeo.attributes.color) {
+          targetLeafGeo.computeBoundingBox();
+          const bb = targetLeafGeo.boundingBox;
+          const cx = (bb.min.x + bb.max.x) * 0.5;
+          const cy = bb.min.y + (bb.max.y - bb.min.y) * 0.42;
+          const cz = (bb.min.z + bb.max.z) * 0.5;
+          const maxR = Math.max(1.0, Math.hypot(bb.max.x - cx, bb.max.y - cy, bb.max.z - cz));
+          const posAttr = targetLeafGeo.attributes.position;
+          const colArr = new Float32Array(posAttr.count * 3);
+          for (let i = 0; i < posAttr.count; i++) {
+            const lx = posAttr.getX(i) - cx;
+            const ly = posAttr.getY(i) - cy;
+            const lz = posAttr.getZ(i) - cz;
+            const radialRatio = Math.min(1.0, Math.hypot(lx, ly, lz) / (maxR * 0.78));
+            const heightRatio = Math.max(0.0, Math.min(1.0, (posAttr.getY(i) - bb.min.y) / Math.max(1.0, bb.max.y - bb.min.y)));
+            // Deep interior foliage self-shadowing (0.62) -> bright sunlit outer crown tips (1.06)
+            const ao = 0.62 + 0.44 * (radialRatio * 0.65 + heightRatio * 0.35);
+            colArr[i * 3]     = ao * 0.96;
+            colArr[i * 3 + 1] = ao * 1.02;
+            colArr[i * 3 + 2] = ao * 0.92;
+          }
+          targetLeafGeo.setAttribute('color', new THREE.BufferAttribute(colArr, 3));
         }
-        leafGeo.setAttribute('color', new THREE.BufferAttribute(colArr, 3));
-      }
+      };
+
+      // Bake 3D Spherical Canopy Ambient Occlusion into leafGeo vertex colors (0 FPS cost, lush 3D crown depth)
+      bakeCanopyVertexAO(leafGeo);
       branchGeo.computeBoundingSphere();
       leafGeo.computeBoundingSphere();
 
       // Create 3 shared tropical canopy tint material variants per preset with baked vertexColors AO & fast harmonic wind shader
       const baseHex = (id === 'pine') ? 0x2e7d32 : (id === 'aspen' ? 0x7cb342 : (id === 'bush' ? 0x558b2f : 0x43a047));
+      // Build a clean static MeshPhongMaterial for LOD1 instanced leaves (no non-instanced ez-tree wind onBeforeCompile!)
+      const lod1Col = new THREE.Color(baseHex);
+      lod1Col.offsetHSL(0.0, 0.02, 0.01);
+      const lod1LeafMat = new THREE.MeshPhongMaterial({
+        name: 'leaves_lod1',
+        map: baseLeafMat.map,
+        color: lod1Col,
+        side: THREE.DoubleSide,
+        alphaTest: baseLeafMat.alphaTest || 0.35,
+        vertexColors: true,
+        dithering: true
+      });
+
+      let lod1BranchGeo = branchGeo;
+      let lod1LeafGeo = leafGeo;
+      if (id !== 'bush') {
+        const lodTree = new ezTreeModule.Tree();
+        lodTree.loadPreset(presetName);
+        if (lodTree.options && lodTree.options.branch) {
+          const lb = lodTree.options.branch;
+          lb.sections = { 0: 5, 1: 3, 2: 2, 3: 1 };
+          lb.segments = { 0: 4, 1: 3, 2: 3, 3: 3 };
+        }
+        if (lodTree.options && lodTree.options.leaves) {
+          // Maintain full leafy volume at ~50% fewer leaf cards by boosting card scale 1.42x
+          lodTree.options.leaves.count = Math.max(4, Math.round((lodTree.options.leaves.count || 12) * 0.50));
+          lodTree.options.leaves.size = (lodTree.options.leaves.size || 2.0) * 1.42;
+        }
+        lodTree.generate();
+        lod1BranchGeo = lodTree.branchesMesh.geometry;
+        lod1LeafGeo = lodTree.leavesMesh.geometry;
+        bakeCanopyVertexAO(lod1LeafGeo);
+        lod1BranchGeo.computeBoundingSphere();
+        lod1LeafGeo.computeBoundingSphere();
+      }
+
       const hslOffsets = [
         [-0.022,  0.05, -0.04],
         [ 0.000,  0.02,  0.01],
@@ -5824,7 +5964,10 @@
         branchGeo,
         branchMat,
         leafGeo,
-        leafMats
+        leafMats,
+        lod1BranchGeo,
+        lod1LeafGeo,
+        lod1LeafMat
       };
       ezTreePrototypeCache[presetName] = entry;
       window.ezTreePrototypes.push(entry);
@@ -5889,8 +6032,8 @@
       tree.position.set(x, y, z);
       tree.rotation.y = hashTreeSeed(x * 1.3, z * 1.7) * Math.PI * 2;
       tree.userData = isBush
-        ? { type: 'bush', id: 'bush', baseScale: s }
-        : { type: 'tree', id, health, baseScale: s };
+        ? { type: 'bush', id: 'bush', presetName, baseScale: s }
+        : { type: 'tree', id, presetName, health, baseScale: s };
 
       if (!isBush) {
         attachFastTreeRaycastProxy(tree);
@@ -5905,9 +6048,79 @@
       if (trackGlobals) {
         activeEZTrees.push(tree);
         treeFootprints.push({ x, z, r: footprintRad });
+        if (!isBush && window.treeImpostorSystem) {
+          window.treeImpostorSystem.registerTree(tree, presetName, proto);
+        }
       }
       return tree;
     }
+
+    // --- PRESET-BATCHED GPU-INSTANCED EZ-TREE LOD1 SYSTEM (Exact EZ-Tree Silhouette, Bark & Foliage Cards beyond ~68m) ---
+    window.treeImpostorSystem = (function() {
+      const MAX_PER_PRESET = 260;
+      const zeroMat = new THREE.Matrix4().makeScale(0, 0, 0);
+      const batches = new Map();
+
+      function getOrCreateBatch(presetName, proto) {
+        if (batches.has(presetName)) return batches.get(presetName);
+        const branchInst = new THREE.InstancedMesh(proto.lod1BranchGeo, proto.branchMat, MAX_PER_PRESET);
+        const leafInst = new THREE.InstancedMesh(proto.lod1LeafGeo, proto.lod1LeafMat, MAX_PER_PRESET);
+        branchInst.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        leafInst.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        branchInst.castShadow = false;
+        branchInst.receiveShadow = false;
+        leafInst.castShadow = false;
+        leafInst.receiveShadow = false;
+        branchInst.frustumCulled = false;
+        leafInst.frustumCulled = false;
+        // Skip planar water reflection for distant alpha-tested leaves while keeping Layer 1 enabled on main camera
+        leafInst.layers.set(1);
+
+        for (let i = 0; i < MAX_PER_PRESET; i++) {
+          branchInst.setMatrixAt(i, zeroMat);
+          leafInst.setMatrixAt(i, zeroMat);
+        }
+        branchInst.count = 0;
+        leafInst.count = 0;
+        scene.add(branchInst);
+        scene.add(leafInst);
+
+        const batch = { branchInst, leafInst, count: 0 };
+        batches.set(presetName, batch);
+        return batch;
+      }
+
+      return {
+        batches,
+        registerTree(tree, presetName, proto) {
+          if (!proto || !proto.lod1BranchGeo || !proto.lod1LeafGeo) return;
+          const batch = getOrCreateBatch(presetName, proto);
+          if (batch.count >= MAX_PER_PRESET) return;
+          const slot = batch.count++;
+          batch.branchInst.setMatrixAt(slot, zeroMat);
+          batch.leafInst.setMatrixAt(slot, zeroMat);
+          batch.branchInst.count = batch.count;
+          batch.leafInst.count = batch.count;
+
+          tree.userData.impostorBatch = batch;
+          tree.userData.impostorSlot = slot;
+          tree.userData.impostorMat = tree.matrixWorld.clone();
+          tree.userData.isImpostorActive = false;
+        },
+        setImpostorActive(tree, active) {
+          if (!tree || !tree.userData || !tree.userData.impostorBatch) return;
+          if (tree.userData.isImpostorActive === active) return;
+          tree.userData.isImpostorActive = active;
+          const batch = tree.userData.impostorBatch;
+          const slot = tree.userData.impostorSlot;
+          const m = active ? tree.userData.impostorMat : zeroMat;
+          batch.branchInst.setMatrixAt(slot, m);
+          batch.leafInst.setMatrixAt(slot, m);
+          batch.branchInst.instanceMatrix.needsUpdate = true;
+          batch.leafInst.instanceMatrix.needsUpdate = true;
+        }
+      };
+    })();
 
     // 1. EZ-Tree Coastal Pine (multi-age tropical canopy: 3.5m saplings to 24m coastal pines)
     function spawnEZPine(x, z, scale = 1.0) {
@@ -5949,16 +6162,10 @@
       return spawnPooledEZTree(presetName, 'ash', x, z, s, y, 4, Math.max(4.8, s * 28.0), false);
     }
 
-    // 5. AAA Triplanar-Textured Mossy & Wet-Sheen Basalt Boulders
-    function createGraniteBoulder(radius = 1.8) {
-      if (!sharedBoulderMat) {
-        sharedBoulderMat = applyAAARockShader(new THREE.MeshStandardMaterial({
-          color: 0xd8dcd8,
-          roughness: 0.84,
-          metalness: 0.05
-        }));
-      }
-      const geo = new THREE.SphereGeometry(radius, 22, 16);
+    // 5. AAA Triplanar-Textured Mossy & Wet-Sheen Basalt Boulders (with 2-Tier Geometric LOD)
+    window.activeBoulders = window.activeBoulders || [];
+    function buildCraggyBoulderGeometry(radius, segW, segH) {
+      const geo = new THREE.SphereGeometry(radius, segW, segH);
       const p = geo.attributes.position;
       for (let i = 0; i < p.count; i++) {
         const x = p.getX(i);
@@ -5968,14 +6175,29 @@
         const crag = fbm2(nx * 2.1 + nz * 1.4, ny * 2.3 - nx * 0.9, 2) * 0.16
                    + ridged2(nx * 2.8 - ny * 1.2, nz * 2.8 + ny * 1.5, 2) * 0.11;
         const scale = 0.88 + crag;
-        // Flatten bottom slightly so boulders sit naturally embedded in soil/streambed
         const flatBottom = ny < -0.35 ? (1.0 - (-0.35 - ny) * 0.35) : 1.0;
         p.setXYZ(i, x * scale * 1.24, y * scale * 0.74 * flatBottom, z * scale * 1.08);
       }
       geo.computeVertexNormals();
-      const rock = new THREE.Mesh(geo, sharedBoulderMat);
+      return geo;
+    }
+    function createGraniteBoulder(radius = 1.8) {
+      if (!sharedBoulderMat) {
+        sharedBoulderMat = applyAAARockShader(new THREE.MeshStandardMaterial({
+          color: 0xd8dcd8,
+          roughness: 0.84,
+          metalness: 0.05
+        }));
+      }
+      const highGeo = buildCraggyBoulderGeometry(radius, 22, 16);
+      const lowGeo = buildCraggyBoulderGeometry(radius, 8, 6);
+      const rock = new THREE.Mesh(highGeo, sharedBoulderMat);
+      rock.userData.highGeo = highGeo;
+      rock.userData.lowGeo = lowGeo;
+      rock.userData.lodLevel = 0;
       rock.castShadow = true;
       rock.receiveShadow = true;
+      window.activeBoulders.push(rock);
       return rock;
     }
 
@@ -6876,7 +7098,19 @@
           && Math.abs(getTerrainHeight(x, z + 1.5) - h) < maxDelta;
     }
 
+    function isInsideVolcanoExclusion(x, z, extraR = 0.0) {
+      if (typeof MOUNT_CALDERA === 'undefined') return false;
+      const d = Math.hypot(x - MOUNT_CALDERA.x, z - MOUNT_CALDERA.z);
+      if (d < 46.0 + extraR) return true;
+      if (d < 90.0 + extraR) {
+        const y = getTerrainHeight(x, z);
+        if (y > 46.0) return true;
+      }
+      return false;
+    }
+
     function isInsideWaterfallChannel(x, z) {
+      if (isInsideVolcanoExclusion(x, z)) return true;
       const caveNav = getCaveNavigationInfo(x, z);
       for (let c = 0; c < CAVE_SYSTEMS.length; c++) {
         const cv = CAVE_SYSTEMS[c];
@@ -7935,11 +8169,12 @@
       rocks: []
     };
 
-    // Shared uniforms for synchronized breeze & sunlit grass translucency
+    // Shared uniforms for synchronized breeze, sunlit grass translucency & distance LOD collapse
     window.grassUniforms = {
       uGrassTime: { value: 0 },
       uGrassWind: { value: 1.0 },
-      uSunDir: { value: sunLight.position.clone().normalize() }
+      uSunDir: { value: sunLight.position.clone().normalize() },
+      uLodBias: { value: 1.0 }
     };
 
     const gltfLoader = new THREE.GLTFLoader();
@@ -8102,16 +8337,18 @@
         side: THREE.DoubleSide
       });
 
-      // Procedural wind wave & sunlit grass tip translucency shader while roots stay firmly planted
+      // Procedural wind wave, sunlit grass tip translucency & distance height-collapse LOD shader
       grassMat.onBeforeCompile = function (shader) {
         shader.uniforms.uGrassTime = window.grassUniforms.uGrassTime;
         shader.uniforms.uGrassWind = window.grassUniforms.uGrassWind;
         shader.uniforms.uSunDir = window.grassUniforms.uSunDir;
+        shader.uniforms.uLodBias = window.grassUniforms.uLodBias;
         shader.vertexShader = shader.vertexShader.replace(
           '#include <common>',
           `#include <common>
           uniform float uGrassTime;
           uniform float uGrassWind;
+          uniform float uLodBias;
           varying float vTipWeight;
           varying vec3 vGrassWorldPos;
           `
@@ -8125,12 +8362,19 @@
             vec4 instWorldOrigin = modelMatrix * vec4(position, 1.0);
             float wPhase = position.x * 0.24 + uGrassTime * 2.5;
           #endif
-          float tipWeight = clamp(position.y / 0.45, 0.0, 1.0);
-          tipWeight = tipWeight * tipWeight;
-          float gust = (sin(wPhase) * 0.052 + sin(wPhase * 2.3 + 1.1) * 0.022) * uGrassWind;
-          transformed.x += gust * tipWeight;
-          transformed.z += gust * 0.55 * tipWeight;
-          vTipWeight = tipWeight;
+          float distToCam = length(cameraPosition.xz - instWorldOrigin.xz);
+          float distScale = 1.0 - smoothstep(48.0 * uLodBias, 86.0 * uLodBias, distToCam);
+          if (distScale <= 0.001) {
+            transformed = vec3(0.0);
+          } else {
+            float tipWeight = clamp(position.y / 0.45, 0.0, 1.0);
+            tipWeight = tipWeight * tipWeight;
+            float gust = (sin(wPhase) * 0.052 + sin(wPhase * 2.3 + 1.1) * 0.022) * uGrassWind * distScale;
+            transformed.x = transformed.x * distScale + gust * tipWeight;
+            transformed.y *= distScale;
+            transformed.z = transformed.z * distScale + gust * 0.55 * tipWeight;
+            vTipWeight = tipWeight;
+          }
           vGrassWorldPos = instWorldOrigin.xyz;
           `
         );
@@ -8304,6 +8548,25 @@
         roughness: 0.48,
         side: THREE.DoubleSide
       });
+      flowerMat.onBeforeCompile = function (shader) {
+        shader.uniforms.uLodBias = window.grassUniforms.uLodBias;
+        shader.vertexShader = shader.vertexShader.replace(
+          '#include <common>',
+          `#include <common>
+          uniform float uLodBias;
+          `
+        ).replace(
+          '#include <begin_vertex>',
+          `#include <begin_vertex>
+          #ifdef USE_INSTANCING
+            vec4 flOrigin = modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+            float flDist = length(cameraPosition.xz - flOrigin.xz);
+            float flScale = 1.0 - smoothstep(40.0 * uLodBias, 72.0 * uLodBias, flDist);
+            transformed *= flScale;
+          #endif
+          `
+        );
+      };
       const flowerMesh = new THREE.InstancedMesh(flowerGeo, flowerMat, flowerCount);
       const flowerPalette = [
         new THREE.Color(0xff5252), // Tropical Hibiscus Red
@@ -10381,11 +10644,97 @@
       inventory: { timber: 2, stone: 4 }
     };
 
-    // Quality tier architecture (Low / Medium / High)
+    // Quality tier architecture (Low / Medium / High) + Dynamic 60 FPS Adaptive Frame-Budget Governor
     window.qualityTier = 'medium';
+    window.AdaptiveGovernor = {
+      enabled: true,
+      ewmaMs: 16.6,
+      targetMs: 16.6,
+      tierLabel: 'Balanced',
+      waterReflRes: 288,
+      waterReflStride: 3,
+      lodBias: 1.0,
+      grassRatio: 0.78,
+      shadowStride: 14,
+      shadowRadiusSq: 1444.0, // 38m
+      particleBudgetScale: 1.0,
+      lastAdjustTime: 0,
+      applyPreset(tier) {
+        if (tier === 'low') {
+          this.tierLabel = 'Perf-Low';
+          this.waterReflRes = 160;
+          this.waterReflStride = 5;
+          this.lodBias = 0.74;
+          this.grassRatio = 0.35;
+          this.shadowStride = 24;
+          this.shadowRadiusSq = 784.0; // 28m
+          this.particleBudgetScale = 0.45;
+        } else if (tier === 'high') {
+          this.tierLabel = 'Ultra';
+          this.waterReflRes = 384;
+          this.waterReflStride = 2;
+          this.lodBias = 1.22;
+          this.grassRatio = 1.0;
+          this.shadowStride = 10;
+          this.shadowRadiusSq = 2116.0; // 46m
+          this.particleBudgetScale = 1.0;
+        } else {
+          this.tierLabel = 'Balanced';
+          this.waterReflRes = 288;
+          this.waterReflStride = 3;
+          this.lodBias = 1.0;
+          this.grassRatio = 0.78;
+          this.shadowStride = 14;
+          this.shadowRadiusSq = 1444.0; // 38m
+          this.particleBudgetScale = 0.85;
+        }
+        if (window.grassUniforms && window.grassUniforms.uLodBias) {
+          window.grassUniforms.uLodBias.value = this.lodBias;
+        }
+      },
+      update(dt, timeSec) {
+        const frameMs = Math.min(80.0, Math.max(4.0, dt * 1000.0));
+        this.ewmaMs = this.ewmaMs * 0.91 + frameMs * 0.09;
+        // Skip initial shader-warmup period (3.5s) so boot spikes do not trigger quality downgrades
+        if (!this.enabled || timeSec < 3.5 || timeSec - this.lastAdjustTime < 0.85) return;
+
+        if (this.ewmaMs > 24.5) {
+          // Frame budget exceeded (< 41 FPS): step down distant/reflection/particle costs while keeping near-field & biome coverage intact
+          this.lastAdjustTime = timeSec;
+          this.waterReflRes = Math.max(160, this.waterReflRes - 32);
+          this.waterReflStride = Math.min(6, this.waterReflStride + 1);
+          this.lodBias = Math.max(0.78, this.lodBias - 0.06);
+          this.particleBudgetScale = Math.max(0.40, this.particleBudgetScale - 0.14);
+          this.shadowStride = Math.min(24, this.shadowStride + 4);
+          this.tierLabel = this.ewmaMs > 29.0 ? 'Gov:Throttled' : 'Gov:Scaling';
+          if (this.ewmaMs > 31.0 && renderer.getPixelRatio() > 1.0) {
+            renderer.setPixelRatio(Math.max(1.0, renderer.getPixelRatio() - 0.20));
+          }
+        } else if (this.ewmaMs < 17.2) {
+          // Device has headroom: progressively restore maximum visual fidelity
+          this.lastAdjustTime = timeSec;
+          const maxRes = window.qualityTier === 'high' ? 384 : (window.qualityTier === 'low' ? 192 : 288);
+          const minStride = window.qualityTier === 'high' ? 2 : (window.qualityTier === 'low' ? 4 : 3);
+          const maxBias = window.qualityTier === 'high' ? 1.22 : (window.qualityTier === 'low' ? 0.84 : 1.08);
+          this.waterReflRes = Math.min(maxRes, this.waterReflRes + 32);
+          this.waterReflStride = Math.max(minStride, this.waterReflStride - 1);
+          this.lodBias = Math.min(maxBias, this.lodBias + 0.05);
+          this.particleBudgetScale = Math.min(1.0, this.particleBudgetScale + 0.12);
+          this.shadowStride = Math.max(10, this.shadowStride - 2);
+          this.tierLabel = 'Gov:Optimal';
+        }
+        if (window.grassUniforms && window.grassUniforms.uLodBias) {
+          window.grassUniforms.uLodBias.value = this.lodBias;
+        }
+      }
+    };
+
     window.setQualityTier = function(tier, suppressToast = false) {
       window.qualityTier = tier;
       console.log('Quality tier set to:', tier);
+      if (window.AdaptiveGovernor) {
+        window.AdaptiveGovernor.applyPreset(tier);
+      }
 
       const qualityPills = document.querySelectorAll('#quality-pill-group .pill-btn');
       const qualityValBadge = document.getElementById('quality-val');
@@ -10413,7 +10762,7 @@
       } else if (tier === 'medium') {
         if (qualityValBadge) qualityValBadge.innerText = 'Balanced (60 FPS)';
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.enabled = !window._playerInsideCave;
         renderer.shadowMap.type = THREE.PCFShadowMap;
         if (window.instancedGrass) {
           window.instancedGrass.visible = true;
@@ -10429,7 +10778,7 @@
       } else if (tier === 'high') {
         if (qualityValBadge) qualityValBadge.innerText = 'Cinematic (Ultra)';
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2.0));
-        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.enabled = !window._playerInsideCave;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         if (window.instancedGrass) {
           window.instancedGrass.visible = true;
@@ -10567,6 +10916,10 @@
       treeObj.userData = treeObj.userData || {};
       treeObj.userData.isFalling = true;
       treeObj.userData.health = 0;
+      treeObj.visible = true;
+      if (window.treeImpostorSystem) {
+        window.treeImpostorSystem.setImpostorActive(treeObj, false);
+      }
       const idx = interactiveTargets.indexOf(treeObj);
       if (idx !== -1) interactiveTargets.splice(idx, 1);
       if (typeof window.removeInteractiveTarget === 'function') window.removeInteractiveTarget(treeObj);
@@ -11558,9 +11911,24 @@
       }
       const _windTime = timeSec * windMult;
       animate._frameCount = ((animate._frameCount || 0) + 1) | 0;
-      // Event-driven directional shadow map updates: only re-render shadow map when falling trees animate or every 16th frame (or when sunLight snaps)
-      if (renderer.shadowMap.enabled && !window._playerInsideCave) {
-        if ((activeFallingTrees.length > 0 && (animate._frameCount & 1) === 0) || (animate._frameCount & 15) === 0) {
+      const gov = window.AdaptiveGovernor;
+      if (gov) {
+        gov.update(dt, timeSec);
+      }
+      const lodBias = gov ? gov.lodBias : 1.0;
+      const partScale = gov ? gov.particleBudgetScale : 1.0;
+
+      // Shadow discipline: automatically disable directional shadow map pass when inside subterranean caves
+      const shouldEnableShadows = (window.qualityTier !== 'low') && !window._playerInsideCave && ((window.caveDarknessFactor || 0) < 0.55);
+      if (renderer.shadowMap.enabled !== shouldEnableShadows) {
+        renderer.shadowMap.enabled = shouldEnableShadows;
+        if (shouldEnableShadows) renderer.shadowMap.needsUpdate = true;
+      }
+
+      // Event-driven directional shadow map updates: only re-render shadow map when falling trees animate or on governor stride
+      const shadStride = gov ? gov.shadowStride : 16;
+      if (renderer.shadowMap.enabled) {
+        if ((activeFallingTrees.length > 0 && (animate._frameCount & 1) === 0) || (animate._frameCount % shadStride) === 0) {
           renderer.shadowMap.needsUpdate = true;
         }
       }
@@ -11578,11 +11946,17 @@
           }
         }
       }
-      // Staggered distance culling for tree shadow-casters (within 38m), water reflection trunks (75m), bushes (110m) & small trees (380m)
+      // Staggered distance LOD & GPU-instanced EZ-Tree LOD1 switching (full 3D < 68m*lodBias, batched instanced EZ-Tree 68m..520m)
       if (activeEZTrees.length > 0) {
         const batchSize = 128;
         const startIdx = ((animate._treeLodCursor || 0)) % activeEZTrees.length;
         const pxT = player.pos.x, pzT = player.pos.z;
+        const fullDetailRad = 68.0 * lodBias;
+        const fullDetailSq = fullDetailRad * fullDetailRad;
+        const bushMaxSq = (95.0 * lodBias) * (95.0 * lodBias);
+        const shadRadSq = gov ? gov.shadowRadiusSq : 1444.0;
+        const impSys = window.treeImpostorSystem;
+
         for (let k = 0; k < batchSize; k++) {
           const idx = (startIdx + k) % activeEZTrees.length;
           const tr = activeEZTrees[idx];
@@ -11592,21 +11966,31 @@
           const dSq = dx * dx + dz * dz;
           const isBush = tr.userData && tr.userData.type === 'bush';
           if (isBush) {
-            const vis = dSq <= 12100.0; // 110m bush visibility radius
+            const vis = dSq <= bushMaxSq;
             if (tr.visible !== vis) tr.visible = vis;
           } else {
-            const maxTreeSq = (tr.userData && tr.userData.baseScale < 0.27) ? 144400.0 : 302500.0; // 380m saplings, 550m large trees
-            const vis = dSq <= maxTreeSq;
-            if (tr.visible !== vis) tr.visible = vis;
-            if (vis && tr.branchesMesh) {
-              const castShad = dSq <= 1444.0; // 38m shadow frustum radius
-              if (tr.branchesMesh.castShadow !== castShad) {
-                tr.branchesMesh.castShadow = castShad;
-                tr.leavesMesh.castShadow = castShad;
-              }
-              const targetLayerMask = dSq <= 5625.0 ? 1 : 2; // Layer 0 (mask 1) within 75m, Layer 1 (mask 2) beyond 75m
-              if (tr.branchesMesh.layers.mask !== targetLayerMask) {
-                tr.branchesMesh.layers.mask = targetLayerMask;
+            const maxTreeSq = (tr.userData && tr.userData.baseScale < 0.27) ? 144400.0 : 270400.0; // 380m saplings, 520m large trees
+            if (dSq > maxTreeSq) {
+              if (tr.visible) tr.visible = false;
+              if (impSys) impSys.setImpostorActive(tr, false);
+            } else if (dSq > fullDetailSq && impSys && tr.userData.impostorBatch) {
+              // Swap to batched GPU-instanced simplified EZ-Tree LOD1 (exact species branches & foliage silhouette)
+              if (tr.visible) tr.visible = false;
+              impSys.setImpostorActive(tr, true);
+            } else {
+              // Near-field (< 68m * lodBias): full 3D EZ-Tree geometry and leaf wind shader
+              if (!tr.visible) tr.visible = true;
+              if (impSys) impSys.setImpostorActive(tr, false);
+              if (tr.branchesMesh) {
+                const castShad = dSq <= shadRadSq;
+                if (tr.branchesMesh.castShadow !== castShad) {
+                  tr.branchesMesh.castShadow = castShad;
+                  tr.leavesMesh.castShadow = castShad;
+                }
+                const targetLayerMask = dSq <= 4225.0 ? 1 : 2; // Layer 0 within 65m, Layer 1 beyond 65m
+                if (tr.branchesMesh.layers.mask !== targetLayerMask) {
+                  tr.branchesMesh.layers.mask = targetLayerMask;
+                }
               }
             }
           }
@@ -11614,20 +11998,70 @@
         animate._treeLodCursor = (startIdx + batchSize) % activeEZTrees.length;
       }
 
-      // Scroll Waterfall Gorge UV cascades DOWNHILL, animate 3D ballistic splash droplets, expanding foam rings & mist plumes
+      // Staggered 2-tier geometric LOD for basalt boulders (< 46m highGeo 22x16, > 46m lowGeo 8x6, > 260m culled) & GLB scatter distance culling
+      if (window.activeBoulders && window.activeBoulders.length > 0 && (animate._frameCount & 3) === 0) {
+        const bList = window.activeBoulders;
+        const bBatch = Math.min(48, bList.length);
+        const bStart = ((animate._boulderLodCursor || 0)) % bList.length;
+        const pxB = player.pos.x, pzB = player.pos.z;
+        const lodSwapSq = (46.0 * lodBias) * (46.0 * lodBias);
+        for (let b = 0; b < bBatch; b++) {
+          const rock = bList[(bStart + b) % bList.length];
+          if (!rock || !rock.parent) continue;
+          const dx = rock.position.x - pxB;
+          const dz = rock.position.z - pzB;
+          const dSq = dx * dx + dz * dz;
+          if (dSq > 67600.0) { // > 260m
+            if (rock.visible) rock.visible = false;
+          } else {
+            if (!rock.visible) rock.visible = true;
+            const wantLow = dSq > lodSwapSq ? 1 : 0;
+            if (rock.userData.lodLevel !== wantLow && rock.userData.highGeo && rock.userData.lowGeo) {
+              rock.userData.lodLevel = wantLow;
+              rock.geometry = wantLow ? rock.userData.lowGeo : rock.userData.highGeo;
+              rock.castShadow = !wantLow;
+            }
+          }
+        }
+        animate._boulderLodCursor = (bStart + bBatch) % bList.length;
+      }
+      if (window.floraItems && (animate._frameCount % 12) === 0) {
+        const pxF = player.pos.x, pzF = player.pos.z;
+        const maxFloraSq = (50.0 * lodBias) * (50.0 * lodBias);
+        ['flowers', 'grass', 'rocks'].forEach(cat => {
+          const arr = window.floraItems[cat];
+          if (!arr) return;
+          for (let i = 0; i < arr.length; i++) {
+            const item = arr[i];
+            if (!item) continue;
+            const dx = item.position.x - pxF;
+            const dz = item.position.z - pzF;
+            item.visible = (dx * dx + dz * dz) <= maxFloraSq;
+          }
+        });
+      }
+
+      // Scroll Waterfall Gorge UV cascades DOWNHILL, with distance culling & particle draw-range budgets
+      const wfDist1Sq = (player.pos.x - 23.5) * (player.pos.x - 23.5) + (player.pos.z - 2.0) * (player.pos.z - 2.0);
+      const wfDist2Sq = (player.pos.x - (-15.0)) * (player.pos.x - (-15.0)) + (player.pos.z - 145.0) * (player.pos.z - 145.0);
+      const minWfDistSq = Math.min(wfDist1Sq, wfDist2Sq);
+      const nearWaterfall = !window._playerInsideCave && (minWfDistSq < 18225.0); // within 135m of either waterfall
+
       const wfSpeedMult = (window.envConfig && window.envConfig.riverSpeed !== undefined) ? window.envConfig.riverSpeed : 1.0;
-      if (waterfallMaterials && waterfallMaterials.length) {
+      if (waterfallMaterials && waterfallMaterials.length && minWfDistSq < 78400.0) {
         waterfallMaterials.forEach(item => {
           item.tex.offset.y -= dt * item.speed * wfSpeedMult;
         });
       }
-      if (window.uplandLakeNormals) {
+      if (window.uplandLakeNormals && minWfDistSq < 48400.0) {
         window.uplandLakeNormals.offset.x += dt * 0.038 * wfSpeedMult;
         window.uplandLakeNormals.offset.y += Math.sin(timeSec * 0.4) * dt * 0.014;
       }
       if (window.waterfallFoamRings && window.waterfallFoamRings.length) {
         for (let r = 0; r < window.waterfallFoamRings.length; r++) {
           const ring = window.waterfallFoamRings[r];
+          ring.mesh.visible = nearWaterfall;
+          if (!nearWaterfall) continue;
           ring.phase = (ring.phase + dt * ring.speed * wfSpeedMult) % 1.0;
           const p = ring.phase;
           const sc = ring.minS + (ring.maxS - ring.minS) * p;
@@ -11638,28 +12072,37 @@
       }
       if (window.waterfallSplashParticles) {
         const sp = window.waterfallSplashParticles;
-        const pos = sp.pos;
-        const vel = sp.vel;
-        const life = sp.life;
-        const g = sp.gravity || 9.2;
-        for (let i = 0; i < sp.count; i++) {
-          const age = life[i * 2] + dt * wfSpeedMult;
-          const maxL = life[i * 2 + 1];
-          if (age >= maxL) {
-            sp.respawn(i, false);
-          } else {
-            life[i * 2] = age;
-            const i3 = i * 3;
-            vel[i3 + 1] -= g * dt * wfSpeedMult;
-            pos[i3]     += vel[i3] * dt * wfSpeedMult;
-            pos[i3 + 1] += vel[i3 + 1] * dt * wfSpeedMult;
-            pos[i3 + 2] += vel[i3 + 2] * dt * wfSpeedMult;
+        sp.points.visible = nearWaterfall;
+        if (nearWaterfall) {
+          const distAtten = minWfDistSq < 3600.0 ? 1.0 : Math.max(0.25, 1.0 - (Math.sqrt(minWfDistSq) - 60.0) / 75.0);
+          const activeCount = Math.max(16, Math.min(sp.count, Math.floor(sp.count * partScale * distAtten)));
+          sp.points.geometry.setDrawRange(0, activeCount);
+          const pos = sp.pos;
+          const vel = sp.vel;
+          const life = sp.life;
+          const g = sp.gravity || 9.2;
+          for (let i = 0; i < activeCount; i++) {
+            const age = life[i * 2] + dt * wfSpeedMult;
+            const maxL = life[i * 2 + 1];
+            if (age >= maxL) {
+              sp.respawn(i, false);
+            } else {
+              life[i * 2] = age;
+              const i3 = i * 3;
+              vel[i3 + 1] -= g * dt * wfSpeedMult;
+              pos[i3]     += vel[i3] * dt * wfSpeedMult;
+              pos[i3 + 1] += vel[i3 + 1] * dt * wfSpeedMult;
+              pos[i3 + 2] += vel[i3 + 2] * dt * wfSpeedMult;
+            }
           }
+          sp.points.geometry.attributes.position.needsUpdate = true;
         }
-        sp.points.geometry.attributes.position.needsUpdate = true;
       }
       if (waterfallMistSprites && waterfallMistSprites.length) {
+        const showMist = nearWaterfall && minWfDistSq < 11025.0; // within 105m
         waterfallMistSprites.forEach((m, idx) => {
+          m.sprite.visible = showMist;
+          if (!showMist) return;
           m.phase = (m.phase + dt * m.speed) % 1.0;
           const p = m.phase;
           const swell = 0.72 + p * 0.52;
@@ -11674,7 +12117,7 @@
           }
         });
       }
-      if (!animate.lastWfRipple || timeSec - animate.lastWfRipple > 0.65) {
+      if (nearWaterfall && (!animate.lastWfRipple || timeSec - animate.lastWfRipple > 0.65)) {
         animate.lastWfRipple = timeSec;
         addWaterRipple(23.5 + (Math.random() - 0.5) * 2.2, 2.0 + (Math.random() - 0.5) * 3.6, 1.45);
       }
@@ -11687,9 +12130,11 @@
         for (let c = 0; c < window.activeCampfires.length; c++) {
           const cf = window.activeCampfires[c];
           const lit = cf.isLit !== false;
-          if (cf.flameGroup) cf.flameGroup.visible = lit;
-          if (cf.smokeGroup) cf.smokeGroup.visible = lit;
-          if (cf.sparkPoints) cf.sparkPoints.visible = lit;
+          const cfDistSq = cf.group ? camera.position.distanceToSquared(cf.group.position) : 0.0;
+          const nearFireParticles = lit && !window._playerInsideCave && (cfDistSq < 5625.0); // within 75m
+          if (cf.flameGroup) cf.flameGroup.visible = lit && (cfDistSq < 19600.0); // 140m
+          if (cf.smokeGroup) cf.smokeGroup.visible = nearFireParticles;
+          if (cf.sparkPoints) cf.sparkPoints.visible = nearFireParticles;
 
           if (lit) {
             const flicker = 1.38 + Math.sin(timeSec * 5.2 + c * 2.1) * 0.14
@@ -11735,7 +12180,7 @@
                   if (!slot.sizzledReady) {
                     slot.sizzledReady = true;
                     AudioEngine.playSizzle(1.0);
-                    if (camera.position.distanceTo(cf.group.position) < 12.0) {
+                    if (cfDistSq < 144.0) {
                       showToast('🍖 Spit meat golden-cooked & sizzling! Pull it off before it chars!');
                     }
                   }
@@ -11751,8 +12196,8 @@
               }
             }
 
-            // Thin subtle rising smoke wisps (max opacity <= 0.14)
-            if (cf.smokePuffs) {
+            // Thin subtle rising smoke wisps (max opacity <= 0.14, distance-culled beyond 75m)
+            if (nearFireParticles && cf.smokePuffs) {
               const windDrift = 0.32 * windMult;
               for (let s = 0; s < cf.smokePuffs.length; s++) {
                 const p = cf.smokePuffs[s];
@@ -11771,12 +12216,13 @@
               }
             }
 
-            // Short-lived rising ember sparks (< 1.4m above coals)
-            if (cf.sparkPoints && cf.sparkPos && cf.sparkData) {
+            // Short-lived rising ember sparks (< 1.4m above coals, governor-scaled draw range)
+            if (nearFireParticles && cf.sparkPoints && cf.sparkPos && cf.sparkData) {
               const sPos = cf.sparkPos;
               const sData = cf.sparkData;
-              const sCount = sData.length;
-              for (let i = 0; i < sCount; i++) {
+              const activeSparks = Math.max(6, Math.floor(sData.length * partScale));
+              cf.sparkPoints.geometry.setDrawRange(0, activeSparks);
+              for (let i = 0; i < activeSparks; i++) {
                 const sd = sData[i];
                 sd.age += dt;
                 if (sd.age >= sd.maxLife || sPos[i * 3 + 1] > 1.38) {
@@ -11801,6 +12247,10 @@
             if (cf.tipCoalMat) cf.tipCoalMat.emissiveIntensity = 0.08;
           }
         }
+      }
+
+      if (window.updateVolcanoPlume) {
+        window.updateVolcanoPlume(dt, timeSec, camera.position, windMult, partScale);
       }
 
       // Update Gravity-Accelerated Falling Trees & Woodchip Bursts
@@ -12474,7 +12924,7 @@
         }
       }
 
-      // Live Debug Telemetry Overlay Update (4Hz refresh when enabled)
+      // Live Debug Telemetry Overlay Update (4Hz refresh when enabled, exposing renderer.info & Governor metrics)
       animate.dbgTimer = (animate.dbgTimer || 0) + dt;
       animate.dbgFrames = (animate.dbgFrames || 0) + 1;
       if (animate.dbgTimer >= 0.25) {
@@ -12484,10 +12934,29 @@
           const ms = (1000 / Math.max(1, fps)).toFixed(1);
           const fpsEl = document.getElementById('dbg-fps');
           const msEl = document.getElementById('dbg-ms');
+          const drawsEl = document.getElementById('dbg-draws');
+          const reflEl = document.getElementById('dbg-water-refl');
+          const govEl = document.getElementById('dbg-gov');
           const posEl = document.getElementById('dbg-pos');
           const depthEl = document.getElementById('dbg-depth');
           if (fpsEl) fpsEl.innerText = fps;
           if (msEl) msEl.innerText = ms;
+          if (drawsEl && renderer && renderer.info && renderer.info.render) {
+            const calls = renderer.info.render.calls || 0;
+            const trisK = ((renderer.info.render.triangles || 0) / 1000).toFixed(1);
+            drawsEl.innerText = `${calls} / ${trisK}k`;
+          }
+          if (reflEl) {
+            const ws = window._waterReflStats;
+            reflEl.innerText = ws ? (ws.skipped ? `Skipped (${ws.reason})` : `${ws.res}px (1/${ws.stride})`) : '288px';
+          }
+          if (govEl) {
+            const gTier = window.AdaptiveGovernor ? window.AdaptiveGovernor.tierLabel : window.qualityTier;
+            const chunks = (window.ArchipelagoChunkManager && window.ArchipelagoChunkManager.chunks)
+              ? window.ArchipelagoChunkManager.chunks.filter(c => c.hydrated).length
+              : 0;
+            govEl.innerText = `${gTier} (x${(window.AdaptiveGovernor ? window.AdaptiveGovernor.lodBias : 1.0).toFixed(2)}) • ${chunks} isl`;
+          }
           if (posEl) posEl.innerText = `${player.pos.x.toFixed(1)}, ${player.pos.y.toFixed(1)}, ${player.pos.z.toFixed(1)}`;
           if (depthEl) {
             if (isCameraUnderwater) {
