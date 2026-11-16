@@ -1,0 +1,70 @@
+           for (let c = 0; c < caveMouthMeta.length; c++) {
+             const m = caveMouthMeta[c];
+             const cv = m.cv;
+-            const d0 = (x0 - cv.px) * cv.dirX + (z0 - cv.pz) * cv.dirZ;
+-            const d1 = (x1 - cv.px) * cv.dirX + (z1 - cv.pz) * cv.dirZ;
+-            const d2 = (x2 - cv.px) * cv.dirX + (z2 - cv.pz) * cv.dirZ;
+-            const maxD = Math.max(d0, d1, d2);
+-            const minD = Math.min(d0, d1, d2);
+-            if (maxD <= -0.15 || minD >= 15.0) continue;
+-
+-            const p0 = Math.abs((x0 - cv.px) * cv.perpX + (z0 - cv.pz) * cv.perpZ);
+-            const p1 = Math.abs((x1 - cv.px) * cv.perpX + (z1 - cv.pz) * cv.perpZ);
+-            const p2 = Math.abs((x2 - cv.px) * cv.perpX + (z2 - cv.pz) * cv.perpZ);
+-            const minP = Math.min(p0, p1, p2);
+-            if (minP >= m.halfW + 0.15) continue;
+-
++            // Doorway slab only. A 15m-deep cut on a steep slope deletes the hillside and you can see through the mountain.
++            const cx = (x0 + x1 + x2) / 3.0;
++            const cy = (y0 + y1 + y2) / 3.0;
++            const cz = (z0 + z1 + z2) / 3.0;
++            const dC = (cx - cv.px) * cv.dirX + (cz - cv.pz) * cv.dirZ;
++            if (dC < -0.40 || dC > 2.35) continue;
++            const pC = Math.abs((cx - cv.px) * cv.perpX + (cz - cv.pz) * cv.perpZ);
++            const archHalf = m.halfW * 0.94;
++            if (pC >= archHalf) continue;
++            const archTop = cv.baseY + m.ceilH * Math.sqrt(Math.max(0.0, 1.0 - Math.pow(pC / archHalf, 2.0)));
+             const minY = Math.min(y0, y1, y2);
+             const maxY = Math.max(y0, y1, y2);
+-            // Only remove triangles that rise vertically into the arch doorway (preserve flat ground & high ridge roof)
+-            if (maxY > cv.baseY + 0.35 && minY < cv.baseY + m.ceilH + 2.6) {
++            if (cy > cv.baseY + 0.45 && cy < archTop - 0.05 && maxY > cv.baseY + 0.30 && minY < archTop + 0.4) {
+               carveTri = true;
+               break;
+             }
+@@ -4041,21 +4064,21 @@
+           float dist1 = dot(d1, vec2(0.98338, 0.18155));
+           float p1 = abs(dot(d1, vec2(-0.18155, 0.98338)));
+           float archH1 = 2.4 + 4.95 * sqrt(max(0.0, 1.0 - pow(p1 / 4.45, 2.0)));
+-          if (dist1 > -0.60 && dist1 < 16.0 && p1 < 4.30 && vWorldPos.y > 2.65 && vWorldPos.y < archH1) discard;
++          if (dist1 > -0.45 && dist1 < 2.55 && p1 < 4.30 && vWorldPos.y > 2.65 && vWorldPos.y < archH1) discard;
+ 
+           // Cave 2 Portal at (-40.0, 88.0), unit dir = (-0.96972, 0.24423), baseY = 4.2
+           vec2 d2 = vWorldPos.xz - vec2(-40.0, 88.0);
+           float dist2 = dot(d2, vec2(-0.96972, 0.24423));
+           float p2 = abs(dot(d2, vec2(-0.24423, -0.96972)));
+           float archH2 = 4.2 + 4.85 * sqrt(max(0.0, 1.0 - pow(p2 / 4.35, 2.0)));
+-          if (dist2 > -0.60 && dist2 < 16.0 && p2 < 4.20 && vWorldPos.y > 4.45 && vWorldPos.y < archH2) discard;
++          if (dist2 > -0.45 && dist2 < 2.55 && p2 < 4.20 && vWorldPos.y > 4.45 && vWorldPos.y < archH2) discard;
+ 
+-          // Cave 3 (Volcanic Lava Tube) Portal at (46.0, -112.0), unit dir = (0.56653, -0.82404), baseY = 3.2
+-          vec2 d3 = vWorldPos.xz - vec2(46.0, -112.0);
+-          float dist3 = dot(d3, vec2(0.56653, -0.82404));
+-          float p3 = abs(dot(d3, vec2(0.82404, 0.56653)));
+-          float archH3 = 3.2 + 4.75 * sqrt(max(0.0, 1.0 - pow(p3 / 4.25, 2.0)));
+-          if (dist3 > -0.60 && dist3 < 16.0 && p3 < 4.10 && vWorldPos.y > 3.45 && vWorldPos.y < archH3) discard;
++          // Cave 3 lava-tube portal on the east flank of Mount Caldera (-214.1, 68.4), dir (-0.99875, -0.04998), baseY 33
++          vec2 d3 = vWorldPos.xz - vec2(-214.1, 68.4);
++          float dist3 = dot(d3, vec2(-0.99875, -0.04998));
++          float p3 = abs(dot(d3, vec2(0.04998, -0.99875)));
++          float archH3 = 33.0 + 4.55 * sqrt(max(0.0, 1.0 - pow(p3 / 4.25, 2.0)));
++          if (dist3 > -0.45 && dist3 < 2.55 && p3 < 4.15 && vWorldPos.y > 33.35 && vWorldPos.y < archH3) discard;
+         }
+ 
+         // 1. Multi-Frequency World Coordinates (Macro, Mid-Scale Detail, and Crisp Micro-Grain)
+@@ -4130,8 +4153,8 @@
+         float bElder = 1.0 - smoothstep(45.0, 135.0, length(vWorldPos.xz - vec2(-165.0, 72.0)));
+         float bMeadow = 1.0 - smoothstep(45.0, 145.0, length(vWorldPos.xz - vec2(55.0, 225.0)));
+         float bKarst = 1.0 - smoothstep(40.0, 125.0, length(vWorldPos.xz - vec2(168.0, 28.0)));
+-        float calderaDist = length(vWorldPos.xz - vec2(-124.0, 224.0));
+-        float bCaldera = 1.0 - smoothstep(42.0, 118.0, calderaDist);
