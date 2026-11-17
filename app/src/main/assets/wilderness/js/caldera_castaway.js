@@ -515,7 +515,7 @@
   // --- 5A. FLIGHT 409 CRASHED TWIN-OTTER SEAPLANE (Dry sand west of the cove: -44, -28) ---
   function buildCrashedSeaplane() {
     const cx = -44.0, cz = -28.0;
-    const cy = getTerrainHeight(cx, cz) + 0.32;
+    const cy = getTerrainHeight(cx, cz) + 0.02;
     const planeGroup = new THREE.Group();
     planeGroup.position.set(cx, cy, cz);
     planeGroup.rotation.set(0.07, 0.42, -0.14);
@@ -527,11 +527,22 @@
       const vx = fPos.getX(i), vy = fPos.getY(i), vz = fPos.getZ(i);
       // Subtle impact denting along belly & aft tail section
       const dent = Math.sin(vy * 1.4 + vx * 2.2) * 0.035;
-      fPos.setXYZ(i, vx + dent, vy, vz + (vx < 0 ? 0.05 : 0));
+      const belly = vx < 0.2 ? (0.2 - vx) * 0.28 : 0.0;
+      fPos.setXYZ(i, vx + dent - belly, vy, vz + (vx < 0 ? 0.08 : 0));
     }
+    const bellyCols = new Float32Array(fPos.count * 3);
+    for (let i = 0; i < fPos.count; i++) {
+      const shade = fPos.getX(i) < 0.05 ? 0.55 : 1.0;
+      bellyCols[i * 3] = shade;
+      bellyCols[i * 3 + 1] = shade;
+      bellyCols[i * 3 + 2] = shade;
+    }
+    fuselageGeo.setAttribute('color', new THREE.BufferAttribute(bellyCols, 3));
     fuselageGeo.computeVertexNormals();
     fuselageGeo.rotateZ(Math.PI / 2);
-    const fuselage = new THREE.Mesh(fuselageGeo, matAluminum);
+    const weatheredAlu = matAluminum.clone();
+    weatheredAlu.vertexColors = true;
+    const fuselage = new THREE.Mesh(fuselageGeo, weatheredAlu);
     fuselage.position.set(0, 1.62, 0);
     fuselage.castShadow = true;
     fuselage.receiveShadow = true;
@@ -912,10 +923,19 @@
       }
 
       // Encrusted Reef Brain Coral & Sea Fans at Pillar Base
-      const coral = new THREE.Mesh(
-        new THREE.DodecahedronGeometry(0.36 + (i % 2) * 0.12, 1),
-        (i % 2 === 0) ? coralPinkMat : coralGoldMat
-      );
+      const coralGeo = (i % 2 === 0)
+        ? new THREE.SphereGeometry(0.34, 10, 8)
+        : new THREE.ConeGeometry(0.42, 0.16, 9);
+      if (i % 2 === 0) {
+        const cp = coralGeo.attributes.position;
+        for (let ci = 0; ci < cp.count; ci++) {
+          const cx0 = cp.getX(ci), cy0 = cp.getY(ci), cz0 = cp.getZ(ci);
+          const lump = 1.0 + Math.sin(cx0 * 18.0) * Math.cos(cz0 * 16.0) * 0.18;
+          cp.setXYZ(ci, cx0 * lump, cy0 * 0.45, cz0 * lump);
+        }
+        coralGeo.computeVertexNormals();
+      }
+      const coral = new THREE.Mesh(coralGeo, (i % 2 === 0) ? coralPinkMat : coralGoldMat);
       coral.scale.set(1.2, 0.68, 1.1);
       coral.position.set(Math.cos(ang + 0.8) * 0.85, 0.55, Math.sin(ang + 0.8) * 0.85);
       colGroup.add(coral);
@@ -930,6 +950,13 @@
     for (let step = 0; step < 3; step++) {
       const rStep = 3.85 - step * 0.85;
       const disc = new THREE.Mesh(new THREE.CylinderGeometry(rStep, rStep + 0.28, 0.50, 28), stoneMat);
+      const dPos = disc.geometry.attributes.position;
+      for (let vi = 0; vi < dPos.count; vi++) {
+        const vx = dPos.getX(vi), vy = dPos.getY(vi), vz = dPos.getZ(vi);
+        const chip = 1.0 - Math.pow(Math.abs(Math.sin(Math.atan2(vz, vx) * 3.0 + step * 1.7)), 4.0) * 0.22;
+        dPos.setXYZ(vi, vx * chip, vy, vz * chip);
+      }
+      disc.geometry.computeVertexNormals();
       disc.position.set(rx, centerY + step * 0.46, rz);
       disc.receiveShadow = true;
       ruinGroup.add(disc);
@@ -985,6 +1012,28 @@
   let instBambooRings  = null;
   let instBambooCrowns = null;
 
+  function notchCulm(geo) {
+    const p = geo.attributes.position;
+    geo.computeBoundingBox();
+    const minY = geo.boundingBox.min.y;
+    const span = Math.max(0.001, geo.boundingBox.max.y - minY);
+    const col = new Float32Array(p.count * 3);
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+      const t = (y - minY) / span;
+      const ring = Math.pow(Math.abs(Math.sin(t * Math.PI * 7.0)), 12.0);
+      const pinch = 1.0 - ring * 0.09;
+      p.setXYZ(i, x * pinch, y, z * pinch);
+      const wet = t < 0.32 ? 0.58 : 1.0;
+      col[i * 3] = wet;
+      col[i * 3 + 1] = wet * (t < 0.32 ? 0.9 : 1.0);
+      col[i * 3 + 2] = wet * (t < 0.32 ? 0.72 : 1.0);
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    geo.computeVertexNormals();
+    return geo;
+  }
+
   function buildBambooAndMangroves() {
     const bambooZones = [
       { cx: -68, cz: -28, radius: 20, count: 22 },
@@ -1005,7 +1054,7 @@
       ezBamboo.loadPreset('Aspen Medium');
       ezBamboo.options.seed = 24680;
       ezBamboo.options.bark.type = 'birch';
-      ezBamboo.options.bark.tint = 0x8ab846;
+      ezBamboo.options.bark.tint = 0x6d7a38;
       ezBamboo.options.bark.textureScale = { x: 1, y: 2.4 };
       ezBamboo.options.branch.levels = 2;
       ezBamboo.options.branch.length = { 0: 56, 1: 10.5, 2: 7.5, 3: 1 };
@@ -1018,7 +1067,7 @@
       ezBamboo.options.branch.segments = { 0: 6, 1: 3, 2: 3, 3: 3 };
       ezBamboo.options.leaves.type = 'ash';
       ezBamboo.options.leaves.billboard = 'double';
-      ezBamboo.options.leaves.tint = 0x62b63a;
+      ezBamboo.options.leaves.tint = 0x4c8632;
       ezBamboo.options.leaves.size = 3.05;
       ezBamboo.options.leaves.count = 10;
       ezBamboo.options.leaves.alphaTest = 0.5;
@@ -1054,12 +1103,24 @@
       };
       crownMat.needsUpdate = true;
     } else {
-      stalkGeo = new THREE.CylinderGeometry(0.08, 0.12, 8.0, 10);
+      stalkGeo = new THREE.CylinderGeometry(0.08, 0.12, 8.0, 10, 8);
+      notchCulm(stalkGeo);
       stalkGeo.translate(0, 4.0, 0);
-      stalkMat = matBambooCulm;
-      crownGeo = new THREE.DodecahedronGeometry(1.4, 1);
-      crownGeo.translate(0, 7.5, 0);
-      crownMat = new THREE.MeshStandardMaterial({ color: 0x55a630, roughness: 0.6 });
+      stalkMat = matBambooCulm.clone();
+      stalkMat.vertexColors = true;
+      stalkMat.roughness = 0.78;
+      const cardPos = [];
+      for (let card = 0; card < 3; card++) {
+        const rot = card * 1.05;
+        const cs = Math.cos(rot), sn = Math.sin(rot);
+        [[-1.2, 0, 0], [1.2, 0, 0], [1.2, 1.1, 0], [-1.2, 0, 0], [1.2, 1.1, 0], [-1.2, 1.1, 0]].forEach(p => {
+          cardPos.push(p[0] * cs, p[1] + 6.8, p[0] * sn);
+        });
+      }
+      crownGeo = new THREE.BufferGeometry();
+      crownGeo.setAttribute('position', new THREE.Float32BufferAttribute(cardPos, 3));
+      crownGeo.computeVertexNormals();
+      crownMat = new THREE.MeshStandardMaterial({ color: 0x3f7a2e, roughness: 0.82, side: THREE.DoubleSide });
     }
 
     instBambooStalks = new THREE.InstancedMesh(stalkGeo, stalkMat, maxStalks);
@@ -1474,16 +1535,29 @@
       const rx = vx + Math.cos(ra) * ((mc.rimR || 36.0) - 1.8);
       const rz = vz + Math.sin(ra) * ((mc.rimR || 36.0) - 1.8);
       const ry = getTerrainHeight(rx, rz);
-      const spire = new THREE.Mesh(
-        new THREE.ConeGeometry(1.8 + (rIdx % 2) * 0.65, 5.2 + (rIdx % 3) * 1.6, 5),
-        matObsidianGlass
-      );
-      spire.position.set(rx, ry + 1.4, rz);
-      spire.rotation.set((rIdx % 2 === 0 ? 0.14 : -0.10), ra + 0.4, -0.12);
+      const spire = window.createGraniteBoulder(2.2 + (rIdx % 2) * 0.9);
+      spire.material = spire.material.clone();
+      spire.material.color.set(0x241f1c);
+      spire.position.set(rx, ry - 0.85, rz);
+      spire.rotation.set(Math.sin(ra) * 0.28, ra, Math.cos(ra) * -0.22);
       spire.castShadow = true;
       spire.raycast = () => {};
       worldLandmarksGroup.add(spire);
     });
+
+    for (let s = 0; s < 5; s++) {
+      const a = s * 1.25 + 0.5;
+      const rad = 58 + (s % 3) * 16;
+      const sx = vx + Math.cos(a) * rad;
+      const sz = vz + Math.sin(a) * rad;
+      const sy = getTerrainHeight(sx, sz);
+      const slopeRock = window.createGraniteBoulder(1.5 + (s % 2) * 1.2);
+      slopeRock.material = slopeRock.material.clone();
+      slopeRock.material.color.set(0x3a332e);
+      slopeRock.position.set(sx, sy - 0.55, sz);
+      slopeRock.rotation.y = a;
+      worldLandmarksGroup.add(slopeRock);
+    }
 
     // --- Volcanic Rising Ash Smoke Column, White Rim Fumarole Steam & Cauldron Embers ---
     const vfx = window.getCampfireVFXAssets ? window.getCampfireVFXAssets() : null;
@@ -1849,7 +1923,7 @@
     outpostGroup.position.set(ox, oy, oz);
 
     const concreteMat = new THREE.MeshStandardMaterial({
-      color: 0x868d91,
+      color: 0x6a726c,
       normalMap: aaaSurfacePBRAssets.steelNormTex,
       normalScale: new THREE.Vector2(0.55, 0.55),
       roughness: 0.82
@@ -1901,8 +1975,10 @@
     const towerH = 22.0;
     const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
     corners.forEach(([sx, sz]) => {
-      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.19, towerH, 10), matRustedSteel);
-      leg.position.set(towerX + sx * 1.15, towerH * 0.5, towerZ + sz * 1.15);
+      const foot = getTerrainHeight(ox + towerX + sx * 1.15, oz + towerZ + sz * 1.15) - oy;
+      const h = Math.max(14.0, towerH - foot);
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.19, h, 10), matRustedSteel);
+      leg.position.set(towerX + sx * 1.15, foot + h * 0.5, towerZ + sz * 1.15);
       leg.rotation.z = sx * 0.055;
       leg.rotation.x = -sz * 0.055;
       leg.castShadow = true;
@@ -1921,6 +1997,7 @@
     // Parabolic Microwave Dish + Tripod Feedhorn Assembly
     const dishGroup = new THREE.Group();
     dishGroup.position.set(towerX - 0.88, 16.5, towerZ);
+    dishGroup.rotation.set(0.22, 0.65, -0.16);
     const dish = new THREE.Mesh(new THREE.ConeGeometry(1.42, 0.68, 24, 1, true), matAluminum);
     dish.rotation.z = Math.PI / 2;
     dishGroup.add(dish);
@@ -2299,10 +2376,14 @@
     rGroup.position.copy(raftState.pos);
 
     // 9 Lashed Giant Bamboo Deck Logs with Raised Culm Nodes & Hemp Rope Lashings
+    const raftWood = matSeasonedBamboo.clone();
+    raftWood.vertexColors = true;
+    raftWood.roughness = 0.78;
+    raftWood.color.set(0xb8925a);
     for (let i = -4; i <= 4; i++) {
-      const logGeo = new THREE.CylinderGeometry(0.18, 0.18, 5.6, 16);
+      const logGeo = notchCulm(new THREE.CylinderGeometry(0.18, 0.16, 5.6, 12, 8));
       logGeo.rotateX(Math.PI / 2);
-      const log = new THREE.Mesh(logGeo, matSeasonedBamboo);
+      const log = new THREE.Mesh(logGeo, raftWood);
       log.position.set(i * 0.36, 0.12, 0);
       log.castShadow = true;
       log.receiveShadow = true;
@@ -2337,7 +2418,7 @@
     });
 
     // Bamboo Mast, Yard/Boom Spars, Rigging Shrouds & Woven Austronesian Crab-Claw Sail
-    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.125, 5.0, 14), matSeasonedBamboo);
+    const mast = new THREE.Mesh(notchCulm(new THREE.CylinderGeometry(0.085, 0.125, 5.0, 10, 8)), raftWood);
     mast.position.set(0, 2.55, -0.6);
     mast.castShadow = true;
     rGroup.add(mast);
@@ -2391,7 +2472,7 @@
 
     const poles = new THREE.Group();
     for (let i = -2; i <= 2; i++) {
-      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.13, 5.1, 6), matSeasonedBamboo);
+      const pole = new THREE.Mesh(notchCulm(new THREE.CylinderGeometry(0.11, 0.13, 5.1, 8, 8)), raftWood);
       pole.rotation.x = Math.PI / 2;
       pole.position.set(i * 0.38, 0.18, (i % 2) * 0.35);
       poles.add(pole);
@@ -5705,11 +5786,11 @@
     dCan.width = 256; dCan.height = 256;
     const dCtx = dCan.getContext('2d');
     const dGrad = dCtx.createLinearGradient(0, 0, 0, 256);
-    dGrad.addColorStop(0.00, '#5a361d'); // Dark russet dorsal ridge
-    dGrad.addColorStop(0.45, '#8c5833'); // Warm chestnut flank
-    dGrad.addColorStop(0.75, '#b88b61'); // Golden fawn lower side
-    dGrad.addColorStop(0.88, '#e8dfd1'); // Creamy white chest & belly
-    dGrad.addColorStop(1.00, '#ede6da');
+    dGrad.addColorStop(0.00, '#2c160e');
+    dGrad.addColorStop(0.42, '#6e4124');
+    dGrad.addColorStop(0.72, '#c4a27a');
+    dGrad.addColorStop(0.86, '#f4efe4');
+    dGrad.addColorStop(1.00, '#fbf7f0');
     dCtx.fillStyle = dGrad;
     dCtx.fillRect(0, 0, 256, 256);
     for (let s = 0; s < 42; s++) {
@@ -5734,7 +5815,7 @@
 
     // 2. Rabbit Agouti Sandy-Brown Coat
     const rabbitMat = wolfPBRAssets.injectWolfAnisotropicSSSMaterial(new THREE.MeshStandardMaterial({
-      color: 0x8a755f,
+      color: 0x6a5342,
       normalMap: wolfPBRAssets.normTex,
       normalScale: new THREE.Vector2(0.75, 0.75),
       roughness: 0.78,
@@ -5965,6 +6046,10 @@
     body.position.set(0, 0.14, 0);
     body.castShadow = true;
     bodyPivot.add(body);
+    const belly = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), assets.deerWhiteMat);
+    belly.scale.set(0.72, 0.42, 1.15);
+    belly.position.set(0, 0.06, 0.02);
+    bodyPivot.add(belly);
 
     const headPivot = new THREE.Group();
     headPivot.position.set(0, 0.22, 0.18);
