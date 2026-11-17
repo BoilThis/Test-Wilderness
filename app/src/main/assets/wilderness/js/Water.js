@@ -222,6 +222,24 @@
 				#include <shadowmap_pars_fragment>
 				#include <shadowmask_pars_fragment>
 
+				float rainHash(vec2 p) {
+					return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+				}
+
+				vec2 rainCellGrad(vec2 worldXZ, float cellScale, float speed) {
+					vec2 cell = floor(worldXZ * cellScale);
+					vec2 f = fract(worldXZ * cellScale);
+					float n = rainHash(cell);
+					vec2 drop = vec2(rainHash(cell + vec2(19.1, 7.7)), rainHash(cell + vec2(3.3, 41.2)));
+					float life = fract(time * speed + n);
+					vec2 d = f - drop;
+					float dist = length(d);
+					float front = life * 0.72;
+					float amp = (1.0 - life) * smoothstep(0.0, 0.08, life);
+					float ripple = sin((dist - front) * 24.0) * exp(-abs(dist - front) * 12.0) * amp;
+					return (d / max(dist, 0.001)) * ripple;
+				}
+
 				void main() {
 
 					#include <logdepthbuf_fragment>
@@ -249,10 +267,12 @@
 						}
 					}
 
-					// Dynamic rain droplet ripples (near-field within 85m)
+					// Rain rings: two cell sizes, each with its own drop and lifetime, within 85m
 					if (uRainIntensity > 0.01 && camDist < 85.0) {
-						float rainWave = sin(worldPosition.x * 22.0 + time * 12.0) * cos(worldPosition.z * 22.0 + time * 14.0) * 0.22 * uRainIntensity * (1.0 - camDist / 85.0);
-						surfaceNormal = normalize(surfaceNormal + vec3(rainWave, 0.0, rainWave));
+						float rainFade = uRainIntensity * (1.0 - camDist / 85.0);
+						vec2 rainG = rainCellGrad(worldPosition.xz, 0.62, 0.72);
+						rainG += rainCellGrad(worldPosition.xz + vec2(3.7, 1.9), 1.08, 1.25) * 0.65;
+						surfaceNormal = normalize(surfaceNormal + vec3(rainG.x, 0.0, rainG.y) * rainFade * 0.9);
 					}
 
 					// Underwater view looking up at the surface: Snell's Window & shimmering subsurface refraction
