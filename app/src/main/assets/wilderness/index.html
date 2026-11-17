@@ -4406,7 +4406,7 @@
         detailedCliff = mix(detailedCliff, vec3(0.20, 0.39, 0.15) * (0.8 + 0.4 * gMicro.g), ledgeMoss * 0.65);
         baseTerrain.rgb = mix(baseTerrain.rgb, detailedCliff, rockBlend);
 
-        // Dark scoria crest. Molten color stays in the crater pool; the rim is cooled basalt with hairline embers.
+        // Dark scoria crest. The rim stays cooled basalt. The lava pool carries the fire.
         if (bCaldera > 0.01) {
           float ashBand = smoothstep(28.0, 70.0, elev) * bCaldera;
           vec3 basaltScoria = mix(vec3(0.11, 0.10, 0.10), vec3(0.20, 0.16, 0.14), sMicro.r);
@@ -4414,13 +4414,11 @@
           float crestBand = smoothstep(118.0, 146.0, elev) * (1.0 - smoothstep(30.0, 78.0, calderaDist));
           vec3 darkLava = mix(vec3(0.045, 0.032, 0.028), vec3(0.12, 0.07, 0.05), macroNoise);
           baseTerrain.rgb = mix(baseTerrain.rgb, darkLava, crestBand * 0.96);
-          float cracks = pow(clamp(sin(vWorldPos.x * 0.85 + vWorldPos.z * 0.62) * 0.5 + 0.5, 0.0, 1.0), 9.0);
-          baseTerrain.rgb += vec3(0.42, 0.06, 0.01) * cracks * crestBand * 0.28;
           float sulfurRim = smoothstep(140.0, 162.0, elev) * (1.0 - smoothstep(28.0, 52.0, calderaDist));
           vec3 sulfurStain = mix(vec3(0.24, 0.18, 0.10), vec3(0.36, 0.24, 0.10), macroNoise);
           baseTerrain.rgb = mix(baseTerrain.rgb, sulfurStain, sulfurRim * 0.22);
           float poolGlow = (1.0 - smoothstep(16.0, 30.0, calderaDist)) * (1.0 - smoothstep(130.0, 146.0, elev)) * smoothstep(118.0, 128.0, elev);
-          baseTerrain.rgb += vec3(0.42, 0.07, 0.012) * poolGlow * (0.35 + 0.12 * sin(uTime * 1.6 + vWorldPos.x * 0.25));
+          baseTerrain.rgb += vec3(0.42, 0.07, 0.012) * poolGlow * (0.28 + 0.08 * sin(uTime * 1.6));
         }
 
         // Tree-canopy leaf-litter humus & fallen twig mosaic beneath forest groves

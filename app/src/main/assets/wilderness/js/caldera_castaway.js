@@ -1459,7 +1459,13 @@
           float rimDamp = 1.0 - smoothstep(uLavaRadius * 0.62, uLavaRadius * 0.96, rad);
           float swell = (sin(pos.x * 0.34 + uTime * 1.45) * cos(pos.z * 0.34 - uTime * 1.15) * 0.28
                       + sin(rad * 0.65 - uTime * 2.1) * 0.12) * rimDamp;
-          pos.y += swell;
+          vec2 b1 = vec2(sin(uTime * 0.7) * 6.0, cos(uTime * 0.5) * 5.0);
+          vec2 b2 = vec2(cos(uTime * 0.45) * 8.0, sin(uTime * 0.85) * 4.0);
+          vec2 b3 = vec2(sin(uTime * 0.33 + 2.0) * 3.5, cos(uTime * 0.6 + 1.2) * 7.0);
+          float dome = exp(-length(pos.xz - b1) * 0.55) * (0.45 + 0.55 * sin(uTime * 3.1));
+          dome += exp(-length(pos.xz - b2) * 0.7) * (0.45 + 0.55 * sin(uTime * 2.4 + 2.0));
+          dome += exp(-length(pos.xz - b3) * 0.6) * (0.45 + 0.55 * sin(uTime * 2.8 + 4.1));
+          pos.y += swell + dome * 0.9 * rimDamp;
           vec4 wp = modelMatrix * vec4(pos, 1.0);
           vWorldPos = wp.xyz;
           gl_Position = projectionMatrix * viewMatrix * wp;
@@ -1516,6 +1522,20 @@
           col = mix(col, orangeLava, smoothstep(0.36, 0.72, magma));
           col = mix(col, yellowCore, smoothstep(0.74, 0.96, magma));
           col += orangeLava * wallEmber * 0.85;
+          float bubble = 0.0;
+          for (int i = 0; i < 5; i++) {
+            float fi = float(i);
+            vec2 cell = vec2(hash21(vec2(fi, 1.7)), hash21(vec2(fi, 9.2))) * 2.0 - 1.0;
+            cell *= uPoolEdgeR * 0.55;
+            float period = 2.2 + hash21(vec2(fi, 3.1)) * 2.6;
+            float life = fract(uTime / period + hash21(vec2(fi, 4.4)));
+            float d = length(relXZ - cell);
+            float core = exp(-d * d / (0.65 + life * 5.0)) * pow(1.0 - life, 0.4) * smoothstep(0.0, 0.07, life);
+            float ring = exp(-abs(d - life * 3.4) * 2.2) * (1.0 - life);
+            bubble = max(bubble, core * 1.4 + ring * 0.45);
+          }
+          col = mix(col, yellowCore, clamp(bubble, 0.0, 1.0));
+          col += orangeLava * bubble * 0.9;
           gl_FragColor = vec4(col * 1.42, 1.0);
         }
       `
@@ -1569,7 +1589,7 @@
 
       // Layer A: Towering Dark Volcanic Ash & Sulfur Smoke Column (26 billboard puffs rising up to +84m above cauldron)
       const ashPuffs = [];
-      const ashCount = 26;
+      const ashCount = 48;
       for (let i = 0; i < ashCount; i++) {
         const aMat = new THREE.SpriteMaterial({
           map: vfx.sharedSmokeTex,
@@ -1590,6 +1610,30 @@
           radialJitter: 0.25 + (i % 4) * 0.22,
           rotOff: (i * 1.17) % (Math.PI * 2),
           rotSpeed: ((i % 2 === 0 ? 1 : -1) * (0.14 + (i % 3) * 0.06))
+        });
+      }
+
+      const flameBursts = [];
+      const flameCount = 14;
+      for (let i = 0; i < flameCount; i++) {
+        const fMat = new THREE.SpriteMaterial({
+          map: vfx.sharedSmokeTex,
+          color: 0xff6a12,
+          transparent: true,
+          opacity: 0.0,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending
+        });
+        const fsp = new THREE.Sprite(fMat);
+        fsp.raycast = () => {};
+        plumeGroup.add(fsp);
+        flameBursts.push({
+          sprite: fsp,
+          mat: fMat,
+          phase: Math.random(),
+          speed: 0.5 + (i % 5) * 0.09,
+          ang: (i / flameCount) * Math.PI * 2 + (i % 3) * 0.4,
+          rad: 1.5 + (i % 7) * 1.6
         });
       }
 
@@ -1693,8 +1737,8 @@
             p.sprite.visible = true;
             p.phase = (p.phase + dt * p.speed) % 1.0;
             const t = p.phase;
-            const riseY = t * 82.0;
-            const spread = 5.0 + Math.pow(t, 1.15) * 14.5;
+            const riseY = t * 112.0;
+            const spread = 6.5 + Math.pow(t, 1.15) * 18.0;
             const px = Math.cos(p.angle + t * 2.6 + timeSec * 0.18) * spread * p.radialJitter + t * wDrift;
             const pz = Math.sin(p.angle + t * 2.3 + timeSec * 0.15) * spread * p.radialJitter - t * wDrift * 0.32;
             p.sprite.position.set(px, riseY, pz);
@@ -1707,8 +1751,30 @@
               p.mat.color.lerpColors(_colAsh, _colHigh, Math.min(1.0, (t - 0.22) / 0.65));
             }
             const env = Math.sin(Math.pow(t, 0.62) * Math.PI);
-            p.mat.opacity = env * (0.42 - t * 0.16);
+            p.mat.opacity = env * (0.55 - t * 0.18);
           }
+
+          let burst = 0.0;
+          const showFlames = distSq < 48400.0;
+          for (let i = 0; i < flameBursts.length; i++) {
+            const f = flameBursts[i];
+            if (!showFlames) {
+              f.sprite.visible = false;
+              continue;
+            }
+            f.sprite.visible = true;
+            f.phase = (f.phase + dt * f.speed) % 1.0;
+            const t = f.phase;
+            const hot = t < 0.36 ? Math.sin((t / 0.36) * Math.PI) : 0.0;
+            const rise = Math.pow(Math.min(t / 0.36, 1.0), 0.6) * 7.2;
+            f.sprite.position.set(Math.cos(f.ang) * f.rad, rise, Math.sin(f.ang) * f.rad);
+            const sc = 0.8 + hot * 4.6;
+            f.sprite.scale.set(sc * 0.5, sc, 1.0);
+            f.mat.opacity = hot * 0.9;
+            f.mat.color.setHex(t < 0.1 ? 0xfff2b0 : 0xff4a00);
+            if (hot > burst) burst = hot;
+          }
+          calderaLight.intensity = 3.8 + burst * 5.5;
 
           if (cinderPoints && cinderPos && cinderData) {
             const showCinders = distSq < 13225.0; // within 115m
