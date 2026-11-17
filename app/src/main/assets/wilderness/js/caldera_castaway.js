@@ -1392,10 +1392,10 @@
   // --- 5E. MOUNT CALDERA VOLCANO CRATER, WALL-TO-WALL MAGMA CAULDRON, PLUMES & OBSIDIAN NODES ---
   function buildVolcanicCalderaBiome() {
     const mc = window.MOUNT_CALDERA || {
-      x: -302.0, z: 64.0, baseR: 112.0, rimR: 36.0, poolEdgeR: 26.5, rimY: 168.0, floorY: 126.0, lavaY: 132.5, footY: 12.0
+      x: -302.0, z: 64.0, baseR: 112.0, rimR: 36.0, poolEdgeR: 33.2, rimY: 168.0, floorY: 162.5, lavaY: 166.8, footY: 12.0
     };
     const vx = mc.x, vz = mc.z;
-    const lavaY = mc.lavaY || 86.5;
+    const lavaY = mc.lavaY || 166.8;
 
     // Build subdivided concentric radial magma disc (12 radial rings x 64 angular segments)
     // Radius = 21.0m embeds cleanly 2m+ into the 16.4–17.4m sloped basalt cauldron wall around 360° -> zero gaps!
@@ -1436,13 +1436,13 @@
       return geo;
     }
 
-    const lavaRadius = (mc.poolEdgeR || 26.5) + 2.4;
-    const lavaGeo = createRadialMagmaGeometry(lavaRadius, 12, 64);
+    const lavaRadius = (mc.poolEdgeR || 33.2) + 2.2;
+    const lavaGeo = createRadialMagmaGeometry(lavaRadius, 14, 64);
     const lavaShaderMat = new THREE.ShaderMaterial({
       uniforms: {
         uTime: window.fireShaderTime || { value: 0.0 },
         uCalderaCenter: { value: new THREE.Vector2(vx, vz) },
-        uPoolEdgeR: { value: mc.poolEdgeR || 26.5 },
+        uPoolEdgeR: { value: mc.poolEdgeR || 33.2 },
         uLavaRadius: { value: lavaRadius }
       },
       vertexShader: `
@@ -1456,16 +1456,16 @@
           vec3 pos = position;
           float rad = length(pos.xz);
           vRad = rad;
-          float rimDamp = 1.0 - smoothstep(uLavaRadius * 0.62, uLavaRadius * 0.96, rad);
-          float swell = (sin(pos.x * 0.34 + uTime * 1.45) * cos(pos.z * 0.34 - uTime * 1.15) * 0.28
-                      + sin(rad * 0.65 - uTime * 2.1) * 0.12) * rimDamp;
+          float rimDamp = 1.0 - smoothstep(uLavaRadius * 0.55, uLavaRadius * 0.90, rad);
+          float swell = (sin(pos.x * 0.34 + uTime * 1.45) * cos(pos.z * 0.34 - uTime * 1.15) * 0.18
+                      + sin(rad * 0.65 - uTime * 2.1) * 0.08) * rimDamp;
           vec2 b1 = vec2(sin(uTime * 0.7) * 6.0, cos(uTime * 0.5) * 5.0);
           vec2 b2 = vec2(cos(uTime * 0.45) * 8.0, sin(uTime * 0.85) * 4.0);
           vec2 b3 = vec2(sin(uTime * 0.33 + 2.0) * 3.5, cos(uTime * 0.6 + 1.2) * 7.0);
           float dome = exp(-length(pos.xz - b1) * 0.55) * (0.45 + 0.55 * sin(uTime * 3.1));
           dome += exp(-length(pos.xz - b2) * 0.7) * (0.45 + 0.55 * sin(uTime * 2.4 + 2.0));
           dome += exp(-length(pos.xz - b3) * 0.6) * (0.45 + 0.55 * sin(uTime * 2.8 + 4.1));
-          pos.y += swell + dome * 0.9 * rimDamp;
+          pos.y += swell + dome * 0.45 * rimDamp;
           vec4 wp = modelMatrix * vec4(pos, 1.0);
           vWorldPos = wp.xyz;
           gl_Position = projectionMatrix * viewMatrix * wp;
@@ -1549,17 +1549,18 @@
     worldLandmarksGroup.add(calderaLight);
     registerManagedLight(calderaLight, 78.0);
 
-    // Jagged Basalt & Obsidian Crater Rim Monoliths (clear of NE Overlook Saddle at -0.62 rad)
+    // Low, weathered basalt boulders embedded on the outer crater shoulder (none inside the cauldron wall)
     const rimAngs = [0.25, 1.15, 2.05, 3.05, 4.05, 4.95];
     rimAngs.forEach((ra, rIdx) => {
-      const rx = vx + Math.cos(ra) * ((mc.rimR || 36.0) - 1.8);
-      const rz = vz + Math.sin(ra) * ((mc.rimR || 36.0) - 1.8);
+      const rx = vx + Math.cos(ra) * ((mc.rimR || 36.0) + 2.6);
+      const rz = vz + Math.sin(ra) * ((mc.rimR || 36.0) + 2.6);
       const ry = getTerrainHeight(rx, rz);
-      const spire = window.createGraniteBoulder(2.2 + (rIdx % 2) * 0.9);
+      const spire = window.createGraniteBoulder(1.8 + (rIdx % 2) * 0.5);
       spire.material = spire.material.clone();
       spire.material.color.set(0x241f1c);
-      spire.position.set(rx, ry - 0.85, rz);
-      spire.rotation.set(Math.sin(ra) * 0.28, ra, Math.cos(ra) * -0.22);
+      spire.scale.set(1.25, 0.52, 1.15);
+      spire.position.set(rx, ry - 0.55, rz);
+      spire.rotation.set(Math.sin(ra) * 0.12, ra, Math.cos(ra) * -0.12);
       spire.castShadow = true;
       spire.raycast = () => {};
       worldLandmarksGroup.add(spire);
@@ -1643,10 +1644,10 @@
       const rimVentAngles = [0.42, 1.48, 2.55, 3.65, 4.78];
       const steamPuffs = [];
       rimVentAngles.forEach((va, vIdx) => {
-        const vRad = 22.8 + (vIdx % 2) * 1.0;
+        const vRad = (mc.rimR || 36.0) + 0.6 + (vIdx % 2) * 0.8;
         const svx = vx + Math.cos(va) * vRad;
         const svz = vz + Math.sin(va) * vRad;
-        const svy = getTerrainHeight(svx, svz) + 0.4;
+        const svy = getTerrainHeight(svx, svz) + 0.3;
         for (let k = 0; k < 4; k++) {
           const stMat = new THREE.SpriteMaterial({
             map: vfx.sharedSmokeTex,
@@ -1842,7 +1843,8 @@
     function spawnObsidianNode(ox, oy, oz, isLavaTubeVein) {
       const node = new THREE.Group();
       node.position.set(ox, oy, oz);
-      const baseRock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.56, 1), matAnodizedDark);
+      const baseRockGeo = window.buildLoveRockGeometry ? window.buildLoveRockGeometry(0.56, 2, 4) : new THREE.DodecahedronGeometry(0.56, 1);
+      const baseRock = new THREE.Mesh(baseRockGeo, matAnodizedDark);
       baseRock.scale.set(1.3, 0.48, 1.2);
       baseRock.position.y = 0.14;
       baseRock.raycast = () => {};
@@ -1912,8 +1914,8 @@
       { x: 841.0,  z: -788.0, y: 28.0, name: 'Magma Trench Fumarole' }
     ];
     [0.42, 1.48, 2.55, 3.65, 4.78].forEach(va => {
-      const gx = vx + Math.cos(va) * 23.2;
-      const gz = vz + Math.sin(va) * 23.2;
+      const gx = vx + Math.cos(va) * ((mc.rimR || 36.0) + 0.8);
+      const gz = vz + Math.sin(va) * ((mc.rimR || 36.0) + 0.8);
       geothermalVents.push({ x: gx, z: gz, y: getTerrainHeight(gx, gz), name: 'Caldera Rim Fumarole' });
     });
     window.geothermalVents = geothermalVents;
@@ -2199,7 +2201,8 @@
       let hAcc = 0.22 * scale;
       for (let i = 0; i < radii.length; i++) {
         const r = radii[i] * scale;
-        const stone = new THREE.Mesh(new THREE.DodecahedronGeometry(r, 0), stoneMat);
+        const sGeo = window.buildLoveRockGeometry ? window.buildLoveRockGeometry(r, 2, i) : new THREE.DodecahedronGeometry(r, 0);
+        const stone = new THREE.Mesh(sGeo, stoneMat);
         stone.scale.set(1.18, 0.56, 1.05);
         stone.position.set(((i % 2) - 0.5) * 0.04 * scale, hAcc, ((i % 3) - 1) * 0.03 * scale);
         stone.rotation.y = i * 0.85;
@@ -5678,7 +5681,7 @@
   const snapperAgents = [];
 
   function buildInstancedUnderwaterSchoolsAndRays() {
-    // 1. Anchovy Baitballs (120 streamlined silver fish in 4 dense boid swarms near reefs/kelp)
+    // 1. Anchovy & Sardine Baitballs (360 streamlined silver fish across 18 inter-island channels, reefs & kelp forests)
     const anchGeo = new THREE.ConeGeometry(0.055, 0.34, 6);
     anchGeo.rotateX(Math.PI / 2);
     anchGeo.scale(0.55, 1.0, 1.0);
@@ -5687,80 +5690,173 @@
       roughness: 0.14,
       metalness: 0.88
     });
-    const anchCount = 120;
+    const anchCount = 360;
     const anchInst = new THREE.InstancedMesh(anchGeo, anchMat, anchCount);
+    anchInst.frustumCulled = false;
     anchInst.layers.set(1);
     scene.add(anchInst);
 
     const baitCenters = [
-      { x: -16, z: -32, y: -1.6 },
-      { x: -328, z: 222, y: -1.25 },
-      { x: 452, z: 266, y: -2.4 },
-      { x: -58, z: -112, y: -2.0 }
+      { x: -16,  z: -32,  y: -1.8 },
+      { x: -328, z: 222,  y: -1.4 },
+      { x: 452,  z: 266,  y: -2.8 },
+      { x: -58,  z: -112, y: -3.2 },
+      // Inter-Island Channels & Submarine Reef Drop-Offs
+      { x: -85,  z: -155, y: -5.4 },
+      { x: 75,   z: -165, y: -6.2 },
+      { x: -165, z: -135, y: -4.8 },
+      { x: 185,  z: -155, y: -5.8 },
+      { x: -302, z: 224,  y: -1.5 },
+      { x: -245, z: 195,  y: -4.5 },
+      { x: 265,  z: 185,  y: -6.5 },
+      { x: 355,  z: 245,  y: -7.8 },
+      { x: -295, z: -265, y: -8.5 },
+      { x: 290,  z: -245, y: -8.2 },
+      { x: -385, z: 45,   y: -7.4 },
+      { x: 375,  z: 35,   y: -7.6 },
+      { x: -145, z: 295,  y: -6.8 },
+      { x: 145,  z: 315,  y: -7.2 }
     ];
     const anchBoids = [];
     for (let i = 0; i < anchCount; i++) {
       const c = baitCenters[i % baitCenters.length];
       const ang = (i * 0.72) % (Math.PI * 2);
-      const r = 1.2 + (i % 7) * 0.45;
+      const r = 1.4 + (i % 8) * 0.55;
+      const floorY = getTerrainHeight(c.x, c.z);
+      const safeY = Math.max(floorY + 1.2, c.y);
       anchBoids.push({
-        cx: c.x, cz: c.z, baseY: c.y,
+        cx: c.x, cz: c.z, baseY: safeY,
         x: c.x + Math.cos(ang) * r,
-        y: c.y + ((i % 5) - 2) * 0.22,
+        y: safeY + ((i % 5) - 2) * 0.28,
         z: c.z + Math.sin(ang) * r,
-        vx: -Math.sin(ang) * 2.1,
+        vx: -Math.sin(ang) * 2.2,
         vy: 0,
-        vz: Math.cos(ang) * 2.1,
+        vz: Math.cos(ang) * 2.2,
         phase: i * 0.37
       });
     }
-    fishBoidGroups.push({ mesh: anchInst, boids: anchBoids, speed: 2.5, radius: 5.5, scatterScale: 1.8 });
+    fishBoidGroups.push({ mesh: anchInst, boids: anchBoids, speed: 2.5, radius: 6.5, scatterScale: 1.8 });
 
-    // 2. Reef Damselfish (90 vivid coral-garden schooling fish across 3 coral beds)
-    const damselGeo = new THREE.SphereGeometry(0.095, 8, 6);
-    damselGeo.scale(0.45, 0.92, 1.35);
+    // 2. Reef Damselfish, Chromis & Butterflyfish (300 vivid coral-garden schooling fish across 16 inter-island coral/kelp beds)
+    const damselGeo = new THREE.SphereGeometry(0.105, 8, 6);
+    damselGeo.scale(0.45, 0.94, 1.38);
     const damselMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
       roughness: 0.22,
       metalness: 0.42
     });
-    const damselCount = 90;
+    const damselCount = 300;
     const damselInst = new THREE.InstancedMesh(damselGeo, damselMat, damselCount);
+    damselInst.frustumCulled = false;
     damselInst.layers.set(1);
     const damselColors = [
       new THREE.Color(0x2898b5), // Reef Turquoise-Blue
-      new THREE.Color(0xd19a34), // Muted Amber-Gold Damselfish
+      new THREE.Color(0xd19a34), // Amber-Gold Damselfish
       new THREE.Color(0x3a9478), // Sea-Jade Chromis
-      new THREE.Color(0xc96c4c)  // Terracotta Anthias
+      new THREE.Color(0xc96c4c), // Terracotta Anthias
+      new THREE.Color(0xe0b842), // Sunlit Lemon Butterflyfish
+      new THREE.Color(0x4b7bc9)  // Cobalt Reef Tang
     ];
     const coralCenters = [
-      { x: -24, z: -46, y: -1.3 },
-      { x: -348, z: 234, y: -1.1 },
-      { x: 468, z: 274, y: -2.2 }
+      { x: -24,  z: -46,  y: -1.5 },
+      { x: -348, z: 234,  y: -1.3 },
+      { x: 468,  z: 274,  y: -2.6 },
+      { x: -115, z: -168, y: -3.8 },
+      { x: 112,  z: -178, y: -4.2 },
+      { x: -195, z: -112, y: -3.6 },
+      { x: 215,  z: -124, y: -4.1 },
+      { x: -312, z: 216,  y: -1.4 },
+      { x: -268, z: 242,  y: -2.8 },
+      { x: 312,  z: 228,  y: -5.2 },
+      { x: 398,  z: 282,  y: -4.6 },
+      { x: -345, z: -215, y: -6.2 },
+      { x: 335,  z: -195, y: -5.8 },
+      { x: -415, z: 125,  y: -5.5 },
+      { x: -75,  z: 275,  y: -4.8 },
+      { x: 95,   z: 285,  y: -5.0 }
     ];
     const damselBoids = [];
     for (let i = 0; i < damselCount; i++) {
       const c = coralCenters[i % coralCenters.length];
       const ang = (i * 0.91) % (Math.PI * 2);
-      const r = 1.6 + (i % 6) * 0.65;
+      const r = 1.8 + (i % 7) * 0.72;
+      const floorY = getTerrainHeight(c.x, c.z);
+      const safeY = Math.max(floorY + 1.0, c.y);
       damselBoids.push({
-        cx: c.x, cz: c.z, baseY: c.y,
+        cx: c.x, cz: c.z, baseY: safeY,
         x: c.x + Math.cos(ang) * r,
-        y: c.y + ((i % 4) - 1.5) * 0.25,
+        y: safeY + ((i % 4) - 1.5) * 0.28,
         z: c.z + Math.sin(ang) * r,
-        vx: -Math.sin(ang) * 1.4,
+        vx: -Math.sin(ang) * 1.5,
         vy: 0,
-        vz: Math.cos(ang) * 1.4,
+        vz: Math.cos(ang) * 1.5,
         phase: i * 0.51
       });
       damselInst.setColorAt(i, damselColors[i % damselColors.length]);
     }
     if (damselInst.instanceColor) damselInst.instanceColor.needsUpdate = true;
     scene.add(damselInst);
-    fishBoidGroups.push({ mesh: damselInst, boids: damselBoids, speed: 1.65, radius: 6.8, scatterScale: 1.4 });
+    fishBoidGroups.push({ mesh: damselInst, boids: damselBoids, speed: 1.7, radius: 7.5, scatterScale: 1.45 });
+
+    // 2B. Deep-Channel Pelagic Trevally & Tuna Cruisers (140 larger silver-cobalt fish patrolling deep inter-island channels!)
+    const pelGeo = new THREE.ConeGeometry(0.11, 0.64, 7);
+    pelGeo.rotateX(Math.PI / 2);
+    pelGeo.scale(0.52, 1.05, 1.0);
+    const pelMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.18,
+      metalness: 0.78
+    });
+    const pelagicCount = 140;
+    const pelInst = new THREE.InstancedMesh(pelGeo, pelMat, pelagicCount);
+    pelInst.frustumCulled = false;
+    pelInst.layers.set(1);
+    const pelColors = [
+      new THREE.Color(0x8ab4d4), // Silver-Cobalt Trevally
+      new THREE.Color(0x6e9bc2), // Deep Channel Bluefin
+      new THREE.Color(0x9ec4c8)  // Teal-Silver Mackerel
+    ];
+    const pelagicCenters = [
+      { x: -135, z: -195, y: -7.5 },
+      { x: 145,  z: -205, y: -8.2 },
+      { x: -245, z: -165, y: -9.0 },
+      { x: 255,  z: -175, y: -8.8 },
+      { x: -275, z: 165,  y: -6.5 },
+      { x: 335,  z: 215,  y: -8.5 },
+      { x: -385, z: -85,  y: -10.5 },
+      { x: 395,  z: -75,  y: -10.2 },
+      { x: -185, z: 325,  y: -9.4 },
+      { x: 195,  z: 335,  y: -9.2 },
+      { x: -465, z: 285,  y: -11.5 },
+      { x: 485,  z: -285, y: -12.0 },
+      { x: 0,    z: -165, y: -7.8 },
+      { x: 415,  z: 295,  y: -4.2 }
+    ];
+    const pelBoids = [];
+    for (let i = 0; i < pelagicCount; i++) {
+      const c = pelagicCenters[i % pelagicCenters.length];
+      const ang = (i * 0.64) % (Math.PI * 2);
+      const r = 3.2 + (i % 6) * 1.35;
+      const floorY = getTerrainHeight(c.x, c.z);
+      const safeY = Math.max(floorY + 1.8, c.y);
+      pelBoids.push({
+        cx: c.x, cz: c.z, baseY: safeY,
+        x: c.x + Math.cos(ang) * r,
+        y: safeY + ((i % 5) - 2) * 0.55,
+        z: c.z + Math.sin(ang) * r,
+        vx: -Math.sin(ang) * 3.1,
+        vy: 0,
+        vz: Math.cos(ang) * 3.1,
+        phase: i * 0.43
+      });
+      pelInst.setColorAt(i, pelColors[i % pelColors.length]);
+    }
+    if (pelInst.instanceColor) pelInst.instanceColor.needsUpdate = true;
+    scene.add(pelInst);
+    fishBoidGroups.push({ mesh: pelInst, boids: pelBoids, speed: 3.1, radius: 11.5, scatterScale: 1.65 });
     window.fishSchools = fishBoidGroups;
 
-    // 3. Striped Reef Snappers (16 medium solitary coral reef hunters — spearable!)
+    // 3. Striped Reef Snappers (36 medium solitary coral reef hunters across coasts & inter-island channels — spearable!)
     const snapperMat = new THREE.MeshStandardMaterial({
       color: 0xc26e4e,
       roughness: 0.24,
@@ -5768,11 +5864,15 @@
     });
     const snapperLocations = [
       [-18, -36], [-34, -52], [28, -42], [-334, 212], [-346, 238], [456, 258], [472, 280], [-56, -108],
-      [6, 18], [104, -6], [-18, 194], [110, 232], [-448, 386], [575, 420], [-288, 224], [-42, -96]
+      [6, 18], [104, -6], [-18, 194], [110, 232], [-448, 386], [575, 420], [-288, 224], [-42, -96],
+      // Inter-Island Reef & Channel Snappers
+      [-92, -148], [88, -158], [-172, -124], [192, -138], [-312, 228], [-254, 206], [284, 196], [368, 252],
+      [-310, -242], [305, -228], [-392, 62], [384, 48], [-152, 282], [156, 298], [-224, -186], [234, -192],
+      [-368, 178], [422, 288], [-128, -212], [134, -218]
     ];
     snapperLocations.forEach(([sx, sz], idx) => {
       const w = getWaterInfo(sx, sz, 0);
-      const sy = Math.min((w.isWater ? w.surfaceY : 0.05) - 0.85, Math.max(getTerrainHeight(sx, sz) + 0.55, (w.isWater ? w.surfaceY : 0.05) - 1.9));
+      const sy = Math.min((w.isWater ? w.surfaceY : 0.05) - 0.85, Math.max(getTerrainHeight(sx, sz) + 0.65, (w.isWater ? w.surfaceY : 0.05) - 2.4));
       const sg = new THREE.Group();
       sg.position.set(sx, sy, sz);
       const sBody = new THREE.Mesh(sharedFishAssets.fishBodyGeo, snapperMat);
@@ -5788,10 +5888,10 @@
       sg.userData = { type: 'fish', health: 1, promptLabel: 'Spear Striped Reef Snapper (+1 Raw Fish) [Tap Strike]', tail: sTail };
       wildlifeGroup.add(sg);
       registerInteractiveTarget(sg);
-      snapperAgents.push({ mesh: sg, cx: sx, cz: sz, baseY: sy, ang: idx * 0.8, rad: 3.4 + (idx % 4) * 1.2 });
+      snapperAgents.push({ mesh: sg, cx: sx, cz: sz, baseY: sy, ang: idx * 0.8, rad: 3.8 + (idx % 4) * 1.4 });
     });
 
-    // 4. Bottom Stingrays (8 articulated benthic rays gliding smoothly across sandy flats)
+    // 4. Bottom Stingrays (20 articulated benthic rays gliding smoothly across sandy flats & inter-island seabed channels)
     const rayGeo = new THREE.SphereGeometry(0.65, 16, 10);
     const rPos = rayGeo.attributes.position;
     for (let i = 0; i < rPos.count; i++) {
@@ -5820,12 +5920,16 @@
 
     const raySpots = [
       [-14, -26], [-325, 224], [-352, 218], [450, 262],
-      [24, -36], [-62, -104], [-292, 220], [18, 22]
+      [24, -36], [-62, -104], [-292, 220], [18, 22],
+      // Inter-Island Channel Seabed Stingrays
+      [-95, -162], [92, -172], [-182, -132], [198, -146],
+      [-262, 198], [295, 212], [382, 268], [-325, -235],
+      [318, -218], [-395, 85], [-138, 292], [148, 305]
     ];
     raySpots.forEach(([rx, rz], idx) => {
       const rGroup = new THREE.Group();
       const bedY = getTerrainHeight(rx, rz);
-      rGroup.position.set(rx, bedY + 0.38, rz);
+      rGroup.position.set(rx, bedY + 0.42, rz);
       const disc = new THREE.Mesh(rayGeo, rayMat);
       rGroup.add(disc);
       const whipTail = new THREE.Mesh(new THREE.ConeGeometry(0.028, 1.05, 6), rayMat);
@@ -5834,7 +5938,7 @@
       rGroup.add(whipTail);
       rGroup.layers.set(1);
       wildlifeGroup.add(rGroup);
-      stingrayAgents.push({ mesh: rGroup, cx: rx, cz: rz, ang: idx * 1.1, rad: 6.5 + (idx % 3) * 2.5, speed: 0.24 });
+      stingrayAgents.push({ mesh: rGroup, cx: rx, cz: rz, ang: idx * 1.1, rad: 7.5 + (idx % 3) * 2.8, speed: 0.24 });
     });
     window.stingrayAgents = stingrayAgents;
   }
@@ -9596,14 +9700,17 @@
     for (let g = 0; g < fishBoidGroups.length; g++) {
       const grp = fishBoidGroups[g];
       const bList = grp.boids;
-      // Coarse center check: full-rate within 65m, throttled beyond 65m, skipped beyond 135m
-      const cDist = Math.hypot(bList[0].cx - px, bList[0].cz - pz);
-      if (cDist > 135.0) continue;
-      if (cDist > 65.0 && ((frameCounter + g) & 3) !== 0) continue;
-      const stepDt = cDist > 65.0 ? dt * 4.0 : dt;
+      let anyUpdated = false;
 
       for (let b = 0; b < bList.length; b++) {
         const bo = bList[b];
+        // Per-school distance check so schools across all inter-island channels animate smoothly when nearby
+        const cDist = Math.hypot(bo.cx - px, bo.cz - pz);
+        if (cDist > 210.0 && frameCounter > 3) continue;
+        if (cDist > 90.0 && frameCounter > 3 && ((frameCounter + b) & 3) !== 0) continue;
+        const stepDt = (cDist > 90.0 && frameCounter > 3) ? dt * 4.0 : dt;
+        anyUpdated = true;
+
         const toCx = bo.cx - bo.x;
         const toCz = bo.cz - bo.z;
         const dHome = Math.hypot(toCx, toCz);
@@ -9627,7 +9734,7 @@
 
         bo.x += bo.vx * stepDt;
         bo.z += bo.vz * stepDt;
-        bo.y = bo.baseY + Math.sin(timeSec * 1.9 + bo.phase) * 0.22;
+        bo.y = bo.baseY + Math.sin(timeSec * 1.9 + bo.phase) * 0.24;
 
         bDummy.position.set(bo.x, bo.y, bo.z);
         bDummy.rotation.set(0, Math.atan2(bo.vx, bo.vz) + Math.sin(timeSec * 12.0 + bo.phase) * 0.08, 0);
@@ -9635,7 +9742,9 @@
         bDummy.updateMatrix();
         grp.mesh.setMatrixAt(b, bDummy.matrix);
       }
-      grp.mesh.instanceMatrix.needsUpdate = true;
+      if (anyUpdated) {
+        grp.mesh.instanceMatrix.needsUpdate = true;
+      }
     }
 
     for (let r = 0; r < snapperAgents.length; r++) {

@@ -2427,10 +2427,10 @@
       z: 64.0,
       baseR: 112.0,
       rimR: 36.0,
-      poolEdgeR: 26.5,
+      poolEdgeR: 33.2,
       rimY: 168.0,
-      floorY: 126.0,
-      lavaY: 132.5,
+      floorY: 162.5,
+      lavaY: 166.8,
       footY: 12.0
     };
     window.MOUNT_CALDERA = MOUNT_CALDERA;
@@ -3503,16 +3503,21 @@
         }
       }
 
-      // Smooth Coastal Island Envelope (Domain-Warped 1200m High-Res Central Island Surrounded 360° by Ocean Reefs & Trenches)
-      // Centered near (10, 96) with organic peninsula bays so all central landmarks remain dry inland while outer shores drop cleanly into sea
+      // Smooth Coastal Island Envelope (Domain-Warped 1200m High-Res Central Island Surrounded 360° by Deep Ocean Basins, Submarine Ridges & Trenches)
+      // Centered near (10, 96) with organic peninsula bays so all central landmarks remain dry inland while outer shores drop cleanly into deep sea
       const envDx = (x - 10.0) / 315.0;
       const envDz = (z - 98.0) / 292.0;
       const envWarp = fbm2(x * 0.0045 + 12.1, z * 0.0045 - 8.4, 2) * 0.14;
       const envDist = Math.hypot(envDx, envDz) + envWarp;
       if (envDist > 0.86) {
-        const coastT = smoothstep(0.86, 1.24, envDist);
-        const abyssY = -12.6 + fbm2(x * 0.008, z * 0.008, 2) * 1.4;
-        y = y * (1.0 - coastT) + Math.min(y, abyssY) * coastT;
+        const shelfT = smoothstep(0.86, 1.10, envDist);
+        const deepBasinT = smoothstep(1.04, 1.48, envDist);
+        const trenchT = smoothstep(1.42, 2.05, envDist);
+        // Rolling submarine seamount ridges, coral banks & deep abyssal trenches (-14m shelf -> -32m inter-island basins -> -52m deep ocean trenches)
+        const subRidge = ridged2(x * 0.0065 + 4.2, z * 0.0065 - 3.7, 2) * 7.5 + fbm2(x * 0.012, z * 0.012, 2) * 4.2;
+        const canyonCut = Math.pow(Math.max(0.0, Math.sin(x * 0.0075 - z * 0.0062 + fbm2(x * 0.004, z * 0.004, 2) * 2.4)), 3.0) * 11.5;
+        const abyssY = -13.5 - deepBasinT * 19.5 - trenchT * 16.0 + subRidge * (0.45 + 0.55 * deepBasinT) - canyonCut * deepBasinT;
+        y = y * (1.0 - shelfT) + Math.min(y, abyssY) * shelfT;
       }
 
       // Stratified Eastern Limestone Canyon (x = 160..265, z = -22..88) with weathered rock strata benches & erosion gulch
@@ -3529,7 +3534,7 @@
         }
       }
 
-      // Wide Ocean Fjord Basin opening North (z < -28)
+      // Wide Ocean Fjord Basin opening North (z < -28), plunging into a deep submarine canyon (-34m) offshore
       if (z < -28) {
         const northDist = -28 - z;
         const coveWarp = fbm2(x * 0.014, z * 0.014, 2) * 16.0;
@@ -3538,7 +3543,7 @@
         const distFromChannel = Math.abs(x - fjordCenter);
         if (distFromChannel < fjordHalfWidth) {
           const edgeT = 1.0 - distFromChannel / Math.max(1.0, fjordHalfWidth);
-          const basinDepth = Math.min(16.0, 3.8 + northDist * 0.14);
+          const basinDepth = Math.min(34.0, 4.2 + northDist * 0.22);
           const carved = -basinDepth * Math.pow(edgeT, 0.78);
           y = Math.min(y, carved + 2.2 * (1.0 - edgeT));
         }
@@ -3563,23 +3568,26 @@
       if (vcDist < MOUNT_CALDERA.baseR + 14.0) {
         const ang = Math.atan2(vcDz, vcDx);
         const footY = MOUNT_CALDERA.footY;
-        const coneT = Math.max(0.0, Math.min(1.0, (vcDist - MOUNT_CALDERA.rimR) / (MOUNT_CALDERA.baseR - MOUNT_CALDERA.rimR)));
-        const profile = Math.pow(1.0 - coneT, 1.42);
+        const rawConeT = Math.max(0.0, Math.min(1.0, (vcDist - MOUNT_CALDERA.rimR) / (MOUNT_CALDERA.baseR - MOUNT_CALDERA.rimR)));
+        // Smooth out the summit shoulder near coneT = 0 so the outer cone eases gently into a flat rounded rim lip instead of a pointy cusp
+        const shoulderEase = smoothstep(0.0, 0.16, rawConeT);
+        const effConeT = rawConeT * shoulderEase + (rawConeT * rawConeT / 0.32) * (1.0 - shoulderEase);
+        const profile = Math.pow(1.0 - Math.min(1.0, effConeT), 1.35);
 
-        // Radial basalt ribs on the mid-slopes only (quiet inside the cauldron, quiet on the outer skirt)
-        const outerMask = smoothstep(0.04, 0.22, coneT) * (1.0 - smoothstep(0.78, 1.0, coneT));
+        // Radial basalt ribs on the mid-slopes only (quiet near the summit rim, quiet on the outer skirt)
+        const outerMask = smoothstep(0.16, 0.34, rawConeT) * (1.0 - smoothstep(0.78, 1.0, rawConeT));
         const ribWave = Math.sin(ang * 7.0 + fbm2(Math.cos(ang) * 2.2, Math.sin(ang) * 2.2, 2) * 1.55) * 0.5 + 0.5;
-        const ribs = (ribWave * 4.8 + ridged2(x * 0.028 + 1.4, z * 0.028 - 2.1, 2) * 4.0 + fbm2(x * 0.016, z * 0.016, 2) * 2.6) * outerMask;
+        const ribs = (ribWave * 4.2 + ridged2(x * 0.028 + 1.4, z * 0.028 - 2.1, 2) * 3.4 + fbm2(x * 0.016, z * 0.016, 2) * 2.2) * outerMask;
 
-        // Jagged crest. North-fjord overlook notch at 2.20 rad drops the rim ~7m so the trail can crest it.
-        const rimBelt = Math.exp(-Math.pow(coneT / 0.12, 2.0));
-        const rimJagged = (Math.sin(ang * 5.0 + 0.7) * 3.2 + Math.cos(ang * 9.0 - 1.2) * 1.8 + ridged2(Math.cos(ang) * 2.1, Math.sin(ang) * 2.1, 2) * 2.2) * rimBelt;
+        // Smooth, gently rounded crater lip (no spiky sawtooth peaks)
+        const rimBelt = Math.exp(-Math.pow(rawConeT / 0.14, 2.0));
+        const rimUndulation = (Math.sin(ang * 2.0 + 0.7) * 0.18 + Math.cos(ang * 3.0 - 1.2) * 0.12) * rimBelt;
         const overlookAng = 2.20;
         const dAngOverlook = Math.atan2(Math.sin(ang - overlookAng), Math.cos(ang - overlookAng));
-        const overlookDip = Math.exp(-Math.pow(dAngOverlook / 0.32, 2.0)) * 7.0 * Math.exp(-Math.pow(coneT / 0.18, 2.0));
+        const overlookDip = Math.exp(-Math.pow(dAngOverlook / 0.36, 2.0)) * 0.30 * Math.exp(-Math.pow(rawConeT / 0.18, 2.0));
 
-        const rimCrestY = MOUNT_CALDERA.rimY + rimJagged - overlookDip;
-        let volcH = footY + profile * (MOUNT_CALDERA.rimY - footY) + ribs + rimJagged - overlookDip;
+        const rimCrestY = MOUNT_CALDERA.rimY + rimUndulation - overlookDip;
+        let volcH = footY + profile * (MOUNT_CALDERA.rimY - footY) + ribs + rimUndulation - overlookDip;
 
         // Ash trail: east lava-tube trailhead (angle 0.05) climbing to the north overlook (angle 2.20).
         const trailOuter = MOUNT_CALDERA.baseR * 0.74;
@@ -3595,7 +3603,7 @@
             const rDiff = Math.abs(vcDist - rTrail);
             if (rDiff < 6.4) {
               const trailBlend = (1.0 - smoothstep(2.3, 6.4, rDiff)) * smoothstep(0.0, 0.05, sTrail) * (1.0 - smoothstep(0.94, 1.0, sTrail) * 0.20);
-              const trailTargetY = (footY + 20.0) + sTrail * (MOUNT_CALDERA.rimY - footY - 28.0);
+              const trailTargetY = (footY + 20.0) + sTrail * (MOUNT_CALDERA.rimY - footY - 21.2);
               volcH = volcH * (1.0 - trailBlend * 0.90) + trailTargetY * (trailBlend * 0.90);
             }
           }
@@ -3604,22 +3612,23 @@
         const skirtW = smoothstep(MOUNT_CALDERA.baseR + 12.0, MOUNT_CALDERA.baseR - 28.0, vcDist);
         y = y * (1.0 - skirtW) + Math.max(y, volcH) * skirtW;
 
-        // Crater bowl. Flat floor inside poolEdgeR*0.62, walls up to the jagged crest. Lava mesh sits on lavaY.
+        // Shallow crater bowl with broad rounded rim shoulder. Lava mesh sits at lavaY (166.8m), ~1m below the 167.8m-168m rim.
         if (vcDist < MOUNT_CALDERA.rimR) {
-          const floorR = MOUNT_CALDERA.poolEdgeR * 0.62;
-          const wallSpan = Math.max(0.01, (vcDist - floorR) / Math.max(0.01, MOUNT_CALDERA.rimR - floorR));
-          const bowlFrac = vcDist <= floorR ? 0.0 : Math.pow(wallSpan, 1.55);
+          const floorR = MOUNT_CALDERA.poolEdgeR * 0.65;
+          const wallSpan = Math.max(0.0, Math.min(1.0, (vcDist - floorR) / Math.max(0.01, MOUNT_CALDERA.rimR - floorR)));
+          // Smooth Hermite S-curve from floorY (162.5m) to rimCrestY (~167.8m) so radial slope is 0 at the rim lip (zero grid teeth)
+          const bowlFrac = wallSpan * wallSpan * (3.0 - 2.0 * wallSpan);
           const bowlTargetY = MOUNT_CALDERA.floorY + (rimCrestY - MOUNT_CALDERA.floorY) * bowlFrac;
           y = bowlTargetY;
         }
       }
 
-      // 28 Irregular Archipelago Islands with Main-Island-Fidelity Terraces, Headlands, Gullies & Ridges
+      // 28 Irregular Archipelago Islands with Main-Island-Fidelity Terraces, Headlands, Gullies, Ridges & Deep Submarine Pedestals
       for (let k = 0; k < archipelagoIslets.length; k++) {
         const isl = archipelagoIslets[k];
         const dx = x - isl.x;
         const dz = z - isl.z;
-        const maxReach = isl.r * 1.65;
+        const maxReach = isl.r * 2.15;
         if (dx > -maxReach && dx < maxReach && dz > -maxReach && dz < maxReach) {
           const idist = Math.hypot(dx, dz);
           if (idist < maxReach) {
@@ -3627,6 +3636,7 @@
             const coveHarmonic = Math.sin(ang * 3.0 + k * 2.1) * 0.11 + Math.cos(ang * 5.0 - k * 1.7) * 0.06;
             const shapeWarp = 1.0 + fbm2(Math.cos(ang) * 1.45 + k * 7.3, Math.sin(ang) * 1.45 + k * 4.1, 2) * 0.28 + coveHarmonic;
             const effRadius = isl.r * 1.34 * Math.max(0.62, shapeWarp);
+            const subRadius = effRadius * 1.48;
             if (idist < effRadius) {
               const norm = 1.0 - idist / effRadius;
               // Smooth sandy littoral shelf (norm < 0.22) transitioning into terraced headlands & interior ridges
@@ -3636,11 +3646,18 @@
               islH += fbm2(x * 0.028 + k * 5.0, z * 0.028, 3) * norm * 2.65
                     + ridged2(x * 0.062 + k * 3.1, z * 0.062, 2) * norm * 1.15
                     + fbm2(x * 0.11 - k * 2.3, z * 0.11 + k * 1.9, 2) * smoothstep(0.08, 0.45, norm) * 0.48;
-              if (isl.isVolcano && norm > 0.72) {
-                const craterT = (norm - 0.72) / 0.28;
-                islH -= Math.sin(craterT * Math.PI * 0.5) * 14.5;
+              if (isl.isVolcano && norm > 0.70) {
+                const craterT = smoothstep(0.70, 1.0, norm);
+                islH -= craterT * 8.5;
               }
               y = Math.max(y, islH);
+            } else if (idist < subRadius) {
+              // Submarine reef drop-off slope descending smoothly from -2.2m littoral edge into the deep ocean basin
+              const subT = (idist - effRadius) / Math.max(1.0, subRadius - effRadius);
+              const subEase = subT * subT * (3.0 - 2.0 * subT);
+              const reefTerrace = Math.sin(subT * Math.PI * 3.0 + k) * 0.85 * (1.0 - subT);
+              const pedY = -2.2 * (1.0 - subEase) + y * subEase + reefTerrace;
+              y = Math.max(y, pedY);
             }
           }
         }
@@ -4411,13 +4428,13 @@
           float ashBand = smoothstep(28.0, 70.0, elev) * bCaldera;
           vec3 basaltScoria = mix(vec3(0.11, 0.10, 0.10), vec3(0.20, 0.16, 0.14), sMicro.r);
           baseTerrain.rgb = mix(baseTerrain.rgb, basaltScoria, ashBand * 0.94);
-          float crestBand = smoothstep(118.0, 146.0, elev) * (1.0 - smoothstep(30.0, 78.0, calderaDist));
+          float crestBand = smoothstep(138.0, 168.0, elev) * (1.0 - smoothstep(32.0, 78.0, calderaDist));
           vec3 darkLava = mix(vec3(0.045, 0.032, 0.028), vec3(0.12, 0.07, 0.05), macroNoise);
           baseTerrain.rgb = mix(baseTerrain.rgb, darkLava, crestBand * 0.96);
-          float sulfurRim = smoothstep(140.0, 162.0, elev) * (1.0 - smoothstep(28.0, 52.0, calderaDist));
+          float sulfurRim = smoothstep(158.0, 168.0, elev) * (1.0 - smoothstep(30.0, 48.0, calderaDist));
           vec3 sulfurStain = mix(vec3(0.24, 0.18, 0.10), vec3(0.36, 0.24, 0.10), macroNoise);
           baseTerrain.rgb = mix(baseTerrain.rgb, sulfurStain, sulfurRim * 0.22);
-          float poolGlow = (1.0 - smoothstep(16.0, 30.0, calderaDist)) * (1.0 - smoothstep(130.0, 146.0, elev)) * smoothstep(118.0, 128.0, elev);
+          float poolGlow = (1.0 - smoothstep(28.0, 36.5, calderaDist)) * (1.0 - smoothstep(166.8, 168.2, elev)) * smoothstep(161.0, 165.5, elev);
           baseTerrain.rgb += vec3(0.42, 0.07, 0.012) * poolGlow * (0.28 + 0.08 * sin(uTime * 1.6));
         }
 
@@ -4503,26 +4520,38 @@
 
     let terrainMesh = null;
 
-    // --- AAA TRIPLANAR MOSSY, WET-SHEEN & SUBTERRANEAN DAMP CAVERN ROCK SHADER ---
+    // --- LOVE-ROCKS PROCEDURAL REALISTIC ROCK SHADER (CLEAVAGE FACETS, CREVICE AO, MOSS & SNOW SUPPORT) ---
     let sharedBoulderMat = null;
     window.uCaveDarkness = window.uCaveDarkness || { value: 0.0 };
+    window.rockWeatherUniforms = window.rockWeatherUniforms || {
+      uMossAmount: { value: 1.0 },
+      uSnowAmount: { value: 0.42 }
+    };
+    window.setRockWeather = function (opts = {}) {
+      if (typeof opts.moss === 'number') window.rockWeatherUniforms.uMossAmount.value = Math.max(0.0, Math.min(2.0, opts.moss));
+      if (typeof opts.snow === 'number') window.rockWeatherUniforms.uSnowAmount.value = Math.max(0.0, Math.min(2.0, opts.snow));
+    };
     function applyAAARockShader(mat, isCaveInterior = false) {
       mat.map = cliffTex;
       mat.normalMap = cliffNormTex;
-      mat.normalScale = new THREE.Vector2(isCaveInterior ? 1.65 : 1.35, isCaveInterior ? 1.65 : 1.35);
+      mat.normalScale = new THREE.Vector2(isCaveInterior ? 1.75 : 1.55, isCaveInterior ? 1.75 : 1.55);
       mat.envMap = skyEnvCubeTex;
-      mat.envMapIntensity = isCaveInterior ? 0.25 : 0.65;
+      mat.envMapIntensity = isCaveInterior ? 0.25 : 0.68;
       mat.onBeforeCompile = function (shader) {
         shader.uniforms.uMossTex = { value: groundTex };
         shader.uniforms.uRockTex = { value: cliffTex };
         shader.uniforms.uTime = window.wfShaderTime;
         shader.uniforms.uIsCave = { value: isCaveInterior ? 1.0 : 0.0 };
         shader.uniforms.uCaveDark = window.uCaveDarkness;
+        shader.uniforms.uMossAmount = window.rockWeatherUniforms.uMossAmount;
+        shader.uniforms.uSnowAmount = window.rockWeatherUniforms.uSnowAmount;
         shader.vertexShader = shader.vertexShader.replace(
           '#include <common>',
           `#include <common>
+          attribute vec3 aRockCrevice;
           varying vec3 vRockWPos;
           varying vec3 vRockWNorm;
+          varying vec3 vRockCrevice;
           `
         ).replace(
           '#include <begin_vertex>',
@@ -4536,6 +4565,7 @@
           #endif
           vRockWPos = rWp.xyz;
           vRockWNorm = rWn;
+          vRockCrevice = aRockCrevice;
           `
         );
         shader.fragmentShader = shader.fragmentShader.replace(
@@ -4546,33 +4576,48 @@
           uniform float uTime;
           uniform float uIsCave;
           uniform float uCaveDark;
+          uniform float uMossAmount;
+          uniform float uSnowAmount;
           varying vec3 vRockWPos;
           varying vec3 vRockWNorm;
+          varying vec3 vRockCrevice;
           `
         ).replace(
           '#include <map_fragment>',
           `
           vec3 faceNorm = normalize(vRockWNorm) * (gl_FrontFacing ? 1.0 : -1.0);
-          vec3 rWeights = pow(abs(faceNorm), vec3(3.2));
+          vec3 rWeights = pow(abs(faceNorm), vec3(3.6));
           rWeights /= max(0.0001, rWeights.x + rWeights.y + rWeights.z);
-          float uvScale = (uIsCave > 0.5) ? 0.34 : 0.28;
+          float uvScale = (uIsCave > 0.5) ? 0.34 : 0.30;
           float rockCamDist = length(cameraPosition - vRockWPos);
           vec3 triRock;
-          if (rockCamDist < 58.0 || uIsCave > 0.5) {
+          if (rockCamDist < 64.0 || uIsCave > 0.5) {
             vec4 rX = texture2D(uRockTex, vRockWPos.zy * uvScale);
             vec4 rY = texture2D(uRockTex, vRockWPos.xz * uvScale);
             vec4 rZ = texture2D(uRockTex, vRockWPos.xy * uvScale);
             triRock = (rX.rgb * rWeights.x + rY.rgb * rWeights.y + rZ.rgb * rWeights.z);
           } else {
-            // Distance-simplified single planar rock fetch beyond 58m
+            // Distance-simplified single planar rock fetch beyond 64m
             triRock = texture2D(uRockTex, (vRockWPos.xz + vec2(vRockWPos.y * 0.5)) * uvScale).rgb;
           }
 
-          float strataBand = sin(vRockWPos.y * 4.8 + triRock.r * 5.5) * 0.5 + 0.5;
-          vec3 baseStone = mix(triRock * vec3(0.62, 0.65, 0.68), triRock * vec3(0.94, 0.92, 0.88), strataBand);
-          vec3 mossSample = (rockCamDist < 65.0)
-            ? texture2D(uMossTex, vRockWPos.xz * 0.45).rgb * vec3(0.68, 1.05, 0.58)
-            : vec3(0.32, 0.48, 0.24);
+          // Geological cleavage strata & procedural micro-fracture veins (love-rocks style)
+          float strataBand = sin(vRockWPos.y * 5.2 + vRockWPos.x * 0.8 + triRock.r * 5.8) * 0.5 + 0.5;
+          float microFissure = pow(clamp(1.0 - abs(sin(vRockWPos.x * 3.8 + vRockWPos.y * 4.6 - vRockWPos.z * 3.5 + triRock.g * 6.2)), 0.0, 1.0), 7.0);
+          float creviceDepth = clamp(vRockCrevice.x + microFissure * 0.55, 0.0, 1.0);
+          float edgeWear = clamp(vRockCrevice.y * 0.85 + smoothstep(0.64, 0.92, triRock.g) * (1.0 - creviceDepth) * 0.42, 0.0, 1.0);
+          float shelfFlat = clamp(vRockCrevice.z, 0.0, 1.0);
+
+          vec3 darkSlate = triRock * vec3(0.46, 0.49, 0.52);
+          vec3 warmGranite = triRock * vec3(0.88, 0.85, 0.80);
+          vec3 baseStone = mix(darkSlate, warmGranite, strataBand);
+          // Chiseled facet edge wear highlight & deep cleavage fissure darkening
+          baseStone = mix(baseStone, vec3(0.84, 0.82, 0.77), edgeWear * 0.36);
+          baseStone *= (1.0 - creviceDepth * 0.48);
+
+          vec3 mossSample = (rockCamDist < 68.0)
+            ? texture2D(uMossTex, vRockWPos.xz * 0.48).rgb * vec3(0.62, 1.02, 0.50)
+            : vec3(0.30, 0.48, 0.22);
 
           if (uIsCave > 0.5) {
             // Varied eroded karst limestone, dark damp basalt, calcite flowstone bands & wet seepage stains
@@ -4584,29 +4629,52 @@
             baseStone = mix(basaltCol, limestoneCol, erosionWave * 0.68);
             baseStone = mix(baseStone, vec3(0.66, 0.61, 0.52) * triRock.g, flowstone * 0.55);
             baseStone = mix(baseStone, baseStone * vec3(0.46, 0.50, 0.54), dampPatch * 0.52);
-            float creviceAO = 0.52 + 0.48 * smoothstep(0.18, 0.86, triRock.r);
+            float creviceAO = 0.50 + 0.50 * smoothstep(0.16, 0.86, triRock.r) * (1.0 - creviceDepth * 0.35);
             diffuseColor.rgb = diffuseColor.rgb * baseStone * creviceAO;
           } else {
-            // Lush moss cap on upward-facing boulder crowns (near both waterfalls & forest)
+            // 1. LOVE-ROCKS PROCEDURAL MOSS LAYER (Upward facets, stepped strata shelves, crevices & humid gorges)
             float inGorge1 = step(17.0, vRockWPos.x) * step(vRockWPos.x, 96.0) * (1.0 - smoothstep(4.0, 14.0, abs(vRockWPos.z - 2.0)));
             float inGorge2 = step(118.0, vRockWPos.z) * step(vRockWPos.z, 172.0) * (1.0 - smoothstep(4.0, 16.0, abs(vRockWPos.x - (-15.0))));
             float inGorge = max(inGorge1, inGorge2);
-            float mossCrown = smoothstep(0.42 - inGorge * 0.14, 0.78, faceNorm.y + (triRock.g - 0.5) * 0.32);
-            baseStone = mix(baseStone, mossSample, mossCrown * (0.58 + inGorge * 0.28));
+            float calderaDist = length(vRockWPos.xz - vec2(-302.0, 64.0));
+            float volcanoHeatDry = 1.0 - smoothstep(38.0, 88.0, calderaDist);
+            float alpineFade = 1.0 - smoothstep(58.0, 96.0, vRockWPos.y);
 
-            // Wet dark basalt sheen near waterlines or inside cascading waterfall streams
+            float mossNoise = (triRock.g - 0.48) * 0.38 + sin(vRockWPos.x * 1.7 + vRockWPos.z * 1.5) * 0.08;
+            float mossSignal = faceNorm.y + shelfFlat * 0.24 + creviceDepth * 0.16 + mossNoise + inGorge * 0.18;
+            float mossMask = smoothstep(0.36, 0.68, mossSignal) * clamp(uMossAmount, 0.0, 2.0) * (1.0 - volcanoHeatDry) * (0.25 + 0.75 * alpineFade);
+            // Dark damp humus border ring where moss colonies meet bare rock
+            float mossBorder = smoothstep(0.28, 0.38, mossSignal) * (1.0 - smoothstep(0.38, 0.52, mossSignal)) * clamp(uMossAmount, 0.0, 1.5) * (1.0 - volcanoHeatDry);
+            baseStone = mix(baseStone, baseStone * vec3(0.42, 0.46, 0.36), mossBorder * 0.55);
+            // 2-tone velvet bryophyte moss (deep emerald base -> sunlit chartreuse crown tips)
+            vec3 mossVelvet = mix(mossSample * vec3(0.58, 0.76, 0.48), mossSample * vec3(1.06, 1.18, 0.68), smoothstep(0.52, 0.88, faceNorm.y + triRock.r * 0.2));
+            baseStone = mix(baseStone, mossVelvet, clamp(mossMask * (0.72 + inGorge * 0.24), 0.0, 0.94));
+
+            // 2. LOVE-ROCKS PROCEDURAL SNOW & ALPINE FROST LAYER (High-elevation peaks & stepped rock shelves)
+            float elevSnow = smoothstep(56.0, 98.0, vRockWPos.y) * (1.0 - volcanoHeatDry);
+            float effSnowAmt = clamp(max(elevSnow, (uSnowAmount - 0.42) * 1.45) * (1.0 - volcanoHeatDry), 0.0, 1.0);
+            if (effSnowAmt > 0.01) {
+              float snowSignal = faceNorm.y + shelfFlat * 0.28 + creviceDepth * 0.22 + (triRock.r - 0.48) * 0.26;
+              float snowCap = smoothstep(0.58 - effSnowAmt * 0.28, 0.76 - effSnowAmt * 0.18, snowSignal) * effSnowAmt;
+              vec3 snowShadow = vec3(0.76, 0.85, 0.95);
+              vec3 snowBright = vec3(0.96, 0.98, 1.00);
+              vec3 snowCol = mix(snowShadow, snowBright, smoothstep(0.45, 0.92, faceNorm.y) * (1.0 - creviceDepth * 0.4));
+              baseStone = mix(baseStone, snowCol, clamp(snowCap, 0.0, 0.95));
+            }
+
+            // 3. Wet dark basalt sheen near waterlines or inside cascading waterfall streams
             float streamWet = max(
               inGorge1 * (1.0 - smoothstep(0.0, 5.2, abs(vRockWPos.z - 2.0))),
               inGorge2 * (1.0 - smoothstep(0.0, 6.2, abs(vRockWPos.x - (-15.0))))
             );
             float shoreWet = clamp((1.55 - vRockWPos.y) * 1.15, 0.0, 1.0);
             float wetFactor = clamp(max(shoreWet, streamWet * 0.92), 0.0, 1.0);
-            baseStone = mix(baseStone, baseStone * vec3(0.38, 0.43, 0.47), wetFactor * 0.82);
+            baseStone = mix(baseStone, baseStone * vec3(0.36, 0.41, 0.45), wetFactor * 0.82);
 
             float waterRim = smoothstep(0.05, 0.35, wetFactor) * (1.0 - smoothstep(0.45, 0.85, wetFactor)) * streamWet;
             baseStone += vec3(0.32, 0.42, 0.44) * waterRim;
 
-            float bottomAO = smoothstep(-0.65, 0.15, faceNorm.y) * 0.48 + 0.52;
+            float bottomAO = smoothstep(-0.65, 0.18, faceNorm.y) * 0.50 + 0.50;
             diffuseColor.rgb = diffuseColor.rgb * baseStone * bottomAO;
           }
           `
@@ -4615,14 +4683,18 @@
           `#include <roughnessmap_fragment>
           if (uIsCave > 0.5) {
             float seepStreak = smoothstep(0.42, 0.84, sin(vRockWPos.x * 2.8 + vRockWPos.z * 3.1 + diffuseColor.r * 5.0) * 0.5 + 0.5);
-            roughnessFactor = mix(0.84, 0.11, seepStreak);
+            roughnessFactor = mix(0.86, 0.11, seepStreak);
           } else {
             float inGorgeR = max(
               step(17.0, vRockWPos.x) * step(vRockWPos.x, 96.0) * (1.0 - smoothstep(0.0, 5.5, abs(vRockWPos.z - 2.0))),
               step(118.0, vRockWPos.z) * step(vRockWPos.z, 172.0) * (1.0 - smoothstep(0.0, 6.5, abs(vRockWPos.x - (-15.0))))
             );
             float wetR = clamp(max(clamp((1.55 - vRockWPos.y) * 1.15, 0.0, 1.0), inGorgeR * 0.92), 0.0, 1.0);
-            roughnessFactor = mix(0.84, 0.10, wetR);
+            float mossR = smoothstep(0.42, 0.72, vRockWNorm.y + vRockCrevice.z * 0.25) * clamp(uMossAmount, 0.0, 1.0);
+            float snowR = smoothstep(58.0, 95.0, vRockWPos.y) * smoothstep(0.48, 0.75, vRockWNorm.y);
+            float baseR = mix(0.84, 0.94, mossR);
+            baseR = mix(baseR, 0.22, snowR);
+            roughnessFactor = mix(baseR, 0.10, wetR);
           }
           `
         ).replace(
@@ -6601,26 +6673,369 @@
       return spawnPooledEZTree(presetName, 'ash', x, z, s, y, 4, Math.max(4.8, s * 28.0), false);
     }
 
-    // 5. AAA Triplanar-Textured Mossy & Wet-Sheen Basalt Boulders (with 2-Tier Geometric LOD)
+    // 5. LOVE-ROCKS PROCEDURAL REALISTIC ROCK GENERATOR (Planar Cleavage Facets, Strata Shelves, Crevices, Moss & Snow)
     window.activeBoulders = window.activeBoulders || [];
-    function buildCraggyBoulderGeometry(radius, segW, segH) {
-      const geo = new THREE.SphereGeometry(radius, segW, segH);
-      const p = geo.attributes.position;
-      for (let i = 0; i < p.count; i++) {
-        const x = p.getX(i);
-        const y = p.getY(i);
-        const z = p.getZ(i);
-        const nx = x / radius, ny = y / radius, nz = z / radius;
-        const crag = fbm2(nx * 2.1 + nz * 1.4, ny * 2.3 - nx * 0.9, 2) * 0.16
-                   + ridged2(nx * 2.8 - ny * 1.2, nz * 2.8 + ny * 1.5, 2) * 0.11;
-        const scale = 0.88 + crag;
-        const flatBottom = ny < -0.35 ? (1.0 - (-0.35 - ny) * 0.35) : 1.0;
-        p.setXYZ(i, x * scale * 1.24, y * scale * 0.74 * flatBottom, z * scale * 1.08);
+    const _loveRockUnitPool = new Map();
+    let _boulderSeedCounter = 0;
+
+    function _buildWeldedUnitIcosahedron(detailLevel) {
+      const raw = new THREE.IcosahedronGeometry(1.0, detailLevel);
+      const posAttr = raw.attributes.position;
+      const vertMap = new Map();
+      const uniquePts = [];
+      const uniqueUvs = [];
+      const indices = [];
+
+      for (let i = 0; i < posAttr.count; i++) {
+        const vx = posAttr.getX(i), vy = posAttr.getY(i), vz = posAttr.getZ(i);
+        const key = `${Math.round(vx * 8000)},${Math.round(vy * 8000)},${Math.round(vz * 8000)}`;
+        let idx = vertMap.get(key);
+        if (idx === undefined) {
+          idx = uniquePts.length / 3;
+          vertMap.set(key, idx);
+          const len = Math.hypot(vx, vy, vz) || 1.0;
+          const nx = vx / len, ny = vy / len, nz = vz / len;
+          uniquePts.push(nx, ny, nz);
+          const u = 0.5 + Math.atan2(nz, nx) / (Math.PI * 2.0);
+          const v = 0.5 - Math.asin(Math.max(-1.0, Math.min(1.0, ny))) / Math.PI;
+          uniqueUvs.push(u, v);
+        }
+        indices.push(idx);
       }
+      raw.dispose();
+      return { uniquePts, uniqueUvs, indices };
+    }
+
+    function _getUnitLoveRockTemplate(detailLevel, seed) {
+      // 28 Distinct Geological Rock & Stone Archetypes (0..15 base families + 16..27 specialized location-matched stone types)
+      const sIdx = ((seed | 0) % 28 + 28) % 28;
+      const cacheKey = `${detailLevel}_${sIdx}`;
+      if (_loveRockUnitPool.has(cacheKey)) return _loveRockUnitPool.get(cacheKey);
+
+      const base = _buildWeldedUnitIcosahedron(detailLevel);
+      const vCount = base.uniquePts.length / 3;
+      const positions = new Float32Array(vCount * 3);
+      const crevices = new Float32Array(vCount * 3);
+
+      // Deterministic PRNG per rock archetype seed
+      let rState = (sIdx * 7919 + 1337) >>> 0;
+      const rnd = () => {
+        rState = (rState * 1664525 + 1013904223) >>> 0;
+        return (rState >>> 8) / 16777216.0;
+      };
+
+      // Archetypes 0..15:
+      // 0..3: Chiseled Granite Erratics | 4..6: Stepped Limestone Shelf Slabs | 7..9: Tall Basalt Crag Spires
+      // 10..12: Split-Fault Twin-Lobe Boulders | 13..15: Angular Talus Wedges
+      // +12 Specialized Location-Matched Stone & Rock Archetypes (16..27):
+      // 16: Hexagonal Columnar Basalt Prism (Volcanic slopes & basalt sea cliffs)
+      // 17: Smooth Water-Worn River & Shore Cobble (Riverbeds, cascades, lake shores & beaches)
+      // 18: Jagged Obsidian & Vitreous Volcanic Shard (Mount Caldera & lava tubes)
+      // 19: Honeycomb Tafoni & Wave-Notched Coastal Sandstone (Beaches, tidal flats & sea stacks)
+      // 20: Glacial Striated V-Cleft Erratic Monolith (Alpine meadows & highland plateaus)
+      // 21: Overhanging Cantilevered Slate / Shale Ledge (Gorge walls & steep hillside bluffs)
+      // 22: Flat Natural Flagstone / Trail Paver Stone (Forest trails, camp clearings & wetlands)
+      // 23: Karst Solution Limestone Pinnacle / Rillenkarren (Eastern Karst Canyon & cave portals)
+      // 24: Mossy Forest Pillow Hummock Boulder (Elderwood Rainforest & shaded groves)
+      // 25: Tiered Cavern Flowstone / Dripstone Mound (Subterranean caves & cenote chambers)
+      // 26: Submerged Coral-Bommie & Barnacle Reef Rock (Ocean floor, inter-island channels & reefs)
+      // 27: Wind-Carved Desert/Dune Ventifact Dreikanter (Windward sandy spits & exposed dunes)
+      const isShelfSlab       = (sIdx >= 4 && sIdx <= 6);
+      const isTallCrag        = (sIdx >= 7 && sIdx <= 9);
+      const isSplitRock       = (sIdx >= 10 && sIdx <= 12);
+      const isWedgeRock       = (sIdx >= 13 && sIdx <= 15);
+      const isColumnarBasalt  = (sIdx === 16);
+      const isRiverCobble     = (sIdx === 17);
+      const isObsidianShard   = (sIdx === 18);
+      const isCoastalTafoni   = (sIdx === 19);
+      const isGlacialErratic  = (sIdx === 20);
+      const isCantileverSlate = (sIdx === 21);
+      const isFlagstonePaver  = (sIdx === 22);
+      const isKarstPinnacle   = (sIdx === 23);
+      const isPillowBoulder   = (sIdx === 24);
+      const isCaveFlowstone   = (sIdx === 25);
+      const isCoralBommie     = (sIdx === 26);
+      const isDuneVentifact   = (sIdx === 27);
+
+      const planeCount = (isTallCrag || isObsidianShard) ? 12 : (isRiverCobble || isPillowBoulder || isCaveFlowstone ? 6 : 9);
+      const planes = [];
+      for (let p = 0; p < planeCount; p++) {
+        const phi = Math.acos(1.0 - 2.0 * ((p + 0.5) / planeCount) + (rnd() - 0.5) * 0.18);
+        const theta = p * 2.399963 + rnd() * 0.85;
+        planes.push({
+          x: Math.sin(phi) * Math.cos(theta),
+          y: Math.cos(phi),
+          z: Math.sin(phi) * Math.sin(theta),
+          cutDist: (isShelfSlab || isFlagstonePaver ? 0.56 : (isRiverCobble ? 0.78 : 0.62)) + rnd() * 0.18,
+          scrape: (isObsidianShard ? 0.82 : (isTallCrag ? 0.68 : (isRiverCobble ? 0.25 : 0.58))) + rnd() * 0.22
+        });
+      }
+
+      const tiltX = (rnd() - 0.5) * (isShelfSlab || isFlagstonePaver ? 0.16 : (isCantileverSlate ? 0.52 : 0.42));
+      const tiltZ = (rnd() - 0.5) * (isShelfSlab || isFlagstonePaver ? 0.16 : (isCantileverSlate ? 0.52 : 0.42));
+      const strataFreq = (isCantileverSlate ? 9.5 : (isShelfSlab || isCaveFlowstone ? 6.8 : 4.4)) + rnd() * 2.2;
+      const strataAmp = isRiverCobble ? 0.018 : (isShelfSlab || isCantileverSlate || isCaveFlowstone ? 0.096 : 0.065);
+      const sOffX = (rnd() - 0.5) * 19.0;
+      const sOffZ = (rnd() - 0.5) * 19.0;
+      const faultAng = rnd() * Math.PI * 2.0;
+      const faultCos = Math.cos(faultAng), faultSin = Math.sin(faultAng);
+
+      let aspectX, aspectY, aspectZ;
+      if (isFlagstonePaver) {
+        aspectX = 1.58 + rnd() * 0.24;
+        aspectY = 0.24 + rnd() * 0.08;
+        aspectZ = 1.36 + rnd() * 0.22;
+      } else if (isRiverCobble) {
+        aspectX = 1.28 + rnd() * 0.18;
+        aspectY = 0.42 + rnd() * 0.10;
+        aspectZ = 1.02 + rnd() * 0.16;
+      } else if (isColumnarBasalt) {
+        aspectX = 0.74 + rnd() * 0.12;
+        aspectY = 1.42 + rnd() * 0.28;
+        aspectZ = 0.74 + rnd() * 0.12;
+      } else if (isObsidianShard || isKarstPinnacle) {
+        aspectX = 0.72 + rnd() * 0.14;
+        aspectY = 1.38 + rnd() * 0.30;
+        aspectZ = 0.70 + rnd() * 0.14;
+      } else if (isCantileverSlate) {
+        aspectX = 1.48 + rnd() * 0.22;
+        aspectY = 0.58 + rnd() * 0.14;
+        aspectZ = 1.18 + rnd() * 0.18;
+      } else if (isPillowBoulder) {
+        aspectX = 1.36 + rnd() * 0.18;
+        aspectY = 0.60 + rnd() * 0.12;
+        aspectZ = 1.26 + rnd() * 0.18;
+      } else if (isCaveFlowstone) {
+        aspectX = 1.08 + rnd() * 0.16;
+        aspectY = 1.16 + rnd() * 0.22;
+        aspectZ = 1.08 + rnd() * 0.16;
+      } else if (isCoralBommie || isCoastalTafoni) {
+        aspectX = 1.24 + rnd() * 0.20;
+        aspectY = 0.84 + rnd() * 0.18;
+        aspectZ = 1.18 + rnd() * 0.20;
+      } else if (isDuneVentifact) {
+        aspectX = 1.42 + rnd() * 0.22;
+        aspectY = 0.56 + rnd() * 0.12;
+        aspectZ = 1.10 + rnd() * 0.18;
+      } else if (isGlacialErratic) {
+        aspectX = 1.18 + rnd() * 0.20;
+        aspectY = 0.98 + rnd() * 0.18;
+        aspectZ = 1.08 + rnd() * 0.18;
+      } else if (isShelfSlab) {
+        aspectX = 1.46 + rnd() * 0.28;
+        aspectY = 0.42 + rnd() * 0.14;
+        aspectZ = 1.24 + rnd() * 0.26;
+      } else if (isTallCrag) {
+        aspectX = 0.78 + rnd() * 0.18;
+        aspectY = 1.20 + rnd() * 0.32;
+        aspectZ = 0.80 + rnd() * 0.18;
+      } else if (isWedgeRock) {
+        aspectX = 1.28 + rnd() * 0.26;
+        aspectY = 0.52 + rnd() * 0.16;
+        aspectZ = 0.88 + rnd() * 0.22;
+      } else {
+        aspectX = 1.12 + rnd() * 0.26;
+        aspectY = 0.68 + rnd() * 0.22;
+        aspectZ = 0.96 + rnd() * 0.24;
+      }
+
+      for (let i = 0; i < vCount; i++) {
+        const i3 = i * 3;
+        const nx = base.uniquePts[i3];
+        const ny = base.uniquePts[i3 + 1];
+        const nz = base.uniquePts[i3 + 2];
+
+        // 1. Planar Cleavage Scraping (creates chiseled angular rock faces & sharp bevel intersections)
+        let rScale = 1.04;
+        let activePlanes = 0;
+        let maxScrape = 0.0;
+        for (let p = 0; p < planeCount; p++) {
+          const pl = planes[p];
+          const dot = nx * pl.x + ny * pl.y + nz * pl.z;
+          if (dot > pl.cutDist) {
+            const excess = dot - pl.cutDist;
+            const cut = excess * pl.scrape;
+            rScale -= cut * 0.68;
+            if (cut > maxScrape) maxScrape = cut;
+            activePlanes++;
+          }
+        }
+
+        // 2. Tilted Geological Strata Ledges (flat shelves where moss & snow naturally accumulate)
+        const warp = fbm2(nx * 2.2 + sOffX, nz * 2.2 + sOffZ, 2) * 0.20;
+        const strataCoord = ny * 0.88 + nx * tiltX + nz * tiltZ + warp;
+        const strataWave = Math.sin(strataCoord * strataFreq);
+        const strataStep = Math.tanh(strataWave * 2.85) * strataAmp;
+        let shelfFlatness = Math.max(0.0, 1.0 - Math.abs(strataWave)) * Math.max(0.0, ny + 0.15) * (isShelfSlab || isFlagstonePaver || isPillowBoulder ? 1.40 : 1.0);
+
+        // 3. Multi-octave ridged crags, deep fracture crevices & specialized morphological modifiers
+        const cragAmp = isRiverCobble ? 0.025 : (isObsidianShard ? 0.16 : 0.115);
+        const crag = fbm2(nx * 2.4 + nz * 1.5 + sOffX, ny * 2.5 - nx * 1.1 + sOffZ, 2) * cragAmp
+                   + ridged2(nx * 3.1 - ny * 1.3 + sOffZ, nz * 3.1 + ny * 1.6 - sOffX, 2) * cragAmp;
+        const fissureWave = Math.abs(Math.sin(nx * 4.2 + ny * 3.6 - nz * 3.9 + sOffX + warp * 3.5));
+        let fissureCut = (isRiverCobble ? 0.015 : 0.11) * Math.pow(Math.max(0.0, 1.0 - fissureWave * 2.4), 2.2);
+
+        const angXZ = Math.atan2(nz, nx);
+        let shiftX = 0.0;
+        let shiftY = 0.0;
+        let shiftZ = 0.0;
+        let extraEdge = 0.0;
+
+        if (isSplitRock) {
+          const faultDist = nx * faultCos + nz * faultSin + ny * 0.18 + warp * 0.35;
+          const faultGroove = Math.exp(-Math.pow(faultDist / 0.17, 2.0)) * Math.max(0.0, ny + 0.45) * 0.24;
+          fissureCut += faultGroove;
+        } else if (isColumnarBasalt) {
+          // 6-sided hexagonal basalt prism with flat stepped top joint
+          const hexFacet = Math.cos(angXZ * 6.0);
+          rScale = 0.88 - hexFacet * 0.065 + strataStep * 0.35;
+          if (ny > 0.42) {
+            shiftY -= (ny - 0.42) * 0.55;
+            shelfFlatness = Math.max(shelfFlatness, 0.85);
+          }
+          extraEdge = Math.max(0.0, hexFacet) * 0.55;
+        } else if (isRiverCobble) {
+          // Water-smoothed ellipsoidal cobble with subtle current-planed top
+          rScale = 0.96 + warp * 0.08;
+          if (ny > 0.35) shiftY -= (ny - 0.35) * 0.18;
+        } else if (isObsidianShard) {
+          // Conchoidal-fractured sharp volcanic shard with serrated ridges
+          const blade = Math.abs(Math.sin(angXZ * 3.0 + ny * 1.8));
+          rScale += blade * 0.18 - (1.0 - blade) * 0.12;
+          extraEdge = blade * 0.72;
+        } else if (isCoastalTafoni) {
+          // Sea-eroded wave-notched base + cellular honeycomb tafoni hollows
+          const waveNotch = (ny > -0.45 && ny < 0.08) ? Math.exp(-Math.pow((ny + 0.18) / 0.20, 2.0)) * 0.22 : 0.0;
+          const tafoniPits = Math.pow(Math.max(0.0, Math.sin(nx * 9.5 + sOffX) * Math.cos(ny * 9.5) * Math.sin(nz * 9.5 + sOffZ)), 2.0) * 0.16;
+          fissureCut += waveNotch + tafoniPits;
+        } else if (isGlacialErratic) {
+          // Frost-wedged V-cleft near crown + parallel glacial striation grooves
+          const cleft = Math.exp(-Math.pow((nx * 0.85 - nz * 0.52) / 0.14, 2.0)) * Math.max(0.0, ny + 0.10) * 0.28;
+          const striations = Math.sin(ny * 14.0 + nx * 3.0) * 0.025;
+          fissureCut += cleft;
+          rScale += striations;
+        } else if (isCantileverSlate) {
+          // Cantilevered overhanging shale/slate outcrop jutting outward on upper half
+          shiftX += Math.max(0.0, ny + 0.32) * 0.44;
+          extraEdge = Math.max(0.0, ny) * 0.45;
+        } else if (isFlagstonePaver) {
+          // Flat natural stepping stone with crisp polygonal rim bevels
+          if (Math.abs(ny) > 0.32) shiftY -= Math.sign(ny) * (Math.abs(ny) - 0.32) * 0.48;
+          shelfFlatness = Math.max(shelfFlatness, ny > 0.15 ? 0.92 : 0.0);
+        } else if (isKarstPinnacle) {
+          // Vertically fluted Rillenkarren karst limestone solution grooves
+          const flutes = Math.pow(Math.max(0.0, Math.cos(angXZ * 9.0 + warp * 2.5)), 2.0) * 0.16 * Math.max(0.0, ny + 0.35);
+          fissureCut += flutes;
+          extraEdge = Math.abs(Math.sin(angXZ * 9.0)) * 0.48;
+        } else if (isPillowBoulder) {
+          // Broad mossy forest hummock with a sunken central saddle that holds deep moss
+          const saddle = (ny > 0.25) ? Math.exp(-(nx * nx + nz * nz) * 2.8) * 0.16 : 0.0;
+          shiftY -= saddle;
+          shelfFlatness = Math.max(shelfFlatness, ny > 0.20 ? 0.95 : 0.0);
+        } else if (isCaveFlowstone) {
+          // Conical tiered dripstone/flowstone mound with cascading mineral ribs
+          const coneTaper = 1.0 - Math.max(0.0, ny + 0.45) * 0.34;
+          const dripRibs = Math.cos(angXZ * 11.0 + Math.sin(ny * 6.0) * 0.5) * 0.065;
+          rScale = rScale * coneTaper + dripRibs;
+        } else if (isCoralBommie) {
+          // Bulbous undercut reef bommie with overhanging table-coral ledges
+          const undercut = ny < -0.05 ? Math.min(0.24, (-0.05 - ny) * 0.42) : 0.0;
+          const coralLedge = Math.pow(Math.max(0.0, Math.sin(ny * 7.5 + warp * 2.0)), 3.0) * 0.15;
+          rScale = rScale - undercut + coralLedge;
+        } else if (isDuneVentifact) {
+          // Three-winged wind-abraded Dreikanter with 3 sharp keel ridges
+          const triKeel = Math.abs(Math.cos(angXZ * 1.5));
+          rScale = 0.78 + triKeel * 0.26 * (1.0 - Math.max(0.0, ny) * 0.32);
+          extraEdge = triKeel * 0.65;
+        }
+
+        const wedgeSlope = isWedgeRock ? (1.0 + nx * 0.16 - ny * 0.08) : 1.0;
+        rScale = Math.max(0.44, (rScale + strataStep + crag - fissureCut) * wedgeSlope);
+        const flatBottom = ny < -0.32 ? (1.0 - (-0.32 - ny) * 0.42) : 1.0;
+
+        positions[i3]     = (nx * rScale + shiftX) * aspectX;
+        positions[i3 + 1] = (ny * rScale * flatBottom + shiftY) * aspectY;
+        positions[i3 + 2] = (nz * rScale + shiftZ) * aspectZ;
+
+        const creviceAO = Math.min(1.0, fissureCut * 5.8 + Math.max(0.0, 0.88 - rScale) * 1.6);
+        const edgeWear = Math.min(1.0, (activePlanes >= 2 ? 0.52 : 0.12) + Math.max(0.0, crag * 2.6) + maxScrape * 1.35 + extraEdge);
+        crevices[i3]     = creviceAO;
+        crevices[i3 + 1] = edgeWear;
+        crevices[i3 + 2] = Math.min(1.0, shelfFlatness * 1.35);
+      }
+
+      const template = { positions, uvs: new Float32Array(base.uniqueUvs), crevices, indices: base.indices };
+      _loveRockUnitPool.set(cacheKey, template);
+      return template;
+    }
+
+    // Location & Biome-Aware Geological Rock Archetype Selector (matches rock/stone morphology to its exact environment)
+    function selectLocationRockSeed(x, z, y, idx = 0) {
+      const h = (y !== undefined && y !== null) ? y : getTerrainHeight(x, z);
+      const u = ((idx | 0) * 2654435761) >>> 0;
+      const pick = u % 5;
+
+      // 1. Submerged Seabed, Inter-Island Channels & Reefs
+      if (h < -0.35) {
+        return pick < 3 ? 26 : (pick === 3 ? 19 : 17); // Coral Bommie (26), Wave-Notched Tafoni (19), Water-Worn Cobble (17)
+      }
+      // 2. Mount Caldera Volcano & Western Volcanic Flanks
+      const volcDist = Math.hypot(x - MOUNT_CALDERA.x, z - MOUNT_CALDERA.z);
+      if (volcDist < MOUNT_CALDERA.baseR + 38.0 || (x < -175 && z < 165)) {
+        const vPool = [16, 18, 7, 8, 9, 16, 18]; // Columnar Basalt Prism (16), Jagged Obsidian Shard (18), Tall Basalt Crags (7..9)
+        return vPool[u % vPool.length];
+      }
+      // 3. Wave-Washed Beaches, Sandy Spits, Dune Headlands & Littoral Shores
+      if (h <= 2.35) {
+        const sPool = [19, 17, 27, 4, 22, 19]; // Honeycomb Tafoni (19), Smooth Shore Cobble (17), Wind Ventifact (27), Shelf Slab (4), Flat Flagstone (22)
+        return sPool[u % sPool.length];
+      }
+      // 4. Stratified Eastern Karst Limestone Canyon & Cave Portals
+      if (x > 142.0 && z > -42.0 && z < 105.0) {
+        const kPool = [23, 21, 5, 6, 10, 23]; // Karst Solution Pinnacle (23), Cantilevered Slate Ledge (21), Limestone Shelf Slabs (5,6), Split-Fault (10)
+        return kPool[u % kPool.length];
+      }
+      // 5. Waterfall Gorge, Plunge Pools, Alpine Tarn & Grand Headwaters Lake
+      if ((x > 15.0 && x < 155.0 && z > -52.0 && z < 52.0) || (z > 135.0 && x > -30.0 && x < 165.0)) {
+        if (h > 22.0) {
+          const aPool = [20, 21, 0, 1, 11, 20]; // Glacial Striated Erratic (20), Cantilevered Ledge (21), Granite Erratics (0,1), Split-Fault (11)
+          return aPool[u % aPool.length];
+        }
+        const rPool = [17, 21, 22, 14, 15]; // Smooth River Cobble (17), Overhanging Ledge (21), Flat Flagstone (22), River Wedges (14,15)
+        return rPool[u % rPool.length];
+      }
+      // 6. Elderwood Temperate Rainforest & Bamboo Wetlands
+      if (x < -30.0 && z > -165.0 && z < 175.0) {
+        const fPool = [24, 22, 10, 12, 2, 3, 24]; // Mossy Forest Pillow Hummock (24), Trail Flagstone (22), Split-Fault (10,12), Granite Erratics (2,3)
+        return fPool[u % fPool.length];
+      }
+      // 7. General Highland Ridges & Windward Meadows
+      return (idx * 3 + 1) % 28;
+    }
+    window.selectLocationRockSeed = selectLocationRockSeed;
+
+    function buildLoveRockGeometry(radius = 1.8, detailLevel = 3, seed = 0) {
+      const tpl = _getUnitLoveRockTemplate(detailLevel, seed);
+      const vCount = tpl.positions.length / 3;
+      const scaledPos = new Float32Array(vCount * 3);
+      for (let i = 0; i < scaledPos.length; i++) {
+        scaledPos[i] = tpl.positions[i] * radius;
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(scaledPos, 3));
+      geo.setAttribute('uv', new THREE.BufferAttribute(tpl.uvs, 2));
+      geo.setAttribute('aRockCrevice', new THREE.BufferAttribute(tpl.crevices, 3));
+      geo.setIndex(tpl.indices);
       geo.computeVertexNormals();
       return geo;
     }
-    function createGraniteBoulder(radius = 1.8) {
+
+    function buildCraggyBoulderGeometry(radius, segW, segH, seed = 0) {
+      const detail = (segW && segW <= 10) ? 1 : ((segW && segW <= 16) ? 2 : 3);
+      return buildLoveRockGeometry(radius, detail, seed);
+    }
+
+    function createGraniteBoulder(radius = 1.8, seedOpt) {
       if (!sharedBoulderMat) {
         sharedBoulderMat = applyAAARockShader(new THREE.MeshStandardMaterial({
           color: 0xd8dcd8,
@@ -6628,12 +7043,15 @@
           metalness: 0.05
         }));
       }
-      const highGeo = buildCraggyBoulderGeometry(radius, 22, 16);
-      const lowGeo = buildCraggyBoulderGeometry(radius, 8, 6);
+      const seed = (seedOpt !== undefined) ? seedOpt : (_boulderSeedCounter++);
+      const highGeo = buildLoveRockGeometry(radius, 3, seed);
+      const lowGeo = buildLoveRockGeometry(radius, 1, seed);
       const rock = new THREE.Mesh(highGeo, sharedBoulderMat);
+      rock.rotation.y = ((seed * 1.6180339) % 1.0) * Math.PI * 2.0;
       rock.userData.highGeo = highGeo;
       rock.userData.lowGeo = lowGeo;
       rock.userData.lodLevel = 0;
+      rock.userData.rockArchetype = ((seed | 0) % 28 + 28) % 28;
       rock.castShadow = true;
       rock.receiveShadow = true;
       window.activeBoulders.push(rock);
@@ -8105,16 +8523,21 @@
             spawnEZBush(bx, bz, 1 + ((idx + b) % 3), 0.72 + treeRand() * 0.65);
           }
         }
-        for (let r = 0; r < 9; r++) {
-          const ang = (r / 9) * Math.PI * 2 + treeRand() * 0.5;
-          const rad = isl.r * (0.35 + treeRand() * 0.68);
+        for (let r = 0; r < 14; r++) {
+          const ang = (r / 14) * Math.PI * 2 + treeRand() * 0.5;
+          const rad = isl.r * (0.25 + treeRand() * 0.78);
           const rx = isl.x + Math.cos(ang) * rad;
           const rz = isl.z + Math.sin(ang) * rad;
           const rh = getTerrainHeight(rx, rz);
-          if (rh > 0.15) {
-            const rSize = 1.5 + treeRand() * 1.9;
-            const rock = createGraniteBoulder(rSize);
+          if (rh > 0.12) {
+            // Location-matched coastal tafoni, shore cobbles, ventifacts & interior crags on starter islets
+            const sizeTier = treeRand();
+            const rSize = sizeTier < 0.35 ? (0.72 + treeRand() * 0.65) : (sizeTier < 0.78 ? (1.45 + treeRand() * 1.25) : (2.80 + treeRand() * 1.15));
+            const locSeed = rh < 2.2 ? (r % 3 === 0 ? 19 : (r % 3 === 1 ? 17 : 27)) : selectLocationRockSeed(rx, rz, rh, idx * 11 + r);
+            const rock = createGraniteBoulder(rSize, locSeed);
             rock.position.set(rx, getGroundedTreeY(rx, rz, rSize * 0.72, rSize * 0.28), rz);
+            rock.scale.set(0.88 + treeRand() * 0.32, 0.78 + treeRand() * 0.44, 0.88 + treeRand() * 0.32);
+            rock.rotation.set((treeRand() - 0.5) * 0.18, treeRand() * Math.PI * 2, (treeRand() - 0.5) * 0.18);
             rock.userData = { type: 'boulder' };
             scene.add(rock);
             interactiveTargets.push(rock);
@@ -8169,25 +8592,66 @@
       }
       if (yieldFn) await yieldFn();
 
-      // 7. Natural Coastal Basalt Boulders, Canyon Slabs & Forest Mossy Outcrops
+      // 7. Multi-Scale Coastal Basalt Boulders, Stepped Canyon Slabs, Split-Fault Outcrops & Companion Rock Clusters
       const boulders = [
-        [-31, 20, 2.2], [-14, 30, 2.4], [-35, 33, 3.0],
-        [18, -14, 3.1], [21, 18, 2.9], [-12, -26, 2.7],
-        [-62, 18, 3.8], [76, -24, 4.4], [84, 32, 4.8],
-        [-78, -28, 3.6], [56, 62, 3.5], [-44, 58, 4.1],
-        [-48, -108, 3.2], [54, -128, 3.6], [-10, -184, 3.8],
-        [-54, 49, 2.8], [-82, 35, 3.4], [-74, 60, 3.1],
-        [204, 35, 3.6], [228, 49, 4.2], [192, 52, 3.3], [244, 38, 3.9],
-        [86, 232, 3.1], [134, 244, 3.4], [-288, 218, 2.6], [-292, 234, 2.9],
-        [-180, 145, 3.7], [150, 165, 3.8], [-115, 255, 3.6], [195, -90, 3.5]
+        // Sunlit Coral Cove & Estuary Mouth (varying from 0.95m accent stones to 4.6m headland slabs)
+        [-31, 20, 2.2], [-14, 30, 1.6], [-35, 33, 3.2], [-28, 12, 1.05], [-9, 36, 1.35],
+        [18, -14, 3.1], [21, 18, 2.9], [-12, -26, 2.7], [12, -29, 1.25], [-24, -18, 4.3],
+        // Elderwood Rainforest & Sanctuary Glade Mossy Outcrops (small woodland stones to giant 5.4m split boulders)
+        [-62, 18, 3.8], [-54, 49, 2.8], [-82, 35, 3.6], [-74, 60, 3.1], [-44, 58, 4.4],
+        [-96, 24, 4.9], [-112, 68, 5.3], [-134, 42, 2.4], [-148, 88, 3.9], [-88, 92, 1.75],
+        [-162, 54, 4.6], [-122, 18, 1.35], [-104, 112, 3.5], [-66, 84, 2.1],
+        // Waterfall Gorge Rim, Alpine Tarn & Stratified Karst Canyon (stepped limestone slabs & tall crags)
+        [76, -24, 4.6], [84, 32, 5.1], [56, 62, 3.5], [112, -48, 4.2], [142, 14, 5.4],
+        [204, 35, 3.6], [228, 49, 4.5], [192, 52, 3.3], [244, 38, 4.1], [174, 12, 2.6],
+        [158, -28, 4.8], [186, -12, 1.85], [216, 16, 5.2], [164, 68, 3.1],
+        // Emerald Bamboo Wetlands & Southern Coast
+        [-78, -28, 3.6], [-48, -108, 3.2], [54, -128, 3.6], [-10, -184, 4.2],
+        [-118, -94, 4.5], [-142, -148, 2.8], [-92, -162, 1.9], [-168, -112, 3.9],
+        [195, -90, 3.7], [128, -144, 4.4], [82, -168, 2.3],
+        // Windward Valley Meadows, Grand Headwaters & Western Volcanic Flanks
+        [86, 232, 3.1], [134, 244, 3.8], [42, 198, 2.2], [18, 246, 4.7], [68, 268, 1.65],
+        [-288, 218, 2.6], [-292, 234, 3.4], [-180, 145, 4.1], [150, 165, 3.8], [-115, 255, 4.3],
+        [-218, 118, 4.8], [-244, 28, 3.5], [-206, -34, 2.7],
+        // Specialized Biome Landmark Stones: Columnar Basalt & Obsidian (Volcano), Karst Rillenkarren (Canyon), Glacial Erratics (Alpine), Coastal Tafoni & Trail Flagstones
+        [-196, 86, 3.4, 16], [-184, 52, 2.9, 18], [-212, 64, 3.8, 16], [-168, 118, 2.6, 18],
+        [182, 26, 3.9, 23], [212, 42, 4.3, 23], [236, 22, 3.2, 21], [168, 48, 3.5, 23],
+        [98, -28, 4.1, 20], [128, 28, 4.5, 20], [64, 18, 3.3, 21], [44, -12, 2.8, 21],
+        [-38, 27, 1.8, 22], [-50, 35, 1.9, 22], [-62, 42, 2.1, 24], [-76, 48, 3.7, 24],
+        [-8, -32, 2.5, 19], [14, -36, 2.3, 19], [-274, 226, 2.8, 19], [-258, 212, 2.2, 27]
       ];
-      boulders.forEach(([x, z, r]) => {
-        if (getTerrainHeight(x, z) > 0.2) {
-          const rock = createGraniteBoulder(r);
+      boulders.forEach(([x, z, r, explicitSeed], bIdx) => {
+        const bh = getTerrainHeight(x, z);
+        if (bh > 0.2) {
+          const seed = (explicitSeed !== undefined) ? explicitSeed : selectLocationRockSeed(x, z, bh, bIdx);
+          const rock = createGraniteBoulder(r, seed);
           rock.position.set(x, getGroundedTreeY(x, z, r * 0.72, r * 0.28), z);
+          rock.rotation.set(((bIdx % 5) - 2) * 0.06, (bIdx * 2.39996) % (Math.PI * 2), ((bIdx % 3) - 1) * 0.06);
           rock.userData = { type: 'boulder' };
           scene.add(rock);
           interactiveTargets.push(rock);
+
+          // Spawn 1-2 smaller satellite companion rocks at the base of large boulders (r >= 3.0m) with matching local geology
+          if (r >= 3.0) {
+            const satCount = r >= 4.2 ? 2 : 1;
+            for (let s = 0; s < satCount; s++) {
+              const sAng = bIdx * 1.9 + s * 2.4;
+              const sDist = r * (0.78 + s * 0.22);
+              const sx = x + Math.cos(sAng) * sDist;
+              const sz = z + Math.sin(sAng) * sDist;
+              const sh = getTerrainHeight(sx, sz);
+              if (sh > 0.15) {
+                const sRad = r * (s === 0 ? 0.38 : 0.26);
+                const satSeed = selectLocationRockSeed(sx, sz, sh, bIdx + 17 + s * 5);
+                const satRock = createGraniteBoulder(sRad, satSeed);
+                satRock.position.set(sx, getGroundedTreeY(sx, sz, sRad * 0.72, sRad * 0.30), sz);
+                satRock.rotation.set(0.12 * (s + 1), sAng + 1.1, -0.08);
+                satRock.userData = { type: 'boulder' };
+                scene.add(satRock);
+                interactiveTargets.push(satRock);
+              }
+            }
+          }
         }
       });
       if (yieldFn) await yieldFn();
@@ -8459,8 +8923,8 @@
         }
 
         if (cragMatrices.length > 0) {
-          const kGeo = new THREE.DodecahedronGeometry(1.0, 1);
-          const kMat = new THREE.MeshStandardMaterial({ color: 0x4b5154, roughness: 0.90 });
+          const kGeo = buildLoveRockGeometry(1.0, 2, 2);
+          const kMat = applyAAARockShader(new THREE.MeshStandardMaterial({ color: 0xb8beba, roughness: 0.86, metalness: 0.04 }));
           horizonCragMesh = new THREE.InstancedMesh(kGeo, kMat, cragMatrices.length);
           for (let i = 0; i < cragMatrices.length; i++) {
             horizonCragMesh.setMatrixAt(i, cragMatrices[i]);
@@ -8742,18 +9206,34 @@
           }
         }
 
-        // 3. Sculpted Coastal Basalt/Granite Outcrops & Ridge Boulders (12..18 per island)
-        const rockCount = isl.isSwimSafe ? 10 : 16;
+        // 3. Multi-Scale Sculpted Coastal Basalt/Granite Outcrops, Stepped Slabs & Ridge Boulders (16..24 per island)
+        const rockCount = isl.isSwimSafe ? 16 : 24;
         for (let b = 0; b < rockCount; b++) {
           const ang = (b / rockCount) * Math.PI * 2 + cRand() * 0.45;
-          const rad = isl.r * (0.28 + cRand() * 0.78);
+          const rad = isl.r * (0.22 + cRand() * 0.84);
           const rx = isl.x + Math.cos(ang) * rad;
           const rz = isl.z + Math.sin(ang) * rad;
           const rh = getTerrainHeight(rx, rz);
           if (rh > 0.05) {
-            const rSize = 1.45 + cRand() * 2.15;
-            const rock = createGraniteBoulder(rSize);
+            const tier = cRand();
+            const rSize = tier < 0.36 ? (0.68 + cRand() * 0.72) : (tier < 0.78 ? (1.45 + cRand() * 1.35) : (2.85 + cRand() * 1.65));
+            let islSeed;
+            if (isl.isVolcano || isl.isBasalt) {
+              const vSeeds = [16, 18, 7, 8, 9, 19]; // Columnar Basalt, Obsidian Shard, Tall Basalt Crag, Coastal Tafoni
+              islSeed = vSeeds[(k + b) % vSeeds.length];
+            } else if (rh < 2.2) {
+              const cSeeds = [19, 17, 27, 4, 22]; // Wave-Notched Tafoni, Shore Cobble, Dune Ventifact, Shelf Slab, Flat Flagstone
+              islSeed = cSeeds[(k + b) % cSeeds.length];
+            } else if (isl.isBamboo) {
+              const bSeeds = [24, 22, 23, 5, 11]; // Mossy Pillow Boulder, Trail Flagstone, Karst Pinnacle, Limestone Slab
+              islSeed = bSeeds[(k + b) % bSeeds.length];
+            } else {
+              islSeed = (k * 7 + b) % 28;
+            }
+            const rock = createGraniteBoulder(rSize, islSeed);
             rock.position.set(rx, getGroundedTreeY(rx, rz, rSize * 0.72, rSize * 0.28), rz);
+            rock.scale.set(0.86 + cRand() * 0.36, 0.74 + cRand() * 0.48, 0.86 + cRand() * 0.36);
+            rock.rotation.set((cRand() - 0.5) * 0.20, cRand() * Math.PI * 2, (cRand() - 0.5) * 0.20);
             rock.userData = { type: 'boulder' };
             scene.add(rock);
             props.push({ mesh: rock, interactive: true });
@@ -9345,15 +9825,15 @@
       scene.add(flowerMesh);
       window.instancedFlowers = flowerMesh;
 
-      // 3. Coral Shoreline, River & Valley Pond Pebbles Instanced Mesh (750 Smooth Stones)
+      // 3. Coral Shoreline, River & Valley Pond Pebbles Instanced Mesh (750 Love-Rocks Sculpted Stones)
       const pebbleCount = 750;
-      const pebbleGeo = new THREE.DodecahedronGeometry(0.12, 0);
-      pebbleGeo.scale(1.3, 0.55, 1.0);
-      const pebbleMat = new THREE.MeshStandardMaterial({
-        color: 0xbcb3a2,
-        roughness: 0.45,
-        metalness: 0.08
-      });
+      const pebbleGeo = buildLoveRockGeometry(0.14, 1, 3);
+      pebbleGeo.scale(1.25, 0.58, 1.05);
+      const pebbleMat = applyAAARockShader(new THREE.MeshStandardMaterial({
+        color: 0xc8c2b4,
+        roughness: 0.55,
+        metalness: 0.06
+      }));
       const pebbleMesh = new THREE.InstancedMesh(pebbleGeo, pebbleMat, pebbleCount);
       pebbleMesh.receiveShadow = true;
 
@@ -9905,15 +10385,10 @@
         return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
       }
 
-      // 1. AAA Triplanar Coastal Basalt & Cliff-Toe Boulders (650 instances, grounded on flat/gentle shores)
-      const talusGeo = new THREE.SphereGeometry(1.0, 14, 10);
-      const tPos = talusGeo.attributes.position;
-      for (let i = 0; i < tPos.count; i++) {
-        const vx = tPos.getX(i), vy = tPos.getY(i), vz = tPos.getZ(i);
-        const soft = 0.88 + fbm2(vx * 2.2 + vz * 1.7, vy * 2.1, 2) * 0.16 + ridged2(vx * 2.6, vz * 2.6, 2) * 0.09;
-        tPos.setXYZ(i, vx * soft * 1.22, vy * soft * 0.62, vz * soft);
-      }
-      talusGeo.computeVertexNormals();
+      // 1. Love-Rocks Multi-Scale Coastal Honeycomb Tafoni, Wave-Notched Shore Stones & Cliff-Toe Slabs (1,050 instances)
+      const talusGeo = buildLoveRockGeometry(1.0, 2, 19);         // Coastal Honeycomb Tafoni & Wave-Notched Rock
+      const streamRockGeo = buildLoveRockGeometry(1.0, 2, 17);    // Smooth Water-Worn River & Cascade Cobble
+      const forestBoulderGeo = buildLoveRockGeometry(1.0, 2, 24); // Mossy Forest Pillow Hummock Boulder
 
       const talusMat = applyAAARockShader(new THREE.MeshStandardMaterial({
         color: 0xffffff,
@@ -9945,11 +10420,15 @@
         const isToeRock = ry > 1.35 && slopeMag > 0.35 && slopeMag <= 0.62;
         if (!isShoreRock && !isToeRock) continue;
 
-        const sc = isShoreRock ? (0.35 + geoRand() * 0.75) : (0.45 + geoRand() * 0.90);
+        // Varying sizes from small 0.22m beach stones to 1.85m broad coastal ledges
+        const sizeRoll = geoRand();
+        const sc = isShoreRock
+          ? (sizeRoll < 0.55 ? (0.22 + geoRand() * 0.45) : (0.68 + geoRand() * 0.92))
+          : (sizeRoll < 0.45 ? (0.35 + geoRand() * 0.55) : (0.90 + geoRand() * 0.95));
         // Sink 40% into ground so boulders sit firmly embedded in sand/soil
         dummy.position.set(rx, ry - sc * 0.28, rz);
-        dummy.scale.set(sc * (0.95 + geoRand() * 0.4), sc * (0.55 + geoRand() * 0.35), sc * (0.90 + geoRand() * 0.35));
-        dummy.rotation.set((geoRand() - 0.5) * 0.25, geoRand() * Math.PI * 2, (geoRand() - 0.5) * 0.25);
+        dummy.scale.set(sc * (0.85 + geoRand() * 0.55), sc * (0.48 + geoRand() * 0.52), sc * (0.82 + geoRand() * 0.50));
+        dummy.rotation.set((geoRand() - 0.5) * 0.28, geoRand() * Math.PI * 2, (geoRand() - 0.5) * 0.28);
         dummy.updateMatrix();
         talusMesh.setMatrixAt(placedTalus, dummy.matrix);
 
@@ -9971,7 +10450,7 @@
 
       // 2. Wet Waterfall Gorge Cobblestones, Step-Pool Riffle Stones & Spillway Lip Rocks (820 instances)
       const streamRockCount = 820;
-      const streamRockMesh = new THREE.InstancedMesh(talusGeo, talusMat, streamRockCount);
+      const streamRockMesh = new THREE.InstancedMesh(streamRockGeo, talusMat, streamRockCount);
       streamRockMesh.castShadow = true;
       streamRockMesh.receiveShadow = true;
       let placedStreamRocks = 0;
@@ -9986,14 +10465,14 @@
         const zOff = isBank ? side * (2.6 + geoRand() * 4.8) : (geoRand() - 0.5) * 5.2;
         const sz = wfZ + zOff;
         const sy = sampleTerrainMeshHeight(sx, sz);
-        const sc = isBank ? (0.32 + geoRand() * 0.85) : (0.18 + geoRand() * 0.42);
+        const sc = isBank ? (0.28 + Math.pow(geoRand(), 0.75) * 1.15) : (0.16 + geoRand() * 0.48);
         // Submerged bed cobbles sit slightly tucked so clear emerald water flows right over them
         const ySink = isBank ? (sc * 0.26) : (sc * 0.42);
         dummy.position.set(sx, sy - ySink, sz);
         dummy.scale.set(
-          sc * (0.95 + geoRand() * 0.45),
-          sc * (isBank ? (0.52 + geoRand() * 0.35) : (0.34 + geoRand() * 0.22)),
-          sc * (0.88 + geoRand() * 0.40)
+          sc * (0.88 + geoRand() * 0.52),
+          sc * (isBank ? (0.48 + geoRand() * 0.48) : (0.34 + geoRand() * 0.24)),
+          sc * (0.85 + geoRand() * 0.48)
         );
         dummy.rotation.set((geoRand() - 0.5) * 0.3, geoRand() * Math.PI * 2, (geoRand() - 0.5) * 0.3);
         dummy.updateMatrix();
@@ -10020,9 +10499,9 @@
           rz = 2.0 + Math.sin(ang) * rad;
         }
         const ry = sampleTerrainMeshHeight(rx, rz);
-        const sc = 0.28 + geoRand() * 0.68;
+        const sc = 0.24 + Math.pow(geoRand(), 0.8) * 0.95;
         dummy.position.set(rx, ry - sc * 0.30, rz);
-        dummy.scale.set(sc * (1.0 + geoRand() * 0.4), sc * (0.45 + geoRand() * 0.28), sc * (0.9 + geoRand() * 0.35));
+        dummy.scale.set(sc * (0.9 + geoRand() * 0.5), sc * (0.45 + geoRand() * 0.38), sc * (0.85 + geoRand() * 0.45));
         dummy.rotation.set((geoRand() - 0.5) * 0.25, geoRand() * Math.PI * 2, (geoRand() - 0.5) * 0.25);
         dummy.updateMatrix();
         streamRockMesh.setMatrixAt(placedStreamRocks, dummy.matrix);
@@ -10038,7 +10517,7 @@
       window.instancedStreamRocks = streamRockMesh;
       if (yieldFn) await yieldFn();
 
-      // 3. Weathered Fallen Forest Deadwood & Mossy Woodland Logs (160 instances)
+      // 3. Weathered Fallen Forest Deadwood & Mossy Woodland Logs (380 instances)
       const { woodBarkTex: deadBarkTex } = getWoodTextures();
       const deadwoodGeo = new THREE.CylinderGeometry(0.15, 0.21, 2.8, 9);
       deadwoodGeo.rotateZ(Math.PI / 2);
@@ -10108,32 +10587,41 @@
       window.instancedDeadwood = deadwoodMesh;
       if (yieldFn) await yieldFn();
 
-      // 3B. Mossy Forest Granite Outcrops & Woodland Boulder Clusters (540 instances across Elderwood & creek banks)
-      const forestBoulderCount = 540;
-      const forestBoulderMesh = new THREE.InstancedMesh(talusGeo, talusMat, forestBoulderCount);
+      // 3B. Mossy Forest Granite Outcrops & Woodland Boulder Clusters (640 instances across Elderwood, Meadows & Canyon)
+      const forestBoulderCount = 640;
+      const forestBoulderMesh = new THREE.InstancedMesh(forestBoulderGeo, talusMat, forestBoulderCount);
       forestBoulderMesh.castShadow = true;
       forestBoulderMesh.receiveShadow = true;
       let placedForestBoulders = 0;
-      for (let i = 0; i < 4200 && placedForestBoulders < forestBoulderCount; i++) {
-        const bx = -32.0 - geoRand() * 212.0;
-        const bz = -18.0 + geoRand() * 182.0;
+      for (let i = 0; i < 5200 && placedForestBoulders < forestBoulderCount; i++) {
+        let bx, bz;
+        if (i < 3400) {
+          bx = -32.0 - geoRand() * 212.0;
+          bz = -18.0 + geoRand() * 182.0;
+        } else {
+          bx = -280.0 + geoRand() * 540.0;
+          bz = -180.0 + geoRand() * 440.0;
+        }
         if (getForestTrailMask(bx, bz) > 0.34) continue;
         if (Math.hypot(bx - (-68.0), bz - 44.0) < 10.0) continue;
+        if (Math.hypot(bx - (-22.0), bz - 24.0) < 12.0) continue;
         if (isInsideWaterfallChannel(bx, bz)) continue;
         const by = sampleTerrainMeshHeight(bx, bz);
-        if (by < 2.2 || by > 54.0) continue;
+        if (by < 2.2 || by > 68.0) continue;
         const hx = sampleTerrainMeshHeight(bx + 1.0, bz);
         const hz = sampleTerrainMeshHeight(bx, bz + 1.0);
-        if (Math.hypot(hx - by, hz - by) > 0.72) continue;
+        if (Math.hypot(hx - by, hz - by) > 0.78) continue;
 
-        const sc = 0.52 + geoRand() * 1.15;
+        // Wide size variation from 0.35m woodland rocks to 2.45m mossy forest outcrops
+        const fTier = geoRand();
+        const sc = fTier < 0.45 ? (0.35 + geoRand() * 0.48) : (fTier < 0.85 ? (0.85 + geoRand() * 0.75) : (1.62 + geoRand() * 0.85));
         dummy.position.set(bx, by - sc * 0.26, bz);
-        dummy.scale.set(sc * (0.9 + geoRand() * 0.45), sc * (0.55 + geoRand() * 0.42), sc * (0.9 + geoRand() * 0.40));
-        dummy.rotation.set((geoRand() - 0.5) * 0.26, geoRand() * Math.PI * 2, (geoRand() - 0.5) * 0.26);
+        dummy.scale.set(sc * (0.85 + geoRand() * 0.55), sc * (0.48 + geoRand() * 0.56), sc * (0.85 + geoRand() * 0.50));
+        dummy.rotation.set((geoRand() - 0.5) * 0.28, geoRand() * Math.PI * 2, (geoRand() - 0.5) * 0.28);
         dummy.updateMatrix();
         forestBoulderMesh.setMatrixAt(placedForestBoulders, dummy.matrix);
-        const mShade = 0.54 + geoRand() * 0.22;
-        tint.setRGB(mShade * 0.84, mShade * 1.06, mShade * 0.78);
+        const mShade = 0.54 + geoRand() * 0.26;
+        tint.setRGB(mShade * 0.86, mShade * 1.04, mShade * 0.80);
         forestBoulderMesh.setColorAt(placedForestBoulders, tint);
         placedForestBoulders++;
       }
@@ -10146,22 +10634,133 @@
       window.instancedForestBoulders = forestBoulderMesh;
       if (yieldFn) await yieldFn();
 
-      // 4. Submerged Coral Reef Shelves, Muted Brain Coral Heads & Branching Staghorn/Plate Corals (strictly below water!)
-      const reefGeo = new THREE.SphereGeometry(1.0, 10, 7);
-      const rPos = reefGeo.attributes.position;
-      for (let i = 0; i < rPos.count; i++) {
-        const vx = rPos.getX(i), vy = rPos.getY(i), vz = rPos.getZ(i);
-        const bump = 0.88 + 0.18 * Math.sin(vx * 3.0 + vz * 2.5);
-        rPos.setXYZ(i, vx * bump * 1.4, vy * bump * 0.25, vz * bump * 1.2);
-      }
-      reefGeo.computeVertexNormals();
+      // 3C. Dedicated Location-Specific Geological Stone & Rock Layers across the Environment (Columnar Basalt, Karst Pinnacles, Cantilevered Slate, Trail Flagstones & Dune Ventifacts)
+      const locSpecs = [
+        { seed: 16, count: 220, name: 'columnarBasalt' },  // Hexagonal Columnar Basalt Prisms on Mount Caldera & volcanic coasts
+        { seed: 18, count: 180, name: 'obsidianShard' },   // Jagged Obsidian Shards on volcanic slopes & ash trails
+        { seed: 23, count: 210, name: 'karstPinnacle' },   // Fluted Rillenkarren Karst Limestone in Eastern Canyon & cave mouths
+        { seed: 21, count: 190, name: 'cantileverSlate' }, // Overhanging Cantilevered Slate Ledges on gorge & hillside bluffs
+        { seed: 22, count: 260, name: 'flagstonePaver' },  // Flat Natural Trail Flagstones along forest trails, camps & stream banks
+        { seed: 20, count: 160, name: 'glacialErratic' },  // Glacial Striated V-Cleft Monoliths on Alpine Tarn & Headwaters plateaus
+        { seed: 27, count: 180, name: 'duneVentifact' }    // Wind-Carved Dreikanter Ventifacts on sandy spits & outer beaches
+      ];
+      window.instancedLocationRocks = [];
+      for (let ls = 0; ls < locSpecs.length; ls++) {
+        const spec = locSpecs[ls];
+        const lGeo = buildLoveRockGeometry(1.0, 2, spec.seed);
+        const lMesh = new THREE.InstancedMesh(lGeo, talusMat, spec.count);
+        lMesh.castShadow = true;
+        lMesh.receiveShadow = true;
+        lMesh.layers.set(1);
+        let placedLoc = 0;
+        for (let a = 0; a < spec.count * 12 && placedLoc < spec.count; a++) {
+          let lx, lz, scMin = 0.35, scMax = 1.65;
+          if (spec.seed === 16 || spec.seed === 18) {
+            // Volcanic Wastes & Mount Caldera slopes + volcanic archipelago islands
+            if (a % 4 === 0 && archipelagoIslets.length > 5) {
+              const vIsl = archipelagoIslets[5 + (a % (archipelagoIslets.length - 5))];
+              const ang = geoRand() * Math.PI * 2;
+              const rad = vIsl.r * (0.20 + geoRand() * 0.78);
+              lx = vIsl.x + Math.cos(ang) * rad;
+              lz = vIsl.z + Math.sin(ang) * rad;
+            } else {
+              const ang = geoRand() * Math.PI * 2;
+              const rad = (MOUNT_CALDERA.rimR + 8.0) + geoRand() * (MOUNT_CALDERA.baseR - MOUNT_CALDERA.rimR + 24.0);
+              lx = MOUNT_CALDERA.x + Math.cos(ang) * rad;
+              lz = MOUNT_CALDERA.z + Math.sin(ang) * rad;
+            }
+            scMin = 0.45; scMax = 2.15;
+          } else if (spec.seed === 23) {
+            // Stratified Eastern Karst Limestone Canyon (x = 152..272, z = -32..96) & cave portals
+            lx = 152.0 + geoRand() * 120.0;
+            lz = -32.0 + geoRand() * 128.0;
+            scMin = 0.50; scMax = 2.25;
+          } else if (spec.seed === 21) {
+            // Waterfall Gorge Rims, Southern Headwaters Escarpment & Steep Hillside Bluffs
+            if (a % 2 === 0) {
+              lx = 22.0 + geoRand() * 68.0;
+              lz = getWaterfallCenterZ(lx) + (geoRand() > 0.5 ? 1 : -1) * (5.5 + geoRand() * 12.0);
+            } else {
+              lx = -24.0 + geoRand() * 165.0;
+              lz = 122.0 + geoRand() * 48.0;
+            }
+            scMin = 0.55; scMax = 1.95;
+          } else if (spec.seed === 22) {
+            // Flat Stepping Flagstones along Elderwood Trail, Overlook Paths & Stream Banks
+            if (a % 2 === 0) {
+              lx = -26.0 - geoRand() * 58.0;
+              lz = getForestTrailZ(lx) + (geoRand() - 0.5) * 4.8;
+            } else {
+              lx = -95.0 + geoRand() * 240.0;
+              lz = -25.0 + geoRand() * 195.0;
+            }
+            scMin = 0.32; scMax = 1.15;
+          } else if (spec.seed === 20) {
+            // Glacial Striated Erratics on High Alpine Plateaus (y > 20m)
+            lx = 62.0 + geoRand() * 115.0;
+            lz = -48.0 + geoRand() * 235.0;
+            scMin = 0.65; scMax = 2.40;
+          } else {
+            // Wind-Carved Dreikanter Ventifacts along sandy spits, beaches & island shorelines
+            if (a % 3 === 0) {
+              const isl = archipelagoIslets[a % archipelagoIslets.length];
+              const ang = geoRand() * Math.PI * 2;
+              const rad = isl.r * (0.68 + geoRand() * 0.34);
+              lx = isl.x + Math.cos(ang) * rad;
+              lz = isl.z + Math.sin(ang) * rad;
+            } else {
+              lx = -325.0 + geoRand() * 650.0;
+              lz = -245.0 + geoRand() * 560.0;
+            }
+            scMin = 0.28; scMax = 1.35;
+          }
+          const ly = sampleTerrainMeshHeight(lx, lz);
+          if (spec.seed === 27 && (ly < 0.05 || ly > 2.45)) continue;
+          if (spec.seed === 20 && ly < 18.0) continue;
+          if (spec.seed !== 27 && (ly < 0.25 || ly > 148.0)) continue;
+          if (isInsideWaterfallChannel(lx, lz)) continue;
 
-      const reefMat = new THREE.MeshStandardMaterial({
+          const sc = scMin + Math.pow(geoRand(), 0.85) * (scMax - scMin);
+          dummy.position.set(lx, ly - sc * (spec.seed === 22 ? 0.12 : 0.28), lz);
+          dummy.scale.set(sc * (0.88 + geoRand() * 0.28), sc * (0.82 + geoRand() * 0.36), sc * (0.88 + geoRand() * 0.28));
+          dummy.rotation.set((geoRand() - 0.5) * (spec.seed === 22 ? 0.08 : 0.22), geoRand() * Math.PI * 2, (geoRand() - 0.5) * (spec.seed === 22 ? 0.08 : 0.22));
+          dummy.updateMatrix();
+          lMesh.setMatrixAt(placedLoc, dummy.matrix);
+
+          if (spec.seed === 16 || spec.seed === 18) {
+            const vShade = 0.24 + geoRand() * 0.16;
+            tint.setRGB(vShade * 1.05, vShade * 0.96, vShade * 0.92);
+          } else if (spec.seed === 23) {
+            const kShade = 0.74 + geoRand() * 0.20;
+            tint.setRGB(kShade * 0.96, kShade * 0.98, kShade * 1.02);
+          } else if (spec.seed === 27) {
+            const dShade = 0.78 + geoRand() * 0.18;
+            tint.setRGB(dShade * 1.06, dShade * 0.98, dShade * 0.84);
+          } else {
+            const gShade = 0.64 + geoRand() * 0.24;
+            tint.setRGB(gShade * 0.96, gShade, gShade * 0.98);
+          }
+          lMesh.setColorAt(placedLoc, tint);
+          placedLoc++;
+        }
+        lMesh.count = placedLoc;
+        lMesh.instanceMatrix.needsUpdate = true;
+        if (lMesh.instanceColor) lMesh.instanceColor.needsUpdate = true;
+        lMesh.computeBoundingSphere();
+        scene.add(lMesh);
+        window.instancedLocationRocks.push(lMesh);
+      }
+      if (yieldFn) await yieldFn();
+
+      // 4. Submerged Coral-Bommie Reef Rocks (seed 26), Brain Coral Heads & Staghorn/Plate Corals across Inter-Island Channels & Reefs
+      const reefGeo = buildLoveRockGeometry(1.0, 2, 26);
+
+      const reefMat = applyAAARockShader(new THREE.MeshStandardMaterial({
         color: 0xffffff,
         roughness: 0.82,
-        metalness: 0.02
-      });
-      const reefCount = 420;
+        metalness: 0.04
+      }));
+      const reefCount = 780;
       const reefMesh = new THREE.InstancedMesh(reefGeo, reefMat, reefCount);
       reefMesh.receiveShadow = true;
 
@@ -10186,7 +10785,7 @@
         roughness: 0.78,
         metalness: 0.03
       });
-      const brainMax = 320;
+      const brainMax = 560;
       const brainCoralMesh = new THREE.InstancedMesh(brainGeo, coralMat, brainMax);
       brainCoralMesh.receiveShadow = true;
       brainCoralMesh.layers.set(1);
@@ -10236,7 +10835,7 @@
       stagGeo.setAttribute('position', new THREE.Float32BufferAttribute(stagPos, 3));
       stagGeo.setAttribute('normal', new THREE.Float32BufferAttribute(stagNorm, 3));
       stagGeo.setIndex(stagIdx);
-      const stagMax = 380;
+      const stagMax = 640;
       const stagCoralMesh = new THREE.InstancedMesh(stagGeo, coralMat, stagMax);
       stagCoralMesh.receiveShadow = true;
       stagCoralMesh.layers.set(1);
@@ -10254,33 +10853,48 @@
       let placedReefs = 0;
       let placedBrain = 0;
       let placedStag = 0;
-      for (let i = 0; i < 20000 && (placedReefs < reefCount || placedBrain < brainMax || placedStag < stagMax); i++) {
-        if (yieldFn && i > 0 && i % 4500 === 0) await yieldFn();
+      for (let i = 0; i < 32000 && (placedReefs < reefCount || placedBrain < brainMax || placedStag < stagMax); i++) {
+        if (yieldFn && i > 0 && i % 5500 === 0) await yieldFn();
         let rx, rz;
-        if (i % 5 === 0) {
+        const mode = i % 5;
+        if (mode === 0) {
           // Coral Fan Cay & Sheltered Reef Cay outer shelves
           const anchor = (i % 10 === 0) ? { x: -342, z: 224 } : { x: 508, z: 295 };
-          rx = anchor.x + (geoRand() - 0.5) * 145;
-          rz = anchor.z + (geoRand() - 0.5) * 145;
+          rx = anchor.x + (geoRand() - 0.5) * 165;
+          rz = anchor.z + (geoRand() - 0.5) * 165;
+        } else if (mode === 1 || mode === 2) {
+          // Submarine reef slopes & inter-island channels around all 28 Archipelago Islands
+          const isl = archipelagoIslets[i % archipelagoIslets.length];
+          const ang = geoRand() * Math.PI * 2;
+          const rad = isl.r * (0.95 + geoRand() * 1.15);
+          rx = isl.x + Math.cos(ang) * rad;
+          rz = isl.z + Math.sin(ang) * rad;
+        } else if (mode === 3) {
+          // Inter-island seabed channels connecting the Main Island to Starter Islets & Outer Islands
+          const isl = archipelagoIslets[i % archipelagoIslets.length];
+          const tLerp = 0.22 + geoRand() * 0.68;
+          rx = isl.x * tLerp + (geoRand() - 0.5) * 95.0;
+          rz = isl.z * tLerp + (geoRand() - 0.5) * 95.0;
         } else {
-          rx = (geoRand() - 0.5) * 340;
-          rz = -265 + geoRand() * 365;
+          rx = (geoRand() - 0.5) * 760;
+          rz = -380 + geoRand() * 760;
         }
         const ry = sampleTerrainMeshHeight(rx, rz);
-        // Strictly submerged between -8.5m and -0.85m so reef shelves and corals never clip air waves
-        if (ry < -8.5 || ry > -0.85) continue;
+        // Submerged from -32.0m deep inter-island channels up to -0.85m shallow reefs
+        if (ry < -32.0 || ry > -0.85) continue;
 
-        if (placedReefs < reefCount && ry > -4.6 && ry < -0.95) {
-          const sc = 0.8 + geoRand() * 1.65;
-          dummy.position.set(rx, ry, rz);
-          dummy.scale.set(sc, Math.min(0.65, sc * 0.35), sc * (0.85 + geoRand() * 0.35));
-          dummy.rotation.set(0, geoRand() * Math.PI * 2, 0);
+        const pickType = i % 3;
+        if (placedReefs < reefCount && (pickType === 0 || (placedBrain >= brainMax && placedStag >= stagMax))) {
+          const sc = 0.85 + Math.pow(geoRand(), 0.75) * 2.85;
+          dummy.position.set(rx, ry - sc * 0.22, rz);
+          dummy.scale.set(sc * (0.88 + geoRand() * 0.36), sc * (0.55 + geoRand() * 0.55), sc * (0.85 + geoRand() * 0.35));
+          dummy.rotation.set((geoRand() - 0.5) * 0.18, geoRand() * Math.PI * 2, (geoRand() - 0.5) * 0.18);
           dummy.updateMatrix();
           reefMesh.setMatrixAt(placedReefs, dummy.matrix);
           reefMesh.setColorAt(placedReefs, reefPalette[Math.floor(geoRand() * reefPalette.length)]);
           placedReefs++;
-        } else if (placedBrain < brainMax && ry > -7.8 && ry < -0.90) {
-          const sc = 0.65 + geoRand() * 1.25;
+        } else if (placedBrain < brainMax && (pickType === 1 || placedStag >= stagMax)) {
+          const sc = 0.72 + geoRand() * 1.55;
           dummy.position.set(rx, ry - 0.08, rz);
           dummy.scale.set(sc, sc * (0.75 + geoRand() * 0.45), sc * (0.85 + geoRand() * 0.3));
           dummy.rotation.set((geoRand() - 0.5) * 0.25, geoRand() * Math.PI * 2, (geoRand() - 0.5) * 0.25);
@@ -10288,10 +10902,10 @@
           brainCoralMesh.setMatrixAt(placedBrain, dummy.matrix);
           brainCoralMesh.setColorAt(placedBrain, mutedCoralPalette[Math.floor(geoRand() * mutedCoralPalette.length)]);
           placedBrain++;
-        } else if (placedStag < stagMax && ry > -8.2 && ry < -1.05) {
-          const sc = 0.72 + geoRand() * 1.18;
+        } else if (placedStag < stagMax) {
+          const sc = 0.80 + geoRand() * 1.65;
           dummy.position.set(rx, ry - 0.05, rz);
-          dummy.scale.set(sc, sc * (0.8 + geoRand() * 0.5), sc);
+          dummy.scale.set(sc, sc * (0.8 + geoRand() * 0.55), sc);
           dummy.rotation.set((geoRand() - 0.5) * 0.2, geoRand() * Math.PI * 2, (geoRand() - 0.5) * 0.2);
           dummy.updateMatrix();
           stagCoralMesh.setMatrixAt(placedStag, dummy.matrix);
@@ -10458,31 +11072,49 @@
       crystalMesh.layers.set(1);
       let crystalIdx = 0;
 
-      // Instanced Fallen Rockfall Slabs & Rubble Scree inside caves
-      const rubbleGeo = new THREE.DodecahedronGeometry(0.65, 1);
-      const rbPos = rubbleGeo.attributes.position;
-      for (let i = 0; i < rbPos.count; i++) {
-        const vx = rbPos.getX(i), vy = rbPos.getY(i), vz = rbPos.getZ(i);
-        const f = 0.85 + 0.25 * Math.sin(vx * 5.0 + vy * 3.0) * Math.cos(vz * 4.0);
-        rbPos.setXYZ(i, vx * f * 1.35, vy * f * 0.62, vz * f * 1.15);
-      }
-      rubbleGeo.computeVertexNormals();
-      const rubbleMat = new THREE.MeshStandardMaterial({
+      // Subterranean Cavern Rock Material (matches caveWallMat triplanar karst limestone, damp basalt, flowstone & seepage sheen)
+      const rubbleMat = applyAAARockShader(new THREE.MeshStandardMaterial({
         map: cliffTex,
         normalMap: cliffNormTex,
-        color: 0x5c6160,
-        roughness: 0.88,
-        metalness: 0.04,
-        envMapIntensity: 0.0,
+        normalScale: new THREE.Vector2(1.75, 1.75),
+        color: 0xb4bcc0,
+        roughness: 0.78,
+        metalness: 0.08,
         fog: true
-      });
-      const rubbleMax = 140;
+      }), true);
+      window.caveDynamicMats.push({ mat: rubbleMat, mouthEnv: 0.22 });
+
+      // 1. Instanced Fallen Rockfall Slabs & Stepped Cavern Scree (340 instances, Love-Rocks slab archetype)
+      const rubbleGeo = buildLoveRockGeometry(0.68, 2, 5);
+      rubbleGeo.scale(1.32, 0.58, 1.12);
+      rubbleGeo.computeVertexNormals();
+      const rubbleMax = 340;
       const rubbleMesh = new THREE.InstancedMesh(rubbleGeo, rubbleMat, rubbleMax);
+      rubbleMesh.receiveShadow = true;
       rubbleMesh.layers.set(1);
       let rubbleIdx = 0;
 
+      // 2. Massive Subterranean Breakdown Boulders & Split-Fault Cavern Outcrops (190 instances, Love-Rocks split-fault archetype)
+      const caveBoulderGeo = buildLoveRockGeometry(1.12, 2, 11);
+      const caveBoulderMax = 190;
+      const caveBoulderMesh = new THREE.InstancedMesh(caveBoulderGeo, rubbleMat, caveBoulderMax);
+      caveBoulderMesh.receiveShadow = true;
+      caveBoulderMesh.castShadow = true;
+      caveBoulderMesh.layers.set(1);
+      let caveBoulderIdx = 0;
+
+      // 3. Tiered Cavern Flowstone & Dripstone Mounds + Fluted Karst Wall-Buttress Crags (190 instances, seed 25 flowstone mound archetype)
+      const caveCragGeo = buildLoveRockGeometry(0.92, 2, 25);
+      const caveCragMax = 190;
+      const caveCragMesh = new THREE.InstancedMesh(caveCragGeo, rubbleMat, caveCragMax);
+      caveCragMesh.receiveShadow = true;
+      caveCragMesh.castShadow = true;
+      caveCragMesh.layers.set(1);
+      let caveCragIdx = 0;
+
       const dummy = new THREE.Object3D();
       const cTint = new THREE.Color();
+      const rockTint = new THREE.Color();
 
       for (let cIndex = 0; cIndex < CAVE_SYSTEMS.length; cIndex++) {
         const cave = CAVE_SYSTEMS[cIndex];
@@ -10553,6 +11185,62 @@
               dummy.scale.set(rScale, hScale, rScale);
               dummy.updateMatrix();
               speleoMesh.setMatrixAt(speleoIdx++, dummy.matrix);
+            }
+
+            // Subterranean Cavern Rocks along tunnel margins (varying sizes, matching damp karst/basalt cavern walls, keeping walk lane clear)
+            if (i >= 6 && i <= lengthSteps - 4) {
+              const sideSign = ((i + cIndex) % 4 === 0) ? 1.0 : -1.0;
+              const wallLat = sideSign * Math.max(2.15, halfW * (0.64 + ((i * 3) % 5) * 0.05));
+              const rx = cx + pt.perpX * wallLat;
+              const rz = cz + pt.perpZ * wallLat;
+              const shade = 0.72 + ((i * 7) % 9) * 0.035;
+              if (cave.isLavaTube) {
+                rockTint.setRGB(shade * 0.68, shade * 0.58, shade * 0.54);
+              } else {
+                rockTint.setRGB(shade * 0.90, shade * 0.95, shade * 0.98);
+              }
+
+              // A: Fallen breakdown slabs & talus scree of varying sizes (0.30m .. 1.35m)
+              if (rubbleIdx < rubbleMax) {
+                const rSc = 0.30 + ((i * 5 + cIndex * 3) % 11) * 0.095;
+                dummy.position.set(rx, floorY + rSc * 0.14, rz);
+                dummy.scale.set(rSc * (0.9 + (i % 3) * 0.22), rSc * (0.55 + (i % 4) * 0.18), rSc * (0.88 + (i % 2) * 0.25));
+                dummy.rotation.set(((i % 3) - 1) * 0.18, i * 1.37, ((i % 2) - 0.5) * 0.22);
+                dummy.updateMatrix();
+                rubbleMesh.setMatrixAt(rubbleIdx, dummy.matrix);
+                rubbleMesh.setColorAt(rubbleIdx, rockTint);
+                rubbleIdx++;
+              }
+
+              // B: Large split-fault cavern boulders & shelf outcrops tucked into chamber walls (0.65m .. 1.95m)
+              if (i % 4 === 0 && caveBoulderIdx < caveBoulderMax) {
+                const bSide = -sideSign * Math.max(2.35, halfW * 0.74);
+                const bx = cx + pt.perpX * bSide;
+                const bz = cz + pt.perpZ * bSide;
+                const bSc = 0.65 + ((i * 3 + cIndex * 5) % 9) * 0.145;
+                dummy.position.set(bx, floorY + bSc * 0.22, bz);
+                dummy.scale.set(bSc * (0.92 + (i % 3) * 0.18), bSc * (0.62 + (i % 4) * 0.22), bSc * (0.90 + (i % 2) * 0.20));
+                dummy.rotation.set(((i % 3) - 1) * 0.14, i * 2.15, ((i % 2) - 0.5) * 0.16);
+                dummy.updateMatrix();
+                caveBoulderMesh.setMatrixAt(caveBoulderIdx, dummy.matrix);
+                caveBoulderMesh.setColorAt(caveBoulderIdx, rockTint);
+                caveBoulderIdx++;
+              }
+
+              // C: Upright angular wall-buttress crags anchoring cavern ribs (0.52m .. 1.68m)
+              if (i % 4 === 2 && caveCragIdx < caveCragMax) {
+                const cSide = -sideSign * Math.max(2.40, halfW * 0.78);
+                const crx = cx + pt.perpX * cSide;
+                const crz = cz + pt.perpZ * cSide;
+                const cSc = 0.52 + ((i * 7 + cIndex * 3) % 8) * 0.15;
+                dummy.position.set(crx, floorY + cSc * 0.34, crz);
+                dummy.scale.set(cSc * 0.88, cSc * (0.95 + (i % 3) * 0.28), cSc * 0.92);
+                dummy.rotation.set(sideSign * 0.12, i * 1.75, -sideSign * 0.10);
+                dummy.updateMatrix();
+                caveCragMesh.setMatrixAt(caveCragIdx, dummy.matrix);
+                caveCragMesh.setColorAt(caveCragIdx, rockTint);
+                caveCragIdx++;
+              }
             }
 
             // Ultra-sparse dim mineral glints only every 18 steps (never light up the cave)
@@ -10631,7 +11319,7 @@
               bUVs.push(u * 5.0, bAccum * 0.16);
             }
 
-            // Populate branch speleothems, rockfalls & sparse mineral specks
+            // Populate branch speleothems, varied breakdown rocks & sparse mineral specks
             if (i >= 4 && i <= bSteps - 4 && i % 3 === 0) {
               if (speleoIdx < speleoMax && sp.ceilH > 2.65) {
                 const sSide = ((i % 6 === 0) ? 1 : -1) * sp.halfW * 0.58;
@@ -10642,14 +11330,44 @@
                 dummy.updateMatrix();
                 speleoMesh.setMatrixAt(speleoIdx++, dummy.matrix);
               }
-              if (br.hasRockfall && rubbleIdx < rubbleMax && (i > 12 && i % 6 === 0)) {
-                const side = (i % 12 === 0 ? 1 : -1) * Math.max(0.85, sp.halfW * 0.65);
-                dummy.position.set(sp.x + sp.perpX * side, sp.floorY + 0.15, sp.z + sp.perpZ * side);
+              const bShade = 0.70 + ((i * 5) % 7) * 0.04;
+              if (cave.isLavaTube) {
+                rockTint.setRGB(bShade * 0.66, bShade * 0.56, bShade * 0.52);
+              } else {
+                rockTint.setRGB(bShade * 0.88, bShade * 0.94, bShade * 0.97);
+              }
+              if (rubbleIdx < rubbleMax && i % 3 === 0) {
+                const side = (i % 6 === 0 ? 1 : -1) * Math.max(1.15, sp.halfW * 0.68);
+                dummy.position.set(sp.x + sp.perpX * side, sp.floorY + 0.12, sp.z + sp.perpZ * side);
                 dummy.rotation.set(i * 0.4, i * 1.3, 0.2);
-                const rs = 0.55 + (i % 3) * 0.28;
-                dummy.scale.set(rs, rs * 0.72, rs);
+                const rs = 0.32 + ((i + bIdx * 3) % 6) * 0.18;
+                dummy.scale.set(rs * 1.15, rs * 0.68, rs);
                 dummy.updateMatrix();
-                rubbleMesh.setMatrixAt(rubbleIdx++, dummy.matrix);
+                rubbleMesh.setMatrixAt(rubbleIdx, dummy.matrix);
+                rubbleMesh.setColorAt(rubbleIdx, rockTint);
+                rubbleIdx++;
+              }
+              if (caveBoulderIdx < caveBoulderMax && i % 6 === 0) {
+                const bSide = (i % 12 === 0 ? -1 : 1) * Math.max(1.35, sp.halfW * 0.74);
+                const bSc = 0.52 + ((i + bIdx * 5) % 5) * 0.22;
+                dummy.position.set(sp.x + sp.perpX * bSide, sp.floorY + bSc * 0.20, sp.z + sp.perpZ * bSide);
+                dummy.rotation.set(0.14, i * 1.85, -0.12);
+                dummy.scale.set(bSc, bSc * 0.72, bSc * 1.08);
+                dummy.updateMatrix();
+                caveBoulderMesh.setMatrixAt(caveBoulderIdx, dummy.matrix);
+                caveBoulderMesh.setColorAt(caveBoulderIdx, rockTint);
+                caveBoulderIdx++;
+              }
+              if (caveCragIdx < caveCragMax && i % 9 === 0) {
+                const cSide = (i % 18 === 0 ? 1 : -1) * Math.max(1.40, sp.halfW * 0.78);
+                const cSc = 0.48 + ((i + bIdx * 2) % 5) * 0.18;
+                dummy.position.set(sp.x + sp.perpX * cSide, sp.floorY + cSc * 0.30, sp.z + sp.perpZ * cSide);
+                dummy.rotation.set(-0.10, i * 1.45, 0.12);
+                dummy.scale.set(cSc * 0.85, cSc * 1.18, cSc * 0.90);
+                dummy.updateMatrix();
+                caveCragMesh.setMatrixAt(caveCragIdx, dummy.matrix);
+                caveCragMesh.setColorAt(caveCragIdx, rockTint);
+                caveCragIdx++;
               }
               if (br.hasMineral && crystalIdx < crystalMax && i % 15 === 0) {
                 const side = (i % 2 === 0 ? 1 : -1) * sp.halfW * 0.72;
@@ -10713,7 +11431,8 @@
         let cenoteMesh = null;
         if (cave.hasCenote || cave.isLavaTube) {
           const cenotePt = cave.getPoint(0.82);
-          const cenoteGeo = new THREE.CircleGeometry(cave.isLavaTube ? 7.2 : 9.8, 32);
+          const cenoteR = cave.isLavaTube ? 7.2 : 9.8;
+          const cenoteGeo = new THREE.CircleGeometry(cenoteR, 32);
           cenoteGeo.rotateX(-Math.PI / 2);
           const cenoteMat = new THREE.MeshStandardMaterial({
             color: cave.isLavaTube ? 0x591804 : 0x062028,
@@ -10731,6 +11450,35 @@
           cenoteMesh.position.set(cenotePt.x, cenotePt.floorY + 0.18, cenotePt.z);
           cenoteMesh.layers.set(1);
           caveRoot.add(cenoteMesh);
+
+          // Ring of varied subterranean shoreline boulders & slabs around the Cenote / Lava Sump bank
+          for (let cr = 0; cr < 10; cr++) {
+            const cAng = (cr / 10) * Math.PI * 2 + 0.35;
+            // Keep entrance approach side clear
+            if (Math.cos(cAng) < -0.55) continue;
+            const bRad = cenoteR * (0.86 + (cr % 3) * 0.08);
+            const rbx = cenotePt.x + Math.cos(cAng) * bRad;
+            const rbz = cenotePt.z + Math.sin(cAng) * bRad;
+            const bSc = 0.55 + (cr % 4) * 0.32;
+            dummy.position.set(rbx, cenotePt.floorY + bSc * 0.18, rbz);
+            dummy.scale.set(bSc * 1.18, bSc * 0.62, bSc * 0.96);
+            dummy.rotation.set(0.12, cAng + 0.8, -0.10);
+            dummy.updateMatrix();
+            if (cave.isLavaTube) {
+              rockTint.setRGB(0.48, 0.40, 0.38);
+            } else {
+              rockTint.setRGB(0.68, 0.74, 0.78);
+            }
+            if (cr % 2 === 0 && caveBoulderIdx < caveBoulderMax) {
+              caveBoulderMesh.setMatrixAt(caveBoulderIdx, dummy.matrix);
+              caveBoulderMesh.setColorAt(caveBoulderIdx, rockTint);
+              caveBoulderIdx++;
+            } else if (rubbleIdx < rubbleMax) {
+              rubbleMesh.setMatrixAt(rubbleIdx, dummy.matrix);
+              rubbleMesh.setColorAt(rubbleIdx, rockTint);
+              rubbleIdx++;
+            }
+          }
         }
         window.caveInteriorEntries.push({ cave, portalX: cave.px, portalZ: cave.pz, tunnelMesh, cenoteMesh, branchMeshes });
 
@@ -10864,7 +11612,7 @@
             const bz = cave.pz + cave.perpZ * (Math.cos(archAng) * radW) + cave.dirZ * depthOff;
             const by = cave.baseY + Math.sin(archAng) * radH;
             const bScale = (ring === 0 ? 1.38 : 1.58) + Math.sin(tArch * Math.PI) * 0.25;
-            const archBoulder = createGraniteBoulder(bScale);
+            const archBoulder = createGraniteBoulder(bScale, cIndex * 5 + a);
             archBoulder.position.set(bx, by, bz);
             archBoulder.scale.set(1.12, 0.92, 1.48);
             archBoulder.rotation.set((a % 3 - 1) * 0.14, portalYaw + (a % 2 - 0.5) * 0.22, (a % 2 - 0.5) * 0.16);
@@ -10879,7 +11627,7 @@
             const wx = cave.px + cave.perpX * lat + cave.dirX * fwd;
             const wz = cave.pz + cave.perpZ * lat + cave.dirZ * fwd;
             const wy = cave.baseY + 0.45 + w * 0.78;
-            const wingRock = createGraniteBoulder(2.10 - w * 0.18);
+            const wingRock = createGraniteBoulder(2.10 - w * 0.18, cIndex * 3 + w);
             wingRock.position.set(wx, wy, wz);
             wingRock.scale.set(1.32, 1.00, 1.48);
             wingRock.rotation.y = portalYaw + sideSign * 0.35;
@@ -10911,9 +11659,24 @@
 
       rubbleMesh.count = rubbleIdx;
       rubbleMesh.instanceMatrix.needsUpdate = true;
+      if (rubbleMesh.instanceColor) rubbleMesh.instanceColor.needsUpdate = true;
       rubbleMesh.computeBoundingSphere();
       caveRoot.add(rubbleMesh);
       window.caveRubbleMesh = rubbleMesh;
+
+      caveBoulderMesh.count = caveBoulderIdx;
+      caveBoulderMesh.instanceMatrix.needsUpdate = true;
+      if (caveBoulderMesh.instanceColor) caveBoulderMesh.instanceColor.needsUpdate = true;
+      caveBoulderMesh.computeBoundingSphere();
+      caveRoot.add(caveBoulderMesh);
+      window.caveBoulderMesh = caveBoulderMesh;
+
+      caveCragMesh.count = caveCragIdx;
+      caveCragMesh.instanceMatrix.needsUpdate = true;
+      if (caveCragMesh.instanceColor) caveCragMesh.instanceColor.needsUpdate = true;
+      caveCragMesh.computeBoundingSphere();
+      caveRoot.add(caveCragMesh);
+      window.caveCragMesh = caveCragMesh;
 
       scene.add(caveRoot);
       caveRoot.updateMatrixWorld(true);
@@ -11020,54 +11783,93 @@
         );
       };
 
-      const kelpMax = 1800;
+      // 0. Continuous Outer Archipelago Submarine Seabed Skirt (2600m x 2600m) so deep inter-island channels & trenches (-20m to -52m) have a sculpted ocean floor everywhere
+      const outerSeabedGeo = new THREE.PlaneGeometry(2600, 2600, 120, 120);
+      outerSeabedGeo.rotateX(-Math.PI / 2);
+      const sbPos = outerSeabedGeo.attributes.position;
+      const sbConc = new Float32Array(sbPos.count);
+      const sbChan = new Float32Array(sbPos.count);
+      const sbMoss = new Float32Array(sbPos.count);
+      const sbCanopy = new Float32Array(sbPos.count);
+      for (let i = 0; i < sbPos.count; i++) {
+        const sx = sbPos.getX(i);
+        const sz = sbPos.getZ(i);
+        const rawY = getTerrainHeight(sx, sz);
+        // Inside the central 1200m terrainMesh bounds, tuck -0.65m underneath so it never z-fights with terrainMesh; outside 580m, match exact seabed & island hulls
+        const inCore = (Math.abs(sx) < 585 && Math.abs(sz) < 585);
+        const sy = inCore ? Math.min(-2.5, rawY - 0.65) : Math.min(-1.2, rawY - 0.15);
+        sbPos.setXYZ(i, sx, sy, sz);
+        sbConc[i] = 0.35;
+      }
+      outerSeabedGeo.setAttribute('aConcavity', new THREE.BufferAttribute(sbConc, 1));
+      outerSeabedGeo.setAttribute('aWaterChannel', new THREE.BufferAttribute(sbChan, 1));
+      outerSeabedGeo.setAttribute('aMossHalo', new THREE.BufferAttribute(sbMoss, 1));
+      outerSeabedGeo.setAttribute('aCanopyAO', new THREE.BufferAttribute(sbCanopy, 1));
+      outerSeabedGeo.computeVertexNormals();
+      const outerSeabedMesh = new THREE.Mesh(outerSeabedGeo, terrainMat);
+      outerSeabedMesh.receiveShadow = true;
+      outerSeabedMesh.layers.set(1);
+      scene.add(outerSeabedMesh);
+      window.outerSeabedMesh = outerSeabedMesh;
+
+      const kelpMax = 3200;
       const kelpMesh = new THREE.InstancedMesh(kelpGeo, kelpMat, kelpMax);
       let placedKelp = 0;
 
-      for (let i = 0; i < 14000 && placedKelp < kelpMax; i++) {
-        if (yieldFn && i > 0 && i % 4000 === 0) await yieldFn();
+      for (let i = 0; i < 24000 && placedKelp < kelpMax; i++) {
+        if (yieldFn && i > 0 && i % 5000 === 0) await yieldFn();
         let kx, kz;
-        const zone = i % 5;
+        const zone = i % 7;
         if (zone === 0) {
           // Winding Estuary Riverbed (-45 .. 132)
           kz = -45.0 + uwRand() * 177.0;
           kx = getEstuaryCenter(kz) + (uwRand() - 0.5) * 26.0;
         } else if (zone === 1) {
-          // Grand Headwaters Tarn Basin
+          // Grand Headwaters Tarn & Cliff-Top Alpine Tarn Basins
+          const lk = (i % 2 === 0) ? HEADWATERS_LAKE : UPLAND_LAKE;
           const ang = uwRand() * Math.PI * 2;
           const rad = Math.sqrt(uwRand()) * 0.86;
-          const pt = sampleLakeShorePt(HEADWATERS_LAKE, ang, rad);
+          const pt = sampleLakeShorePt(lk, ang, rad);
           kx = pt.x;
           kz = pt.z;
         } else if (zone === 2) {
-          // Cliff-Top Alpine Tarn Basin
-          const ang = uwRand() * Math.PI * 2;
-          const rad = Math.sqrt(uwRand()) * 0.86;
-          const pt = sampleLakeShorePt(UPLAND_LAKE, ang, rad);
-          kx = pt.x;
-          kz = pt.z;
-        } else if (zone === 3) {
           // Windward Valley Lagoon Basin
           const ang = uwRand() * Math.PI * 2;
           const rad = Math.sqrt(uwRand()) * 0.86;
           const pt = sampleLakeShorePt(VALLEY_POND, ang, rad);
           kx = pt.x;
           kz = pt.z;
+        } else if (zone === 3 || zone === 4) {
+          // Inter-Island Submarine Corridors & Drop-Offs (between Main Island and all 28 Archipelago Islands)
+          const isl = archipelagoIslets[i % archipelagoIslets.length];
+          if (zone === 3) {
+            // Submarine reef skirt around each island
+            const ang = uwRand() * Math.PI * 2;
+            const rad = isl.r * (0.95 + uwRand() * 1.10);
+            kx = isl.x + Math.cos(ang) * rad;
+            kz = isl.z + Math.sin(ang) * rad;
+          } else {
+            // Open channel between Main Island coast and archipelago islands
+            const t = 0.25 + uwRand() * 0.65;
+            kx = isl.x * t + (uwRand() - 0.5) * 110.0;
+            kz = isl.z * t + (uwRand() - 0.5) * 110.0;
+          }
         } else {
-          // Expanded Coastal Reefs, Sheltered Swim Channel & Plunge Pools
-          kx = -340.0 + uwRand() * 680.0;
-          kz = -260.0 + uwRand() * 580.0;
+          // Expanded Coastal Reefs, Sheltered Swim Channel & Deep Lagoon Basins
+          kx = -480.0 + uwRand() * 960.0;
+          kz = -420.0 + uwRand() * 840.0;
         }
 
         const ky = sampleTerrainMeshHeight(kx, kz);
         const waterCeil = getLocalWaterCeiling(kx, kz);
         const subDepth = waterCeil - ky;
 
-        // Place strictly underwater where depth is between 0.55m and 9.5m
-        if (subDepth > 0.55 && subDepth < 9.5) {
-          const maxPlantH = Math.min(2.6, subDepth * 0.72);
-          const scY = (0.45 + uwRand() * 0.75) * (maxPlantH / 1.65);
-          const scXZ = 0.65 + uwRand() * 0.75;
+        // Place underwater from 0.55m shallows down to 34.0m deep inter-island channels (giant bull kelp forests in deep water!)
+        if (subDepth > 0.55 && subDepth < 34.0) {
+          const isDeepBullKelp = subDepth > 7.5;
+          const maxPlantH = isDeepBullKelp ? Math.min(13.5, subDepth * 0.68) : Math.min(3.2, subDepth * 0.74);
+          const scY = (0.50 + uwRand() * 0.78) * (maxPlantH / 1.65);
+          const scXZ = (isDeepBullKelp ? 1.15 : 0.65) + uwRand() * (isDeepBullKelp ? 1.25 : 0.75);
           dummy.position.set(kx, ky - 0.05, kz);
           dummy.scale.set(scXZ, scY, scXZ);
           dummy.rotation.set((uwRand() - 0.5) * 0.15, uwRand() * Math.PI * 2, (uwRand() - 0.5) * 0.15);
@@ -11087,7 +11889,7 @@
       window.instancedUnderwaterKelp = kelpMesh;
       if (yieldFn) await yieldFn();
 
-      // 2. 1,400 Instanced 3D Bushy Underwater Pondweed (Hornwort/Elodea) & Coral Sea-Fan Clusters
+      // 2. 2,600 Instanced 3D Bushy Underwater Pondweed, Gorgonian Sea-Whips & Coral Sea-Fan Clusters (Rivers, Lakes & Inter-Island Channels)
       const weedGeo = new THREE.ConeGeometry(0.45, 0.95, 7, 4, true);
       weedGeo.translate(0, 0.42, 0);
       const wPos = weedGeo.attributes.position;
@@ -11104,47 +11906,61 @@
       });
       weedMat.onBeforeCompile = kelpMat.onBeforeCompile;
 
-      const weedMax = 1400;
+      const weedMax = 2600;
       const weedMesh = new THREE.InstancedMesh(weedGeo, weedMat, weedMax);
       const weedPalette = [
         new THREE.Color(0x1f7a4c), // Emerald Hornwort
         new THREE.Color(0x2e8b57), // River Elodea
         new THREE.Color(0x26827a), // Teal Lagoon Sea-Fan
         new THREE.Color(0x558b2f), // Olive Mossy Charophyte
-        new THREE.Color(0xd96b43)  // Warm Coral Sea-Whip (Lagoon)
+        new THREE.Color(0xd96b43), // Warm Coral Sea-Whip (Lagoon & Inter-Island Reefs)
+        new THREE.Color(0xc85a72)  // Deep Reef Crimson Gorgonian Fan
       ];
       let placedWeed = 0;
-      for (let i = 0; i < 11000 && placedWeed < weedMax; i++) {
-        if (yieldFn && i > 0 && i % 4000 === 0) await yieldFn();
+      for (let i = 0; i < 19000 && placedWeed < weedMax; i++) {
+        if (yieldFn && i > 0 && i % 5000 === 0) await yieldFn();
         let wx, wz;
-        const zPick = i % 4;
+        const zPick = i % 6;
         if (zPick === 0) {
           wz = -42.0 + uwRand() * 172.0;
           wx = getEstuaryCenter(wz) + (uwRand() - 0.5) * 25.0;
         } else if (zPick === 1) {
+          const lk = (i % 2 === 0) ? HEADWATERS_LAKE : UPLAND_LAKE;
           const ang = uwRand() * Math.PI * 2, rad = Math.sqrt(uwRand()) * 0.86;
-          const pt = sampleLakeShorePt(HEADWATERS_LAKE, ang, rad);
+          const pt = sampleLakeShorePt(lk, ang, rad);
           wx = pt.x;
           wz = pt.z;
         } else if (zPick === 2) {
           const ang = uwRand() * Math.PI * 2, rad = Math.sqrt(uwRand()) * 0.86;
-          const pt = sampleLakeShorePt(UPLAND_LAKE, ang, rad);
-          wx = pt.x;
-          wz = pt.z;
-        } else {
-          const ang = uwRand() * Math.PI * 2, rad = Math.sqrt(uwRand()) * 0.86;
           const pt = sampleLakeShorePt(VALLEY_POND, ang, rad);
           wx = pt.x;
           wz = pt.z;
+        } else if (zPick === 3 || zPick === 4) {
+          // Inter-island channels & island submarine reef slopes
+          const isl = archipelagoIslets[i % archipelagoIslets.length];
+          if (zPick === 3) {
+            const ang = uwRand() * Math.PI * 2;
+            const rad = isl.r * (0.92 + uwRand() * 1.05);
+            wx = isl.x + Math.cos(ang) * rad;
+            wz = isl.z + Math.sin(ang) * rad;
+          } else {
+            const t = 0.22 + uwRand() * 0.68;
+            wx = isl.x * t + (uwRand() - 0.5) * 95.0;
+            wz = isl.z * t + (uwRand() - 0.5) * 95.0;
+          }
+        } else {
+          wx = -440.0 + uwRand() * 880.0;
+          wz = -380.0 + uwRand() * 760.0;
         }
 
         const wy = sampleTerrainMeshHeight(wx, wz);
         const wCeil = getLocalWaterCeiling(wx, wz);
         const depth = wCeil - wy;
-        if (depth > 0.35 && depth < 10.2) {
-          const sc = 0.55 + uwRand() * 0.95;
+        if (depth > 0.35 && depth < 28.0) {
+          const isDeepSeaFan = depth > 6.5;
+          const sc = (isDeepSeaFan ? 1.15 : 0.55) + uwRand() * (isDeepSeaFan ? 1.65 : 0.95);
           dummy.position.set(wx, wy - 0.04, wz);
-          dummy.scale.set(sc, Math.min(depth * 0.65, sc * (0.7 + uwRand() * 0.6)), sc);
+          dummy.scale.set(sc, Math.min(depth * 0.65, sc * (0.85 + uwRand() * 0.85)), sc);
           dummy.rotation.set((uwRand() - 0.5) * 0.2, uwRand() * Math.PI * 2, (uwRand() - 0.5) * 0.2);
           dummy.updateMatrix();
           weedMesh.setMatrixAt(placedWeed, dummy.matrix);
@@ -11226,7 +12042,7 @@
       window.instancedLilyPads = lilyMesh;
       if (yieldFn) await yieldFn();
 
-      // 3B. 1,600 Instanced Swaying Shallow-Bay Seagrass / Turtle-Grass Clumps (0.4m..5.8m sandy lagoons & Sheltered Reef Cay)
+      // 3B. 2,800 Instanced Swaying Seagrass & Turtle-Grass Meadows (Coastal Lagoons, Inter-Island Shoals & Island Reef Shelves)
       const sgPos = [], sgNorm = [], sgCol = [], sgIdx = [];
       for (let b = 0; b < 4; b++) {
         const ang = (b / 4) * Math.PI * 2 + 0.35;
@@ -11247,23 +12063,36 @@
       sgGeo.setAttribute('normal', new THREE.Float32BufferAttribute(sgNorm, 3));
       sgGeo.setAttribute('color', new THREE.Float32BufferAttribute(sgCol, 3));
       sgGeo.setIndex(sgIdx);
-      const sgMesh = new THREE.InstancedMesh(sgGeo, kelpMat, 1600);
+      const sgMax = 2800;
+      const sgMesh = new THREE.InstancedMesh(sgGeo, kelpMat, sgMax);
       let placedSg = 0;
-      for (let i = 0; i < 11000 && placedSg < 1600; i++) {
+      for (let i = 0; i < 18000 && placedSg < sgMax; i++) {
         let sx, sz;
-        if (i % 4 === 0) {
-          sx = -342.0 + (uwRand() - 0.5) * 140.0;
-          sz = 224.0 + (uwRand() - 0.5) * 140.0;
+        const m = i % 5;
+        if (m === 0) {
+          sx = -342.0 + (uwRand() - 0.5) * 150.0;
+          sz = 224.0 + (uwRand() - 0.5) * 150.0;
+        } else if (m === 1 || m === 2) {
+          const isl = archipelagoIslets[i % archipelagoIslets.length];
+          const ang = uwRand() * Math.PI * 2;
+          const rad = isl.r * (0.90 + uwRand() * 0.95);
+          sx = isl.x + Math.cos(ang) * rad;
+          sz = isl.z + Math.sin(ang) * rad;
+        } else if (m === 3) {
+          const isl = archipelagoIslets[i % archipelagoIslets.length];
+          const t = 0.25 + uwRand() * 0.65;
+          sx = isl.x * t + (uwRand() - 0.5) * 90.0;
+          sz = isl.z * t + (uwRand() - 0.5) * 90.0;
         } else {
-          sx = -320.0 + uwRand() * 640.0;
-          sz = -260.0 + uwRand() * 540.0;
+          sx = -420.0 + uwRand() * 840.0;
+          sz = -340.0 + uwRand() * 680.0;
         }
         const sy = sampleTerrainMeshHeight(sx, sz);
         const depth = 0.05 - sy;
-        if (depth > 0.40 && depth < 5.8) {
-          const sc = 0.75 + uwRand() * 0.95;
+        if (depth > 0.40 && depth < 18.5) {
+          const sc = (depth > 6.0 ? 1.25 : 0.75) + uwRand() * (depth > 6.0 ? 1.45 : 0.95);
           dummy.position.set(sx, sy - 0.03, sz);
-          dummy.scale.set(sc, sc * (0.7 + uwRand() * 0.7), sc);
+          dummy.scale.set(sc, sc * (0.8 + uwRand() * 0.8), sc);
           dummy.rotation.set(0, uwRand() * Math.PI * 2, 0);
           dummy.updateMatrix();
           sgMesh.setMatrixAt(placedSg, dummy.matrix);
@@ -11280,12 +12109,12 @@
       scene.add(sgMesh);
       window.instancedSeagrass = sgMesh;
 
-      // 4. Camera-Following 3D Underwater Sun God-Rays & Suspended Aquatic Plankton/Bubble Particles
+      // 4. Camera-Following 3D Underwater Sun God-Rays + World-Space Refractive Spherical Bubbles (Trail Behind Swimmer!)
       const uwGroup = new THREE.Group();
       uwGroup.visible = false;
 
-      const rayGeo = new THREE.ConeGeometry(4.4, 16.0, 14, 1, true);
-      rayGeo.translate(0, -8.0, 0);
+      const rayGeo = new THREE.ConeGeometry(4.4, 22.0, 14, 1, true);
+      rayGeo.translate(0, -11.0, 0);
       const rayMat = new THREE.ShaderMaterial({
         transparent: true,
         depthWrite: false,
@@ -11307,14 +12136,14 @@
           uniform float uFade;
           varying vec3 vLocal;
           void main() {
-            float depthT = clamp(-vLocal.y / 16.0, 0.0, 1.0);
+            float depthT = clamp(-vLocal.y / 22.0, 0.0, 1.0);
             float radius = max(0.2, 4.4 * depthT);
             float radial = length(vLocal.xz) / radius;
             float shaft = 1.0 - smoothstep(0.02, 0.55, radial);
-            shaft *= exp(-depthT * 1.45);
+            shaft *= exp(-depthT * 1.35);
             float band = sin(vLocal.y * 0.85 + vLocal.x * 1.1 + uTime * 0.55) * 0.5 + 0.5;
             shaft *= 0.7 + 0.3 * band;
-            shaft *= 1.0 - smoothstep(0.62, 0.96, depthT);
+            shaft *= 1.0 - smoothstep(0.65, 0.98, depthT);
             shaft *= smoothstep(0.0, 0.06, depthT);
             vec3 col = mix(vec3(0.78, 0.9, 0.78), vec3(0.28, 0.62, 0.58), depthT);
             float alpha = shaft * 0.2 * uFade;
@@ -11333,35 +12162,120 @@
         uwGroup.add(rm);
         rayMeshes.push({ mesh: rm, baseAng: ang, baseRad: rad, phase: r * 0.62 });
       }
+      scene.add(uwGroup);
 
-      const moteCount = 320;
+      // World-Space Refractive Underwater Bubbles (340 ambient rising reef/water-column bubbles + 120 swimmer wake/breath trail bubbles)
+      // Added directly to `scene` (NOT child of camera-locked uwGroup!) so bubbles stay anchored in the water and move behind you as you swim forward!
+      const ambientBubbleCount = 340;
+      const wakeBubbleCount = 120;
+      const moteCount = ambientBubbleCount + wakeBubbleCount;
       const motePos = new Float32Array(moteCount * 3);
+      const moteVel = new Float32Array(moteCount * 3);
+      const moteScale = new Float32Array(moteCount);
+      const motePhase = new Float32Array(moteCount);
+
       for (let m = 0; m < moteCount; m++) {
-        motePos[m * 3]     = (uwRand() - 0.5) * 28.0;
-        motePos[m * 3 + 1] = -uwRand() * 11.0;
-        motePos[m * 3 + 2] = (uwRand() - 0.5) * 28.0;
+        const isWake = m >= ambientBubbleCount;
+        motePos[m * 3]     = -22.0 + (uwRand() - 0.5) * 32.0;
+        motePos[m * 3 + 1] = isWake ? -999.0 : (-0.3 - uwRand() * 14.0);
+        motePos[m * 3 + 2] = 24.0 + (uwRand() - 0.5) * 32.0;
+        moteVel[m * 3]     = 0.0;
+        moteVel[m * 3 + 1] = 0.28 + uwRand() * 0.52;
+        moteVel[m * 3 + 2] = 0.0;
+        // Natural multi-scale distribution: tiny micro-bubbles (0.35), medium pearls (0.75), wobbling larger bubbles (1.35)
+        const sRoll = uwRand();
+        moteScale[m] = sRoll < 0.55 ? (0.32 + uwRand() * 0.35) : (sRoll < 0.88 ? (0.68 + uwRand() * 0.45) : (1.15 + uwRand() * 0.55));
+        motePhase[m] = uwRand() * Math.PI * 2.0;
       }
+
       const moteGeo = new THREE.BufferGeometry();
       moteGeo.setAttribute('position', new THREE.BufferAttribute(motePos, 3));
-      const moteMat = new THREE.PointsMaterial({
-        color: 0xb8f8ff,
-        size: 0.14,
+      moteGeo.setAttribute('aScale', new THREE.BufferAttribute(moteScale, 1));
+      moteGeo.setAttribute('aPhase', new THREE.BufferAttribute(motePhase, 1));
+
+      const moteMat = new THREE.ShaderMaterial({
         transparent: true,
-        opacity: 0.68,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false
+        depthWrite: false,
+        blending: THREE.NormalBlending,
+        uniforms: {
+          uTime: { value: 0.0 },
+          uPixelRatio: { value: Math.min(window.devicePixelRatio || 1.0, 2.0) }
+        },
+        vertexShader: `
+          attribute float aScale;
+          attribute float aPhase;
+          uniform float uTime;
+          uniform float uPixelRatio;
+          varying float vPhase;
+          varying float vScale;
+          varying float vDistFade;
+          void main() {
+            vPhase = aPhase;
+            vScale = aScale;
+            vec3 wPos = position;
+            // Subtle organic helical wobble as bubbles rise through water
+            float wobbleAmp = 0.035 * aScale;
+            wPos.x += sin(uTime * 3.4 + aPhase + position.y * 2.2) * wobbleAmp;
+            wPos.z += cos(uTime * 2.9 + aPhase * 1.3 + position.y * 2.0) * wobbleAmp;
+            vec4 mvPosition = modelViewMatrix * vec4(wPos, 1.0);
+            float dist = max(0.6, -mvPosition.z);
+            vDistFade = (1.0 - smoothstep(18.0, 26.0, dist)) * smoothstep(0.15, 0.55, dist);
+            gl_PointSize = clamp((26.0 * aScale * uPixelRatio) / dist, 2.0, 42.0);
+            gl_Position = projectionMatrix * mvPosition;
+          }
+        `,
+        fragmentShader: `
+          uniform float uTime;
+          varying float vPhase;
+          varying float vScale;
+          varying float vDistFade;
+          void main() {
+            if (vDistFade <= 0.01) discard;
+            vec2 uv = gl_PointCoord * 2.0 - 1.0;
+            // Subtle oblate rising bubble deformation
+            float squash = 1.0 + 0.08 * sin(uTime * 5.5 + vPhase);
+            uv.y *= squash;
+            float r2 = dot(uv, uv);
+            if (r2 > 1.0) discard;
+            float r = sqrt(r2);
+            float nz = sqrt(max(0.0, 1.0 - r2));
+            vec3 norm = normalize(vec3(uv.x, -uv.y, nz));
+
+            // Fresnel refractive glass rim + upper-left sun glint + lower-right internal reflection
+            float fresnel = pow(1.0 - nz, 2.35);
+            float specMain = pow(max(0.0, dot(norm, normalize(vec3(-0.48, 0.58, 0.66)))), 28.0);
+            float specSub  = pow(max(0.0, dot(norm, normalize(vec3(0.42, -0.52, 0.74)))), 14.0) * 0.42;
+            float softEdge = 1.0 - smoothstep(0.84, 1.0, r);
+
+            vec3 rimCol = vec3(0.74, 0.95, 1.0);
+            vec3 coreCol = vec3(0.45, 0.82, 0.92);
+            vec3 col = mix(coreCol, rimCol, fresnel) + vec3(1.0, 1.0, 1.0) * (specMain * 0.95 + specSub);
+            float alpha = (0.06 + fresnel * 0.62 + specMain * 0.88 + specSub * 0.45) * softEdge * vDistFade;
+            gl_FragColor = vec4(col, clamp(alpha, 0.0, 0.88));
+          }
+        `
       });
+
       const motePoints = new THREE.Points(moteGeo, moteMat);
       motePoints.frustumCulled = false;
-      uwGroup.add(motePoints);
+      motePoints.visible = false;
+      scene.add(motePoints);
 
-      scene.add(uwGroup);
       window.underwaterVFX = {
         group: uwGroup,
         rays: rayMeshes,
         motePoints: motePoints,
+        moteMat: moteMat,
         motePos: motePos,
-        moteCount: moteCount
+        moteVel: moteVel,
+        moteScale: moteScale,
+        moteCount: moteCount,
+        ambientCount: ambientBubbleCount,
+        wakeCursor: ambientBubbleCount,
+        wakeAccum: 0.0,
+        lastCamX: -22.0,
+        lastCamY: 2.0,
+        lastCamZ: 24.0
       };
     }
 
@@ -13028,15 +13942,15 @@
       if (scene.fog && scene.fog.isFogExp2) {
         if (isCameraUnderwater) {
           const uwDepth = Math.max(0.0, wInfo.surfaceY - camera.position.y);
-          const depthBlend = Math.min(1.0, uwDepth / 10.5);
+          const depthBlend = Math.min(1.0, uwDepth / 38.0);
           const smoothDepth = depthBlend * depthBlend * (3.0 - 2.0 * depthBlend);
-          // Shallow sunlit teal-cyan (0.045, 0.40, 0.44) -> deep moody abyssal slate (0.014, 0.082, 0.135)
+          // Shallow sunlit teal-cyan (0.045, 0.42, 0.48) -> deep ocean cobalt-slate (0.014, 0.10, 0.19) with long ~45m visibility for deep reefs & fish
           const rFog = 0.045 * (1.0 - smoothDepth) + 0.014 * smoothDepth;
-          const gFog = 0.400 * (1.0 - smoothDepth) + 0.082 * smoothDepth;
-          const bFog = 0.440 * (1.0 - smoothDepth) + 0.135 * smoothDepth;
+          const gFog = 0.420 * (1.0 - smoothDepth) + 0.100 * smoothDepth;
+          const bFog = 0.480 * (1.0 - smoothDepth) + 0.190 * smoothDepth;
           scene.fog.color.setRGB(rFog, gFog, bFog);
-          scene.fog.density = 0.028 + smoothDepth * 0.054;
-          uwAtten = Math.max(0.24, Math.exp(-uwDepth * 0.095));
+          scene.fog.density = 0.013 + smoothDepth * 0.022;
+          uwAtten = Math.max(0.32, Math.exp(-uwDepth * 0.032));
         } else {
           const altRatio = Math.max(0, Math.min(1, (camera.position.y - 6.0) / 140.0));
           const surfDensity = Math.max(0.0008, (window._surfaceFogDensity !== undefined ? window._surfaceFogDensity : (0.00145 - altRatio * 0.00055)));
@@ -13942,10 +14856,15 @@
       if (window.underwaterVFX) {
         const uw = window.underwaterVFX;
         uw.group.visible = isCameraUnderwater;
+        if (uw.motePoints) uw.motePoints.visible = isCameraUnderwater;
         if (isCameraUnderwater) {
-          const uwDepthNow = Math.max(0.0, wInfo.surfaceY - camera.position.y);
-          const rayFade = Math.max(0.0, 1.0 - uwDepthNow / 11.5);
-          uw.group.position.set(camera.position.x, wInfo.surfaceY, camera.position.z);
+          const cx = camera.position.x;
+          const cy = camera.position.y;
+          const cz = camera.position.z;
+          const surfY = wInfo.surfaceY;
+          const uwDepthNow = Math.max(0.0, surfY - cy);
+          const rayFade = Math.max(0.0, 1.0 - uwDepthNow / 24.0);
+          uw.group.position.set(cx, surfY, cz);
           if (uw.rays[0] && uw.rays[0].mesh.material.uniforms) {
             uw.rays[0].mesh.material.uniforms.uTime.value = timeSec;
             uw.rays[0].mesh.material.uniforms.uFade.value = rayFade;
@@ -13957,14 +14876,91 @@
             ray.mesh.position.z = Math.sin(driftAng) * ray.baseRad;
             ray.mesh.visible = rayFade > 0.02;
           }
+
+          if (uw.moteMat && uw.moteMat.uniforms) {
+            uw.moteMat.uniforms.uTime.value = timeSec;
+          }
+
+          // Compute swimmer world velocity so wake bubbles emit in front/around the swimmer and drift naturally toward your back as you swim forward
+          const camVx = dt > 0.0001 ? (cx - uw.lastCamX) / dt : 0.0;
+          const camVy = dt > 0.0001 ? (cy - uw.lastCamY) / dt : 0.0;
+          const camVz = dt > 0.0001 ? (cz - uw.lastCamZ) / dt : 0.0;
+          const swimSpd = Math.hypot(camVx, camVz);
+          const fwdX = -Math.sin(player.yaw);
+          const fwdZ = -Math.cos(player.yaw);
+
           const mPos = uw.motePos;
-          for (let m = 0; m < uw.moteCount; m++) {
-            mPos[m * 3 + 1] += dt * 0.32;
-            mPos[m * 3]     += Math.sin(timeSec * 1.2 + m) * dt * 0.08;
-            if (mPos[m * 3 + 1] > -0.15) {
-              mPos[m * 3 + 1] = -10.5;
+          const mVel = uw.moteVel;
+          const mScale = uw.moteScale;
+          const ambCount = uw.ambientCount || 340;
+
+          // 1. Update 340 World-Space Ambient Bubbles (stay fixed in world space so swimming forward moves them past you to your back!)
+          for (let m = 0; m < ambCount; m++) {
+            const i3 = m * 3;
+            const riseSpd = mVel ? mVel[i3 + 1] : 0.42;
+            mPos[i3 + 1] += riseSpd * dt;
+            // Gentle ocean current drift in world space
+            mPos[i3]     += (wInfo.current ? wInfo.current.x * 0.15 : 0.0) * dt;
+            mPos[i3 + 2] += (wInfo.current ? wInfo.current.y * 0.15 : 0.0) * dt;
+
+            const dx = mPos[i3] - cx;
+            const dz = mPos[i3 + 2] - cz;
+            const distSq = dx * dx + dz * dz;
+            // Respawn in world space if bubble reaches surface or falls behind/outside 20m radius around swimmer
+            if (mPos[i3 + 1] > surfY - 0.12 || mPos[i3 + 1] < cy - 14.0 || mPos[i3 + 1] > cy + 10.0 || distSq > 400.0) {
+              // Bias respawn into the hemisphere ahead of the swimmer so new world-space bubbles enter view and stream past you toward your back
+              const randAng = (Math.sin(m * 12.9898 + timeSec * 1.7) * 43758.5453);
+              const frac1 = randAng - Math.floor(randAng);
+              const frac2 = (randAng * 1.618) - Math.floor(randAng * 1.618);
+              const spawnAng = Math.atan2(fwdZ, fwdX) + (frac1 - 0.5) * Math.PI * 1.45;
+              const spawnRad = (distSq > 400.0) ? (12.0 + frac2 * 7.5) : (2.2 + frac2 * 16.5);
+              mPos[i3]     = cx + Math.cos(spawnAng) * spawnRad;
+              mPos[i3 + 2] = cz + Math.sin(spawnAng) * spawnRad;
+              const floorH = sampleTerrainMeshHeight(mPos[i3], mPos[i3 + 2]);
+              const minY = Math.max(floorH + 0.25, cy - 11.5);
+              const maxY = Math.min(surfY - 0.35, cy + 4.5);
+              mPos[i3 + 1] = minY < maxY ? (minY + ((m * 0.381966 + timeSec * 0.23) % 1.0) * (maxY - minY)) : (surfY - 1.2);
             }
           }
+
+          // 2. Emit & Update 120 World-Space Swimmer Stroke / Breath Wake Bubbles (spawn near swimmer, drift backward & rise!)
+          uw.wakeAccum += dt * (4.0 + Math.min(28.0, swimSpd * 4.8));
+          while (uw.wakeAccum >= 1.0) {
+            uw.wakeAccum -= 1.0;
+            const wIdx = uw.wakeCursor;
+            uw.wakeCursor = ambCount + ((wIdx - ambCount + 1) % (uw.moteCount - ambCount));
+            const i3 = wIdx * 3;
+            const sideSign = (wIdx & 1) ? 1.0 : -1.0;
+            const rightX = Math.cos(player.yaw) * sideSign * (0.22 + (wIdx % 3) * 0.12);
+            const rightZ = -Math.sin(player.yaw) * sideSign * (0.22 + (wIdx % 3) * 0.12);
+            // Spawn slightly in front/below camera so you see the stroke/exhale bubble form and immediately stream past you toward your back
+            mPos[i3]     = cx + fwdX * 0.65 + rightX;
+            mPos[i3 + 1] = Math.min(surfY - 0.18, cy - 0.28 + ((wIdx % 5) - 2) * 0.08);
+            mPos[i3 + 2] = cz + fwdZ * 0.65 + rightZ;
+            // Initial backward kick relative to swimmer stroke + buoyant rise
+            mVel[i3]     = -fwdX * (0.45 + Math.min(1.5, swimSpd * 0.22)) + ( ((wIdx * 7) % 11) - 5 ) * 0.06;
+            mVel[i3 + 1] = 0.48 + (wIdx % 5) * 0.14;
+            mVel[i3 + 2] = -fwdZ * (0.45 + Math.min(1.5, swimSpd * 0.22)) + ( ((wIdx * 13) % 11) - 5 ) * 0.06;
+          }
+
+          for (let m = ambCount; m < uw.moteCount; m++) {
+            const i3 = m * 3;
+            if (mPos[i3 + 1] < -900.0) continue;
+            mPos[i3]     += mVel[i3] * dt;
+            mPos[i3 + 1] += mVel[i3 + 1] * dt;
+            mPos[i3 + 2] += mVel[i3 + 2] * dt;
+            // Water drag rapidly slows horizontal wake velocity so the bubble stays behind in the water column and rises
+            const drag = Math.max(0.0, 1.0 - 3.2 * dt);
+            mVel[i3]     *= drag;
+            mVel[i3 + 2] *= drag;
+            if (mPos[i3 + 1] > surfY - 0.08) {
+              mPos[i3 + 1] = -999.0; // Pop at water surface
+            }
+          }
+
+          uw.lastCamX = cx;
+          uw.lastCamY = cy;
+          uw.lastCamZ = cz;
           uw.motePoints.geometry.attributes.position.needsUpdate = true;
         }
       }
@@ -14336,7 +15332,7 @@
           getForestTrailMask, getGameTrailMask, activeEZTrees,
           interactiveTargets, treeFootprints, buoyantObjects, spawnBuoyantLog, createCampfire, getCampfireVFXAssets,
           fellTreeWithPhysics, activeFallingTrees, spawnWoodchipBurst, getWoodTextures,
-          createGraniteBoulder, applyAAARockShader, addWaterRipple,
+          createGraniteBoulder, buildLoveRockGeometry, applyAAARockShader, setRockWeather: window.setRockWeather, rockWeatherUniforms: window.rockWeatherUniforms, addWaterRipple,
           skyUniforms, cloudUniforms, water, sunLight, hemiLight, fireLight, starDome, starMat, skyPalette,
           refreshEnvironmentIBL, updateSun, syncCaveAtmosphere, uCaveDarkness: window.uCaveDarkness,
           AudioEngine, showToast, triggerSwing, fpAxeMesh
