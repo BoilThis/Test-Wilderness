@@ -11284,23 +11284,52 @@
       const uwGroup = new THREE.Group();
       uwGroup.visible = false;
 
-      const rayGeo = new THREE.ConeGeometry(2.6, 14.0, 12, 1, true);
-      rayGeo.translate(0, -7.0, 0);
-      const rayMat = new THREE.MeshBasicMaterial({
-        color: 0x64f2ff,
+      const rayGeo = new THREE.ConeGeometry(4.4, 16.0, 14, 1, true);
+      rayGeo.translate(0, -8.0, 0);
+      const rayMat = new THREE.ShaderMaterial({
         transparent: true,
-        opacity: 0.11,
+        depthWrite: false,
         blending: THREE.AdditiveBlending,
         side: THREE.DoubleSide,
-        depthWrite: false
+        uniforms: {
+          uTime: { value: 0 },
+          uFade: { value: 1 }
+        },
+        vertexShader: `
+          varying vec3 vLocal;
+          void main() {
+            vLocal = position;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          uniform float uTime;
+          uniform float uFade;
+          varying vec3 vLocal;
+          void main() {
+            float depthT = clamp(-vLocal.y / 16.0, 0.0, 1.0);
+            float radius = max(0.2, 4.4 * depthT);
+            float radial = length(vLocal.xz) / radius;
+            float shaft = 1.0 - smoothstep(0.02, 0.55, radial);
+            shaft *= exp(-depthT * 1.45);
+            float band = sin(vLocal.y * 0.85 + vLocal.x * 1.1 + uTime * 0.55) * 0.5 + 0.5;
+            shaft *= 0.7 + 0.3 * band;
+            shaft *= 1.0 - smoothstep(0.62, 0.96, depthT);
+            shaft *= smoothstep(0.0, 0.06, depthT);
+            vec3 col = mix(vec3(0.78, 0.9, 0.78), vec3(0.28, 0.62, 0.58), depthT);
+            float alpha = shaft * 0.2 * uFade;
+            if (alpha < 0.004) discard;
+            gl_FragColor = vec4(col, alpha);
+          }
+        `
       });
       const rayMeshes = [];
-      for (let r = 0; r < 10; r++) {
+      for (let r = 0; r < 7; r++) {
         const rm = new THREE.Mesh(rayGeo, rayMat);
-        const ang = (r / 10) * Math.PI * 2.0;
-        const rad = 3.5 + (r % 3) * 3.2;
+        const ang = (r / 7) * Math.PI * 2.0;
+        const rad = 2.4 + (r % 3) * 2.6;
         rm.position.set(Math.cos(ang) * rad, 0.0, Math.sin(ang) * rad);
-        rm.rotation.set(0.18, ang, -0.14);
+        rm.rotation.set(0.3 + (r % 3 - 1) * 0.04, ang * 0.15, -0.26 + (r % 2 ? 0.04 : -0.04));
         uwGroup.add(rm);
         rayMeshes.push({ mesh: rm, baseAng: ang, baseRad: rad, phase: r * 0.62 });
       }
@@ -13917,13 +13946,16 @@
           const uwDepthNow = Math.max(0.0, wInfo.surfaceY - camera.position.y);
           const rayFade = Math.max(0.0, 1.0 - uwDepthNow / 11.5);
           uw.group.position.set(camera.position.x, wInfo.surfaceY, camera.position.z);
+          if (uw.rays[0] && uw.rays[0].mesh.material.uniforms) {
+            uw.rays[0].mesh.material.uniforms.uTime.value = timeSec;
+            uw.rays[0].mesh.material.uniforms.uFade.value = rayFade;
+          }
           for (let r = 0; r < uw.rays.length; r++) {
             const ray = uw.rays[r];
-            const driftAng = ray.baseAng + Math.sin(timeSec * 0.55 + ray.phase) * 0.18;
+            const driftAng = ray.baseAng + Math.sin(timeSec * 0.35 + ray.phase) * 0.08;
             ray.mesh.position.x = Math.cos(driftAng) * ray.baseRad;
             ray.mesh.position.z = Math.sin(driftAng) * ray.baseRad;
             ray.mesh.visible = rayFade > 0.02;
-            ray.mesh.material.opacity = (0.08 + 0.05 * Math.sin(timeSec * 1.4 + ray.phase)) * rayFade;
           }
           const mPos = uw.motePos;
           for (let m = 0; m < uw.moteCount; m++) {
