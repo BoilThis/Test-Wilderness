@@ -512,9 +512,9 @@
   scene.add(worldLandmarksGroup);
   const animatedProps = [];
 
-  // --- 5A. FLIGHT 409 CRASHED TWIN-OTTER SEAPLANE (Tidal Cove: -12, -48) ---
+  // --- 5A. FLIGHT 409 CRASHED TWIN-OTTER SEAPLANE (Dry sand west of the cove: -44, -28) ---
   function buildCrashedSeaplane() {
-    const cx = -12.0, cz = -48.0;
+    const cx = -44.0, cz = -28.0;
     const cy = getTerrainHeight(cx, cz) + 0.32;
     const planeGroup = new THREE.Group();
     planeGroup.position.set(cx, cy, cz);
@@ -845,7 +845,7 @@
 
   // --- 5C. SUBMERGED CORAL RUINS & DEEP REEF SHELF (Coral Fan Cay NW Shelf X: 404, Z: 270) ---
   function buildSubmergedRuins() {
-    const rx = 404.0, rz = 270.0;
+    const rx = 447.0, rz = 295.0;
     const ruinGroup = new THREE.Group();
     const stoneMat = applyAAARockShader(new THREE.MeshStandardMaterial({
       color: 0x5e7c74, roughness: 0.72, metalness: 0.14
@@ -2288,7 +2288,7 @@
   // ============================================================================
   const raftState = {
     mesh: new THREE.Group(),
-    pos: new THREE.Vector3(-18.0, 0.08, -36.0),
+    pos: new THREE.Vector3(-48.0, 0.08, -36.0),
     yaw: 0.25,
     vel: new THREE.Vector3()
   };
@@ -2411,9 +2411,9 @@
     const keelRibR = keelRibL.clone();
     keelRibR.position.x = 0.55;
     keel.add(keelRibR);
-    raftState.boatPos = new THREE.Vector3(-10.5, 0.4, -31.5);
+    raftState.boatPos = new THREE.Vector3(-40.0, 0.4, -24.0);
     keel.position.copy(raftState.boatPos);
-    keel.position.y = getTerrainHeight(-10.5, -31.5) + 0.28;
+    keel.position.y = getTerrainHeight(-40.0, -24.0) + 0.28;
     scene.add(keel);
     raftState.keel = keel;
     raftState.boatMesh = null;
@@ -6138,7 +6138,7 @@
       { x: 74,   z: 198, buck: false }, // Windward Valley Lagoon L3 weir shelf
       { x: 88,   z: 172, buck: true },  // Windward Valley Lagoon L3 north sandy littoral shelf
       { x: 106,  z: 212, buck: false }, // Windward Valley Lagoon L3 east cove
-      { x: 455,  z: 274, buck: true },
+      { x: 498,  z: 299, buck: true },
       { x: -452, z: 392, buck: false }
     ];
     for (let i = 0; i < deerSpecs.length; i++) {
@@ -8003,11 +8003,11 @@
     });
 
     const NEW_WAYPOINTS = {
-      crash:            { x: -16.0,  z: -40.0,  yaw: -0.25, pitch: -0.05, dive: false, label: '✈️ Teleported to Flight 409 Seaplane Crash Cove!' },
+      crash:            { x: -40.0,  z: -28.0,  yaw: 0.79, pitch: -0.05, dive: false, label: '✈️ Teleported to Flight 409 Seaplane Crash Cove!' },
       outpost:          { x: 46.0,   z: 88.0,   yaw: -0.45, pitch: 0.05,  dive: false, label: '📡 Teleported to Abandoned Radio Outpost & Weather Station!' },
       volcano:          { x: -250.0, z: 64.0, yaw: 1.57, pitch: -0.22, dive: false, label: '🌋 Teleported to Mount Caldera east rim. Crest is 168m at -302, 64.' },
       lavatube:         { x: -208.1, z: 68.7, yaw: 1.52, pitch: -0.04, dive: false, label: '🔥 Teleported to the lava tube mouth on the east flank!' },
-      ruins:            { x: 412.0,  z: 268.0,  yOverride: -2.6, yaw: 1.45, pitch: -0.18, dive: true, label: '🏛️ Submerged into Coral Fan Cay Ruins & Isotope Trench!' },
+      ruins:            { x: 455.0,  z: 293.0,  yOverride: -2.6, yaw: 1.45, pitch: -0.18, dive: true, label: '🏛️ Submerged into Coral Fan Cay Ruins & Isotope Trench!' },
       bamboo:           { x: -64.0,  z: -24.0,  yaw: 0.65,  pitch: 0.0,   dive: false, label: '🎍 Teleported to Emerald Bamboo Jungle & Mangrove Delta!' },
       valley_pond:      { x: 88.0,   z: 168.0,  yaw: 3.14, pitch: -0.06, dive: false, label: '🌿 Teleported to the north shore of Windward Valley Lagoon (+6.8m)!' },
       canyon_gorge:     { x: 215.0,  z: 42.0,   yaw: -1.57, pitch: -0.04, dive: false, label: '🪨 Teleported to Stratified Eastern Limestone Canyon!' },
@@ -8084,7 +8084,7 @@
       {
         title: '8/12 🏛️ Coral Fan Cay Submerged Ruins & Battery',
         desc: 'Underwater fluted colonnade off Coral Fan Cay, 3-tier sunken altar, glowing coral & Isotope Battery.',
-        x: 412.0, z: 268.0, tx: 404.0, tz: 270.0, yOffset: 1.8, pitch: -0.16, dive: true, tool: 'spear'
+        x: 455.0, z: 293.0, tx: 447.0, tz: 295.0, yOffset: 1.8, pitch: -0.16, dive: true, tool: 'spear'
       },
       {
         title: '9/12 🎍 EZ-Tree Bamboo Jungle & Mangroves',
@@ -8334,8 +8334,8 @@
       campaign.started = true;
       campaign.mode = 'campaign';
       titleScreen.style.display = 'none';
-      player.pos.set(-16.5, getTerrainHeight(-16.5, -39.0) + 0.2, -39.0);
-      player.yaw = -0.35;
+      player.pos.set(-40.0, getTerrainHeight(-40.0, -28.0) + 0.2, -28.0);
+      player.yaw = 0.79;
       player.pitch = -0.04;
       showStoryDialog(
         '🎙️ FLIGHT 409 — CRASH COVE',

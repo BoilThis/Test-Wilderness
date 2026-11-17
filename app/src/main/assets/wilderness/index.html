@@ -2519,7 +2519,7 @@
       { x: 844,  z: -791, r: 70, h: 40, isVolcano: true, isRaftOnly: true, sharkGuarded: true, treeCount: 28, name: "Magma Trench Bastion", arc: "ne_Volcanic" },
 
       // SE Coral Arc (k = 17..22)
-      { x: 465,  z: 270,  r: 45, h: 14, isCoral: true, treeCount: 24, name: "Coral Fan Cay", arc: "se_Coral", shoreMat: true },
+      { x: 508,  z: 295,  r: 45, h: 14, isCoral: true, treeCount: 24, name: "Coral Fan Cay", arc: "se_Coral", shoreMat: true },
       { x: 590,  z: 430,  r: 50, h: 18, isCoral: true, treeCount: 26, name: "Pearlshell Atoll", arc: "se_Coral", part: "skin" },
       { x: 350,  z: 495,  r: 44, h: 16, isCoral: true, treeCount: 22, name: "Lagoon Spit Key", arc: "se_Coral" },
       { x: 740,  z: 290,  r: 52, h: 21, isCoral: true, treeCount: 28, name: "Tradewind Terrace Isle", arc: "se_Coral" },
@@ -3641,9 +3641,9 @@
         }
       }
 
-      // Submerged Sunken Coral Temple Reef Shelf off Coral Fan Cay (404, 270) at ~-4.5m depth
-      if (x > 376.0 && x < 432.0 && z > 242.0 && z < 298.0) {
-        const sDist = Math.hypot(x - 404.0, z - 270.0);
+      // Submerged Sunken Coral Temple Reef Shelf off Coral Fan Cay (447, 295) at ~-4.5m depth
+      if (x > 419.0 && x < 475.0 && z > 267.0 && z < 323.0) {
+        const sDist = Math.hypot(x - 447.0, z - 295.0);
         if (sDist < 26.0) {
           const sW = 1.0 - smoothstep(13.0, 26.0, sDist);
           const shelfY = -4.6 + fbm2(x * 0.06, z * 0.06, 2) * 0.35;
@@ -5888,25 +5888,35 @@
       let bestLand = Infinity;
       let bestStrong = Infinity;
       let shore = null;
+      let onStronghold = false;
       for (let i = 0; i < archipelagoIslets.length; i++) {
         const isl = archipelagoIslets[i];
-        const dist = Math.hypot(x - isl.x, z - isl.z) - isl.r;
+        const centerDist = Math.hypot(x - isl.x, z - isl.z);
+        const dist = centerDist - isl.r;
         if (isl.isRaftOnly) {
           if (dist < bestStrong) bestStrong = dist;
+          if (centerDist < isl.r * 1.25) onStronghold = true;
         } else if (dist < bestLand) {
           bestLand = dist;
           shore = { x: isl.x, z: isl.z };
         }
       }
-      if (terrH > 0.2) {
+      const sampleIsStronghold = (sx, sz) => {
+        for (let i = 0; i < archipelagoIslets.length; i++) {
+          const isl = archipelagoIslets[i];
+          if (isl.isRaftOnly && Math.hypot(sx - isl.x, sz - isl.z) < isl.r * 1.35) return true;
+        }
+        return false;
+      };
+      if (terrH > 0.6 && !onStronghold) {
         bestLand = 0;
         shore = { x: x, z: z };
-      } else {
+      } else if (!onStronghold) {
         for (let a = 0; a < 4; a++) {
           const ang = a * Math.PI * 0.5;
           const sx = x + Math.cos(ang) * 36;
           const sz = z + Math.sin(ang) * 36;
-          if (getTerrainHeight(sx, sz) > 0.4) {
+          if (getTerrainHeight(sx, sz) > 0.6 && !sampleIsStronghold(sx, sz)) {
             bestLand = Math.min(bestLand, 30);
             shore = { x: sx, z: sz };
           }
@@ -5914,8 +5924,10 @@
       }
       const sheltered = (x > -360 && x < -250 && z > 180 && z < 270);
       const standable = terrH > -1.2 && terrH < 0.45;
+      const nearSafeShore = bestLand < 40;
       let band = 'open';
-      if (sheltered || standable || bestLand < 40 || terrH > 0.2 || bestStrong < 16) band = 'lee';
+      if (sheltered || (nearSafeShore && (standable || terrH > 0.6))) band = 'lee';
+      else if (bestStrong < 16 && terrH > -1.2) band = 'lee';
       else if (bestStrong < 75) band = 'trench';
       const weather = window.calderaCampaign && window.calderaCampaign.weather;
       const storm = weather && (weather.current === 'storm' || weather.current === 'rain');
@@ -9864,7 +9876,7 @@
         let rx, rz;
         if (i % 5 === 0) {
           // Coral Fan Cay & Sheltered Reef Cay outer shelves
-          const anchor = (i % 10 === 0) ? { x: -342, z: 224 } : { x: 465, z: 270 };
+          const anchor = (i % 10 === 0) ? { x: -342, z: 224 } : { x: 508, z: 295 };
           rx = anchor.x + (geoRand() - 0.5) * 145;
           rz = anchor.z + (geoRand() - 0.5) * 145;
         } else {
@@ -11570,7 +11582,7 @@
       canyon_gorge:     { x: 215.0,  z: 42.0,   yaw: -1.57, pitch: -0.04, dive: false, label: "🪨 Teleported to Stratified Eastern Limestone Canyon!" },
       swim_cay:         { x: -294.0, z: 224.0,  yaw: 1.57,  pitch: -0.05, dive: false, label: "🏖️ Teleported to Sheltered Reef Cove (25m Swim to Cay)!" },
       outer_stronghold: { x: 791.0,  z: 722.0,  yaw: -0.78, pitch: -0.06, dive: false, label: "⛵ Teleported to Outer Deep Coral Stronghold (2400m Archipelago)!" },
-      ruins:            { x: 412.0,  z: 268.0,  yOverride: -2.6, yaw: 1.45, pitch: -0.18, dive: true, label: "🏛️ Submerged into Coral Fan Cay Ruins & Isotope Trench!" },
+      ruins:            { x: 455.0,  z: 293.0,  yOverride: -2.6, yaw: 1.45, pitch: -0.18, dive: true, label: "🏛️ Submerged into Coral Fan Cay Ruins & Isotope Trench!" },
       cavern:           { x: 31.5,   z: 45.2,   yaw: -1.45, pitch: -0.02, dive: false, label: "🕳️ Teleported to Whispering Basalt Cave Entrance!" },
       cenote:           { x: 215.0,  z: 68.0,   yaw: -1.45, pitch: -0.06, dive: false, caveInterior: true, label: "💎 Teleported inside Subterranean Karst Cenote!" },
       grotto:           { x: -33.5,  z: 85.8,   yaw: 1.25,  pitch: -0.02, dive: false, label: "🌊 Teleported to Cataract Echo Grotto Entrance!" },
@@ -11582,7 +11594,7 @@
       estuary:          { x: -2.0,   z: 42.0,   yaw: 0.0,   pitch: -0.04, dive: false, label: "〰️ Teleported to Emerald Estuary!" },
       volcano:          { x: -250.0, z: 64.0,   yaw: 1.57,  pitch: -0.22, dive: false, label: "🌋 Teleported to Mount Caldera east rim. Crest is 168m at -302, 64." },
       lavatube:         { x: -208.1, z: 68.7,   yaw: 1.52,  pitch: -0.04, dive: false, label: "🔥 Teleported to the lava tube mouth on the east flank!" },
-      crash:            { x: -16.0,  z: -40.0,  yaw: -0.25, pitch: -0.05, dive: false, label: "✈️ Teleported to Flight 409 Seaplane Crash Cove!" }
+      crash:            { x: -40.0,  z: -28.0,  yaw: 0.79, pitch: -0.05, dive: false, label: "✈️ Teleported to Flight 409 Seaplane Crash Cove!" }
     };
 
     function teleportToWaypointKey(key) {
