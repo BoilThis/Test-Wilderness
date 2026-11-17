@@ -2501,7 +2501,7 @@
       { x: -102, z: -142, r: 58, h: 16, isBamboo: true, name: "Emerald Bamboo & Mangrove Island", arc: "inner_north" },
 
       // Nearby Swim-Safe Coastal Cay (k = 5 — 52m across shallow 1.2–1.7m reef shelf, zero shark threat)
-      { x: -342, z: 224,  r: 24, h: 7.2, isSwimSafe: true, sharkSafe: true, treeCount: 14, name: "Sheltered Reef Cay", arc: "swim_cay" },
+      { x: -342, z: 224,  r: 24, h: 7.2, isSwimSafe: true, sharkSafe: true, treeCount: 14, name: "Sheltered Reef Cay", arc: "swim_cay", shoreMat: true },
 
       // NW Basalt Arc (k = 6..10)
       { x: -380, z: -265, r: 46, h: 17, isBasalt: true, treeCount: 22, name: "Driftwood Basalt Atoll", arc: "nw_Basalt" },
@@ -2519,7 +2519,7 @@
       { x: 844,  z: -791, r: 70, h: 40, isVolcano: true, isRaftOnly: true, sharkGuarded: true, treeCount: 28, name: "Magma Trench Bastion", arc: "ne_Volcanic" },
 
       // SE Coral Arc (k = 17..22)
-      { x: 465,  z: 270,  r: 45, h: 14, isCoral: true, treeCount: 24, name: "Coral Fan Cay", arc: "se_Coral" },
+      { x: 465,  z: 270,  r: 45, h: 14, isCoral: true, treeCount: 24, name: "Coral Fan Cay", arc: "se_Coral", shoreMat: true },
       { x: 590,  z: 430,  r: 50, h: 18, isCoral: true, treeCount: 26, name: "Pearlshell Atoll", arc: "se_Coral", part: "skin" },
       { x: 350,  z: 495,  r: 44, h: 16, isCoral: true, treeCount: 22, name: "Lagoon Spit Key", arc: "se_Coral" },
       { x: 740,  z: 290,  r: 52, h: 21, isCoral: true, treeCount: 28, name: "Tradewind Terrace Isle", arc: "se_Coral" },
@@ -4308,17 +4308,17 @@
         vec4 cY = sampleAntiTile(uCliffTex, midUV * 0.9) * 0.50 + sampleAntiTile(uCliffTex, microUV * 0.85) * 0.58;
         vec4 cliffCol = cX * blendWeights.x + cY * blendWeights.y + cZ * blendWeights.z;
 
-        // 7. Local Water Surface Elevation (Sea/Estuary 0.05m, Cliff-Top Lake 33.6m, Headwaters Lake 26.6m, Valley Pond 3.8m)
+        // 7. Local waterline, taken from the same three lake records the water mesh uses
         float localWaterY = 0.05;
-        float distUpland = length((vWorldPos.xz - vec2(112.0, 2.0)) / vec2(34.0, 37.0));
-        float distHeadwaters = length((vWorldPos.xz - vec2(-18.0, 210.0)) / vec2(47.0, 45.0));
-        float distValley = length((vWorldPos.xz - vec2(112.0, 238.0)) / vec2(35.0, 31.0));
+        float distUpland = length((vWorldPos.xz - vec2(118.0, 2.0)) / vec2(39.0, 36.0));
+        float distHeadwaters = length((vWorldPos.xz - vec2(-18.0, 204.0)) / vec2(38.0, 38.0));
+        float distValley = length((vWorldPos.xz - vec2(88.0, 214.0)) / vec2(31.0, 27.0));
         if (distUpland < 1.12 && vWorldPos.y > 24.0) {
           localWaterY = 33.6;
         } else if (distHeadwaters < 1.12 && vWorldPos.y > 16.0) {
           localWaterY = 26.6;
-        } else if (distValley < 1.12 && vWorldPos.y < 8.5) {
-          localWaterY = 3.8;
+        } else if (distValley < 1.12 && vWorldPos.y < 12.0) {
+          localWaterY = 6.8;
         }
         float relWaterH = vWorldPos.y - localWaterY;
 
@@ -4416,7 +4416,7 @@
         baseTerrain.rgb = mix(baseTerrain.rgb, wetStreamStone, channelMask * 0.78);
 
         // Wet shoreline wave-splash darkening & soft aquatic depth tint when submerged
-        baseTerrain.rgb = mix(baseTerrain.rgb, baseTerrain.rgb * vec3(0.62, 0.72, 0.76), wetBand * 0.65);
+        baseTerrain.rgb = mix(baseTerrain.rgb, baseTerrain.rgb * vec3(0.62, 0.72, 0.76), wetBand * 0.25);
 
         // Animated Underwater Solar Caustics on all submerged lakebeds, riverbeds & lagoon floors!
         if (relWaterH < 0.05) {
@@ -4444,7 +4444,7 @@
         #include <roughnessmap_fragment>
         float tRough = mix(0.82, 0.60, rockBlend);
         tRough = mix(tRough, 0.42, mossMask * 0.70);
-        tRough = mix(tRough, 0.16, wetBand * 0.88);
+        tRough = mix(tRough, 0.16, wetBand * 0.34);
         tRough = mix(tRough, 0.11, channelMask * 0.94);
         roughnessFactor = tRough;
         `
@@ -8181,7 +8181,20 @@
 
         for (let k = 5; k < archipelagoIslets.length; k++) {
           const isl = archipelagoIslets[k];
-          hullGroup.add(buildIslandHullMesh(isl, k));
+          const islMesh = buildIslandHullMesh(isl, k);
+          if (isl.shoreMat) {
+            const shoreCount = islMesh.geometry.attributes.position.count;
+            const shoreZero = () => new THREE.BufferAttribute(new Float32Array(shoreCount), 1);
+            islMesh.geometry.setAttribute('aConcavity', shoreZero());
+            islMesh.geometry.setAttribute('aWaterChannel', shoreZero());
+            islMesh.geometry.setAttribute('aMossHalo', shoreZero());
+            islMesh.geometry.setAttribute('aCanopyAO', shoreZero());
+            if (!islMesh.geometry.attributes.uv) {
+              islMesh.geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(shoreCount * 2), 2));
+            }
+            islMesh.material = terrainMat;
+          }
+          hullGroup.add(islMesh);
           const sigMat = new THREE.MeshStandardMaterial({
             color: isl.part ? 0xffe082 : (isl.isRaftOnly ? 0xff7043 : (isl.isCoral ? 0x4dd0e1 : (isl.isBamboo ? 0x7cb342 : 0x90a4ae))),
             roughness: 0.82
@@ -11002,7 +11015,7 @@
       ewmaMs: 16.6,
       targetMs: 16.6,
       tierLabel: 'Balanced',
-      waterReflRes: 288,
+      waterReflRes: 256,
       waterReflStride: 3,
       lodBias: 1.0,
       grassRatio: 0.78,
@@ -11022,7 +11035,7 @@
           this.particleBudgetScale = 0.45;
         } else if (tier === 'high') {
           this.tierLabel = 'Ultra';
-          this.waterReflRes = 384;
+          this.waterReflRes = 256;
           this.waterReflStride = 2;
           this.lodBias = 1.22;
           this.grassRatio = 1.0;
@@ -11031,7 +11044,7 @@
           this.particleBudgetScale = 1.0;
         } else {
           this.tierLabel = 'Balanced';
-          this.waterReflRes = 288;
+          this.waterReflRes = 256;
           this.waterReflStride = 3;
           this.lodBias = 1.0;
           this.grassRatio = 0.78;
@@ -11064,7 +11077,7 @@
         } else if (this.ewmaMs < 17.2) {
           // Device has headroom: progressively restore maximum visual fidelity
           this.lastAdjustTime = timeSec;
-          const maxRes = window.qualityTier === 'high' ? 384 : (window.qualityTier === 'low' ? 192 : 288);
+          const maxRes = window.qualityTier === 'high' ? 256 : (window.qualityTier === 'low' ? 192 : 256);
           const minStride = window.qualityTier === 'high' ? 2 : (window.qualityTier === 'low' ? 4 : 3);
           const maxBias = window.qualityTier === 'high' ? 1.22 : (window.qualityTier === 'low' ? 0.84 : 1.08);
           this.waterReflRes = Math.min(maxRes, this.waterReflRes + 32);
