@@ -8134,12 +8134,12 @@
       {
         title: '1/12 ✈️ Flight 409 Crashed Seaplane',
         desc: 'Twin-Otter fuselage, radial engines, 3-blade props, sheared wing & Cockpit Transponder crate.',
-        x: -16.8, z: -40.2, tx: -12.0, tz: -48.0, pitch: -0.04, dive: false, tool: 'hatchet'
+        x: -36.5, z: -22.5, tx: -44.0, tz: -28.0, pitch: -0.04, dive: false, tool: 'hatchet'
       },
       {
         title: '2/12 🛶 Outrigger Bamboo Raft & Base',
         desc: '9-culm lashed bamboo deck, twin outrigger floats, canvas sail, steering oar & Bamboo Fishing Rod.',
-        x: -15.8, z: -29.2, tx: -17.5, tz: -35.5, pitch: -0.08, dive: false, tool: 'rod'
+        x: -41.5, z: -29.5, tx: -48.0, tz: -36.0, pitch: -0.08, dive: false, tool: 'rod'
       },
       {
         title: '3/12 🕳️ Whispering Cave (Outside Archway)',
@@ -8857,17 +8857,22 @@
     if ((frameCounter & 7) === 0) {
       const navalHud = updateCalderaCastaway._navalHud || (updateCalderaCastaway._navalHud = document.getElementById('cc-naval-hud'));
       if (navalHud) {
-        const showNaval = campaign.onRaft || (player.isSwimming && (Math.abs(px) > 150 || Math.abs(pz) > 150));
+        const sea = window.getSeaBand ? window.getSeaBand(px, pz) : { band: 'lee', distShore: 0, offshoreFactor: 0 };
+        const showNaval = campaign.onRaft || (player.isSwimming && ((sea.distShore || 0) > 25 || Math.abs(px) > 150 || Math.abs(pz) > 150));
         if (!showNaval) {
           if (navalHud.style.display !== 'none') navalHud.style.display = 'none';
         } else {
-          const sea = window.getSeaBand ? window.getSeaBand(px, pz) : { band: 'lee' };
+          const distM = Math.round(sea.distShore || 0);
           const bandLbl = sea.band === 'trench'
-            ? '🌊 Stronghold Trench (5.2kt NE)'
-            : (sea.band === 'open' ? '🌬️ Open Trade Wind (4.4kt NE)' : '🏖️ Sheltered Lee Water');
+            ? `🦈 Stronghold Trench (${distM}m)`
+            : (sea.band === 'open'
+                ? `🌬️ Open Trade Wind (${distM}m offshore)`
+                : (sea.band === 'swell'
+                    ? `🌊 Offshore Swell (${distM}m offshore)`
+                    : `🏖️ Sheltered Lagoon (${distM}m from shore)`));
           const vesselLbl = campaign.onRaft
             ? (campaign.vessel === 'boat' ? '⛵ Keeled Boat' : '🛶 Bamboo Raft')
-            : '🏊 Swimming';
+            : (player.vitals && player.vitals.stamina < 25 ? '🏊 Swimming (Tired)' : '🏊 Swimming');
           const bp = campaign.boatParts || {};
           const partCnt = (bp.keel ? 1 : 0) + (bp.brace ? 1 : 0) + (bp.skin ? 1 : 0) + (bp.sail ? 1 : 0);
           const partStr = campaign.boatBuilt ? '• ✅ Boat Built' : `• ⚙️ Boat Parts: ${partCnt}/4`;
