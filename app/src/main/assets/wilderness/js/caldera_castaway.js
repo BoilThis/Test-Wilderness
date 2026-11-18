@@ -8695,7 +8695,7 @@
 
       if (u.type === 'raincatcher') {
         player.vitals.thirst = Math.min(100, player.vitals.thirst + 40);
-        AudioEngine.playSplash();
+        AudioEngine.playSplash('scoop');
         showToast('💧 Drank fresh purified rainwater! +40 Hydration');
         updateCastawayHUD();
         return;

@@ -7,7 +7,12 @@ import android.os.Bundle
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.media.AudioAttributes
+import android.media.SoundPool
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
+import java.io.File
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -95,7 +100,142 @@ class MainActivity : ComponentActivity() {
   }
 }
 
+private object GameSfx {
+  private const val TAG = "SylvanSfx"
+  private val main = Handler(Looper.getMainLooper())
+  private var pool: SoundPool? = null
+  private var appContext: Context? = null
+  private val ids = HashMap<String, Int>()
+  private val names = HashMap<Int, String>()
+  private val ready = HashSet<Int>()
+  private val descriptors = HashMap<Int, android.content.res.AssetFileDescriptor>()
+  private val pending = HashMap<String, Pair<Float, Float>>()
+  private var loopName: String? = null
+  private var loopStream = 0
+  private var loopWant = 0f
+
+  fun warm(context: Context) {
+    main.post {
+      ensurePool(context.applicationContext)
+      val listed = try {
+        context.assets.list("wilderness/audio")
+      } catch (_: Exception) {
+        null
+      } ?: return@post
+      for (file in listed) {
+        if (file.endsWith(".wav")) loadOne(file.removeSuffix(".wav"))
+      }
+    }
+  }
+
+  fun play(context: Context, name: String, volume: Double, rate: Double) {
+    val vol = volume.toFloat().coerceIn(0f, 1f)
+    val spd = rate.toFloat().coerceIn(0.5f, 2f)
+    main.post {
+      ensurePool(context.applicationContext)
+      val id = ids[name]
+      if (id == null || !ready.contains(id)) {
+        if (id == null) loadOne(name)
+        pending[name] = vol to spd
+        return@post
+      }
+      pool?.play(id, vol, vol, 1, 0, spd)
+    }
+  }
+
+  fun loop(context: Context, name: String, volume: Double) {
+    val vol = volume.toFloat().coerceIn(0f, 1f)
+    main.post {
+      ensurePool(context.applicationContext)
+      loopName = name
+      loopWant = vol
+      val id = ids[name]
+      if (id == null || !ready.contains(id)) {
+        if (id == null) loadOne(name)
+        return@post
+      }
+      applyLoop(id, vol)
+    }
+  }
+
+  private fun ensurePool(context: Context) {
+    if (pool != null) return
+    appContext = context
+    val attrs = AudioAttributes.Builder()
+      .setUsage(AudioAttributes.USAGE_GAME)
+      .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+      .build()
+    val created = SoundPool.Builder().setMaxStreams(12).setAudioAttributes(attrs).build()
+    created.setOnLoadCompleteListener { _, sampleId, status ->
+      main.post {
+        descriptors.remove(sampleId)?.close()
+        if (status != 0) {
+          Log.e(TAG, "sound $sampleId failed to load ($status)")
+          return@post
+        }
+        ready.add(sampleId)
+        val name = names[sampleId] ?: return@post
+        pending.remove(name)?.let { (vol, spd) ->
+          created.play(sampleId, vol, vol, 1, 0, spd)
+        }
+        if (loopName == name) applyLoop(sampleId, loopWant)
+      }
+    }
+    pool = created
+  }
+
+  private fun loadOne(name: String) {
+    if (ids.containsKey(name)) return
+    val context = appContext ?: return
+    val created = pool ?: return
+    try {
+      val afd = context.assets.openFd("wilderness/audio/$name.wav")
+      val id = created.load(afd, 1)
+      if (id == 0) {
+        afd.close()
+        Log.e(TAG, "SoundPool rejected $name")
+        return
+      }
+      descriptors[id] = afd
+      ids[name] = id
+      names[id] = name
+    } catch (err: Exception) {
+      Log.e(TAG, "open $name", err)
+      try {
+        val out = File(context.cacheDir, "sfx-$name.wav")
+        if (!out.exists()) {
+          context.assets.open("wilderness/audio/$name.wav").use { input ->
+            out.outputStream().use { input.copyTo(it) }
+          }
+        }
+        val id = created.load(out.absolutePath, 1)
+        if (id != 0) {
+          ids[name] = id
+          names[id] = name
+        }
+      } catch (again: Exception) {
+        Log.e(TAG, "cache $name", again)
+      }
+    }
+  }
+
+  private fun applyLoop(id: Int, vol: Float) {
+    val created = pool ?: return
+    if (loopStream == 0) {
+      if (vol < 0.01f) return
+      loopStream = created.play(id, vol, vol, 2, -1, 1f)
+      return
+    }
+    created.setVolume(loopStream, vol, vol)
+    if (vol < 0.01f) created.pause(loopStream) else created.resume(loopStream)
+  }
+}
+
 class WebAppInterface(private val context: Context) {
+  init {
+    GameSfx.warm(context)
+  }
+
   @JavascriptInterface
   fun triggerHaptic(durationMs: Long) {
     try {
@@ -112,6 +252,16 @@ class WebAppInterface(private val context: Context) {
     } catch (_: Exception) {
       // Graceful fallback
     }
+  }
+
+  @JavascriptInterface
+  fun playAsset(name: String, volume: Double, rate: Double) {
+    GameSfx.play(context, name, volume, rate)
+  }
+
+  @JavascriptInterface
+  fun setLoopVolume(name: String, volume: Double) {
+    GameSfx.loop(context, name, volume)
   }
 }
 

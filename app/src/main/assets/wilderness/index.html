@@ -1550,15 +1550,40 @@
       }
     };
 
-    // --- SYNTHETIC AUDIO ENGINE ---
+    // Recorded clips, with the old tones kept only if a file fails to load.
     const AudioEngine = {
       ctx: null,
       _splashBuffer: null,
       _windBuffer: null,
+      _clips: {},
+      _loops: {},
+      _loadStarted: false,
+      _banks: {
+        wade: ['wade-1', 'wade-2', 'wade-3'],
+        splash: ['splash-1', 'splash-2'],
+        scoop: ['scoop'],
+        chop: ['chop-1', 'chop-2'],
+        creak: ['creak'],
+        thud: ['thud'],
+        rock: ['rock-1', 'rock-2'],
+        fire: ['fire'],
+        wind: ['wind'],
+        drip: ['drip-1', 'drip-2', 'drip-3'],
+        pebble: ['pebble'],
+        bow: ['bow'],
+        pistol: ['shot-pistol'],
+        rifle: ['shot-rifle'],
+        boom: ['boom'],
+        step: ['step-1', 'step-2', 'step-3'],
+        ocean: ['ocean']
+      },
       init() {
         if (!this.ctx) {
           const AudioContext = window.AudioContext || window.webkitAudioContext;
           if (AudioContext) this.ctx = new AudioContext();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume().catch(() => {});
         }
         if (this.ctx && !this._splashBuffer) {
           const sr = this.ctx.sampleRate;
@@ -1575,46 +1600,107 @@
             wData[i] = (Math.random() * 2 - 1) * Math.sin((i / windLen) * Math.PI);
           }
         }
+        this._preload();
+      },
+      _preload() {
+        if (this._loadStarted) return;
+        this._loadStarted = true;
+        const names = {};
+        Object.keys(this._banks).forEach(bank => {
+          this._banks[bank].forEach(name => { names[name] = true; });
+        });
+        Object.keys(names).forEach(name => this._loadOne(name));
+      },
+      _loadOne() {},
+      _haptic(ms) {
+        if (ms > 0 && window.AndroidBridge && window.AndroidBridge.triggerHaptic) {
+          window.AndroidBridge.triggerHaptic(ms);
+        }
+      },
+      _playBank(bank, volume, rate) {
+        if (window.AndroidBridge && AndroidBridge.playAsset) {
+          const names = this._banks[bank] || [];
+          if (names.length) {
+            const name = names[(Math.random() * names.length) | 0];
+            try {
+              AndroidBridge.playAsset(name, volume, rate || 1);
+              return true;
+            } catch (err) {}
+          }
+        }
+        return false;
+      },
+      setLoop(name, volume) {
+        if (!(window.AndroidBridge && AndroidBridge.setLoopVolume)) return;
+        const rounded = Math.round(volume * 40) / 40;
+        if (this._loopName === name && this._loopVol === rounded) return;
+        this._loopName = name;
+        this._loopVol = rounded;
+        try { AndroidBridge.setLoopVolume(name, rounded); } catch (err) {}
       },
       playChop() {
-        if (!this.ctx) this.init();
-        if (!this.ctx) return;
-        const now = this.ctx.currentTime;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(140, now);
-        osc.frequency.exponentialRampToValueAtTime(35, now + 0.12);
-        gain.gain.setValueAtTime(0.7, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-        osc.start(now);
-        osc.stop(now + 0.12);
-        if (window.AndroidBridge && window.AndroidBridge.triggerHaptic) {
-          window.AndroidBridge.triggerHaptic(40);
+        try { if (!this.ctx) this.init(); } catch (err) {}
+        if (!this.ctx && !(window.AndroidBridge && AndroidBridge.playAsset)) return;
+        const rate = 0.94 + Math.random() * 0.1;
+        if (!this._playBank('chop', 0.42, rate)) {
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(140, now);
+          osc.frequency.exponentialRampToValueAtTime(35, now + 0.12);
+          gain.gain.setValueAtTime(0.7, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.12);
         }
+        this._haptic(40);
       },
-      playSplash() {
-        if (!this.ctx || !this._splashBuffer) this.init();
-        if (!this.ctx || !this._splashBuffer) return;
-        const now = this.ctx.currentTime;
-        const noise = this.ctx.createBufferSource();
-        noise.buffer = this._splashBuffer;
-        const filter = this.ctx.createBiquadFilter();
-        filter.type = 'lowpass';
-        filter.frequency.setValueAtTime(750, now);
-        filter.frequency.linearRampToValueAtTime(200, now + 0.22);
-        noise.connect(filter);
-        filter.connect(this.ctx.destination);
-        noise.start(now);
-        if (window.AndroidBridge && window.AndroidBridge.triggerHaptic) {
-          window.AndroidBridge.triggerHaptic(30);
+      playRockHit() {
+        try { if (!this.ctx) this.init(); } catch (err) {}
+        if (!this.ctx && !(window.AndroidBridge && AndroidBridge.playAsset)) return;
+        const rate = 0.92 + Math.random() * 0.14;
+        if (!this._playBank('rock', 0.38, rate)) this.playChop();
+        else this._haptic(28);
+      },
+      playFootstep(sprinting) {
+        try { if (!this.ctx) this.init(); } catch (err) {}
+        if (!this.ctx && !(window.AndroidBridge && AndroidBridge.playAsset)) return;
+        const rate = (sprinting ? 1.06 : 0.96) + Math.random() * 0.08;
+        this._playBank('step', sprinting ? 0.9 : 0.75, rate);
+      },
+      playSplash(kind) {
+        try { if (!this.ctx || !this._splashBuffer) this.init(); } catch (err) {}
+        const mode = kind || 'splash';
+        const rate = 0.92 + Math.random() * 0.14;
+        let played = false;
+        if (mode === 'wade') played = this._playBank('wade', 0.85, rate);
+        else if (mode === 'scoop') played = this._playBank('scoop', 0.8, rate);
+        else played = this._playBank('splash', 0.95, rate);
+        if (!played && this.ctx && this._splashBuffer) {
+          const now = this.ctx.currentTime;
+          const noise = this.ctx.createBufferSource();
+          noise.buffer = this._splashBuffer;
+          const filter = this.ctx.createBiquadFilter();
+          filter.type = 'lowpass';
+          filter.frequency.setValueAtTime(750, now);
+          filter.frequency.linearRampToValueAtTime(200, now + 0.22);
+          const gain = this.ctx.createGain();
+          gain.gain.value = mode === 'wade' ? 0.22 : 1;
+          noise.connect(filter);
+          filter.connect(gain);
+          gain.connect(this.ctx.destination);
+          noise.start(now);
         }
+        if (mode === 'splash') this._haptic(22);
+        else if (mode === 'scoop') this._haptic(10);
       },
       playFire() {
-        if (!this.ctx) this.init();
-        if (!this.ctx) return;
+        try { if (!this.ctx) this.init(); } catch (err) {}
+        if (!this.ctx && !(window.AndroidBridge && AndroidBridge.playAsset)) return;
+        if (this._playBank('fire', 0.5, 0.96 + Math.random() * 0.08)) return;
         const now = this.ctx.currentTime;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
@@ -1628,8 +1714,10 @@
         osc.stop(now + 0.4);
       },
       playCaveDrip(pitchScale = 1.0, vol = 0.14) {
-        if (!this.ctx) this.init();
-        if (!this.ctx) return;
+        try { if (!this.ctx) this.init(); } catch (err) {}
+        if (!this.ctx && !(window.AndroidBridge && AndroidBridge.playAsset)) return;
+        const rate = Math.max(0.8, Math.min(1.25, pitchScale));
+        if (this._playBank('drip', Math.min(0.32, vol * 1.6), rate)) return;
         const now = this.ctx.currentTime;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
@@ -1646,7 +1734,8 @@
       },
       playPebbleClatter() {
         if (!this.ctx || !this._splashBuffer) this.init();
-        if (!this.ctx || !this._splashBuffer) return;
+        if (!this.ctx) return;
+        if (this._playBank('pebble', 0.28, 0.9 + Math.random() * 0.2)) return;
         const now = this.ctx.currentTime;
         for (let k = 0; k < 3; k++) {
           const t0 = now + k * 0.065;
@@ -1665,7 +1754,8 @@
       },
       playWindGust(vol = 0.07, lowCut = 280) {
         if (!this.ctx || !this._windBuffer) this.init();
-        if (!this.ctx || !this._windBuffer) return;
+        if (!this.ctx) return;
+        if (this._playBank('wind', Math.min(0.22, vol * 2.4), 0.92 + Math.random() * 0.16)) return;
         const now = this.ctx.currentTime;
         const noise = this.ctx.createBufferSource();
         noise.buffer = this._windBuffer;
@@ -1683,8 +1773,9 @@
         noise.start(now);
       },
       playBowTwang() {
-        if (!this.ctx) this.init();
-        if (!this.ctx) return;
+        try { if (!this.ctx) this.init(); } catch (err) {}
+        if (!this.ctx && !(window.AndroidBridge && AndroidBridge.playAsset)) return;
+        if (this._playBank('bow', 0.34, 0.96 + Math.random() * 0.08)) return;
         const now = this.ctx.currentTime;
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
@@ -1701,6 +1792,13 @@
       playRifleShot(isPistol = false) {
         if (!this.ctx || !this._splashBuffer) this.init();
         if (!this.ctx) return;
+        const bank = isPistol ? 'pistol' : 'rifle';
+        const vol = isPistol ? 0.42 : 0.5;
+        const rate = isPistol ? 1.0 : 0.86;
+        if (this._playBank(bank, vol, rate + Math.random() * 0.04)) {
+          this._haptic(isPistol ? 18 : 26);
+          return;
+        }
         const now = this.ctx.currentTime;
         const osc = this.ctx.createOscillator();
         const g1 = this.ctx.createGain();
@@ -1730,43 +1828,46 @@
         }
       },
       playExplosion() {
-        if (!this.ctx) this.init();
-        if (!this.ctx) return;
-        const now = this.ctx.currentTime;
-        const osc = this.ctx.createOscillator();
-        const g = this.ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(115, now);
-        osc.frequency.exponentialRampToValueAtTime(22, now + 0.72);
-        g.gain.setValueAtTime(0.85, now);
-        g.gain.exponentialRampToValueAtTime(0.005, now + 0.78);
-        osc.connect(g);
-        g.connect(this.ctx.destination);
-        osc.start(now);
-        osc.stop(now + 0.8);
-        if (this._windBuffer) {
-          const n = this.ctx.createBufferSource();
-          n.buffer = this._windBuffer;
-          const lp = this.ctx.createBiquadFilter();
-          lp.type = 'lowpass';
-          lp.frequency.setValueAtTime(520, now);
-          lp.frequency.exponentialRampToValueAtTime(95, now + 0.7);
-          const gn = this.ctx.createGain();
-          gn.gain.setValueAtTime(0.62, now);
-          gn.gain.exponentialRampToValueAtTime(0.004, now + 0.72);
-          n.connect(lp);
-          lp.connect(gn);
-          gn.connect(this.ctx.destination);
-          n.start(now);
-          n.stop(now + 0.74);
+        try { if (!this.ctx) this.init(); } catch (err) {}
+        if (!this.ctx && !(window.AndroidBridge && AndroidBridge.playAsset)) return;
+        if (!this._playBank('boom', 0.55, 0.96 + Math.random() * 0.06)) {
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const g = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(115, now);
+          osc.frequency.exponentialRampToValueAtTime(22, now + 0.72);
+          g.gain.setValueAtTime(0.85, now);
+          g.gain.exponentialRampToValueAtTime(0.005, now + 0.78);
+          osc.connect(g);
+          g.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.8);
+          if (this._windBuffer) {
+            const n = this.ctx.createBufferSource();
+            n.buffer = this._windBuffer;
+            const lp = this.ctx.createBiquadFilter();
+            lp.type = 'lowpass';
+            lp.frequency.setValueAtTime(520, now);
+            lp.frequency.exponentialRampToValueAtTime(95, now + 0.7);
+            const gn = this.ctx.createGain();
+            gn.gain.setValueAtTime(0.62, now);
+            gn.gain.exponentialRampToValueAtTime(0.004, now + 0.72);
+            n.connect(lp);
+            lp.connect(gn);
+            gn.connect(this.ctx.destination);
+            n.start(now);
+            n.stop(now + 0.74);
+          }
         }
-        if (window.AndroidBridge && window.AndroidBridge.triggerHaptic) {
-          window.AndroidBridge.triggerHaptic(120);
-        }
+        this._haptic(120);
       },
       playTreeCreakThud(isImpact = false) {
-        if (!this.ctx) this.init();
-        if (!this.ctx) return;
+        try { if (!this.ctx) this.init(); } catch (err) {}
+        if (!this.ctx && !(window.AndroidBridge && AndroidBridge.playAsset)) return;
+        const bank = isImpact ? 'thud' : 'creak';
+        const vol = isImpact ? 0.5 : 0.28;
+        if (this._playBank(bank, vol, 0.94 + Math.random() * 0.1)) return;
         const now = this.ctx.currentTime;
         const osc = this.ctx.createOscillator();
         const g = this.ctx.createGain();
@@ -1799,6 +1900,8 @@
         n.stop(now + 0.24);
       }
     };
+
+    AudioEngine._preload();
 
     // --- GAME ENGINE SETUP ---
     const container = document.getElementById('canvas-container');
@@ -13029,7 +13132,7 @@
         const w = getWaterInfo(camera.position.x, camera.position.z, performance.now() * 0.001);
         if (w.isWater) {
           player.vitals.thirst = Math.min(100, player.vitals.thirst + 25);
-          AudioEngine.playSplash();
+          AudioEngine.playSplash('scoop');
           addWaterRipple(camera.position.x, camera.position.z, 1.8);
           showToast("💧 Scooped mountain water! +25 Hydration");
         }
@@ -14838,6 +14941,11 @@
       const isSub = wInfo.isWater && waterColumnDepth > 0.48 && (player.pos.y < wInfo.surfaceY - 0.15);
 
       player.isSwimming = isSub;
+      if (isSub && !player.wasSwimming) {
+        AudioEngine.playSplash('splash');
+        addWaterRipple(player.pos.x, player.pos.z, 1.3);
+      }
+      player.wasSwimming = isSub;
       // Contextual Dive button: only show when near or in water
       const diveBtnCtx = animate._diveBtnEl || (animate._diveBtnEl = document.getElementById('btn-dive'));
       if (diveBtnCtx) {
@@ -14848,11 +14956,11 @@
         }
       }
 
-      // Interactive water stepping ripples
-      if (wInfo.isWater && wish.lengthSq() > 0.05 && (timeSec - player.lastWaterStepTime > 0.35)) {
+      // Shallow steps only. Swimming is one splash on the way in, then quiet.
+      if (wInfo.isWater && !isSub && wish.lengthSq() > 0.05 && (timeSec - player.lastWaterStepTime > 0.48)) {
         player.lastWaterStepTime = timeSec;
-        addWaterRipple(player.pos.x, player.pos.z, player.isSwimming ? 0.9 : 0.6);
-        AudioEngine.playSplash();
+        addWaterRipple(player.pos.x, player.pos.z, 0.55);
+        AudioEngine.playSplash('wade');
       }
 
       // Sprint & Swimmer Stamina (supports both land sprint and swim-sprint burst)
@@ -15066,6 +15174,13 @@
         animate._warnedCaveDarkEntry = false;
       }
 
+      let oceanVol = 0;
+      if (!(caveNav && caveNav.isInside)) {
+        if (wInfo.isWater && wInfo.surfaceY < 1.2) oceanVol = 0.42;
+        else if (!wInfo.isWater && terrY < 2.2 && player.pos.y < 6) oceanVol = 0.34 * (1 - terrY / 2.2);
+      }
+      AudioEngine.setLoop('ocean', oceanVol);
+
       if (player.pos.y < effectiveGroundY) {
         player.pos.y = effectiveGroundY;
         player.vel.y = 0;
@@ -15080,11 +15195,17 @@
       let breatheY = 0;
       const horizSpeed = Math.hypot(player.vel.x, player.vel.z);
 
-      if (player.headBobEnabled && !player.isSwimming && player.isGrounded && horizSpeed > 0.4) {
+      if (!player.isSwimming && player.isGrounded && !wInfo.isWater && horizSpeed > 0.4) {
         const strideFreq = player.isSprinting ? 12.5 : 8.5;
+        const prevStride = player.stride;
         player.stride += dt * strideFreq;
-        bobY = Math.sin(player.stride) * (player.isSprinting ? 0.045 : 0.026);
-        bobX = Math.cos(player.stride * 0.5) * (player.isSprinting ? 0.022 : 0.012);
+        if (Math.floor(player.stride / Math.PI) !== Math.floor(prevStride / Math.PI)) {
+          AudioEngine.playFootstep(player.isSprinting);
+        }
+        if (player.headBobEnabled) {
+          bobY = Math.sin(player.stride) * (player.isSprinting ? 0.045 : 0.026);
+          bobX = Math.cos(player.stride * 0.5) * (player.isSprinting ? 0.022 : 0.012);
+        }
       } else {
         player.stride *= 0.94;
         const bowSteadyMult = window._bowBreathSteady ? 0.15 : 1.0;
