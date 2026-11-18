@@ -203,15 +203,47 @@
     }
   }
 
+  // Register all 3D rock structures (hero boulders, gorge boulders, skylight oasis boulders, and portal wing rocks)
+  const registeredRockSet = new Set();
+  function registerBoulderObject(obj) {
+    if (!obj || registeredRockSet.has(obj)) return;
+    if (obj.userData && obj.userData.isCaveArch) return;
+    registeredRockSet.add(obj);
+    const rx = obj.position.x;
+    const ry = obj.position.y;
+    const rz = obj.position.z;
+    const baseR = (obj.userData && obj.userData.baseRadius) ? obj.userData.baseRadius : 1.4;
+    const sx = obj.scale ? obj.scale.x : 1.0;
+    const sy = obj.scale ? obj.scale.y : 1.0;
+    const sz = obj.scale ? obj.scale.z : 1.0;
+    const effR = baseR * Math.max(sx, sz) * 0.86;
+    const effH = baseR * sy * 0.74;
+    const topY = ry + effH;
+    registerClimbableCircle(rx, rz, effR * 1.04, topY, ry - baseR * sy);
+    registerCollider(rx, rz, effR * 0.84, ry - baseR * sy, topY - 0.55, 'boulder');
+  }
+
   for (let i = 0; i < masterInteractiveTargets.length; i++) {
     const obj = masterInteractiveTargets[i];
-    if (obj && obj.userData && obj.userData.type === 'rock') {
-      const rx = obj.position.x;
-      const rz = obj.position.z;
-      const sc = obj.scale ? obj.scale.x : 1.4;
-      const topY = obj.position.y + sc * 0.72;
-      registerClimbableCircle(rx, rz, sc * 0.96, topY, obj.position.y - sc);
-      registerCollider(rx, rz, sc * 0.70, obj.position.y - sc, topY - 0.65, 'boulder');
+    if (obj && obj.userData && (obj.userData.type === 'rock' || obj.userData.type === 'boulder')) {
+      registerBoulderObject(obj);
+    }
+  }
+  if (Array.isArray(window.activeBoulders)) {
+    for (let i = 0; i < window.activeBoulders.length; i++) {
+      registerBoulderObject(window.activeBoulders[i]);
+    }
+  }
+  if (Array.isArray(window.instancedRockColliders)) {
+    for (let i = 0; i < window.instancedRockColliders.length; i++) {
+      const rc = window.instancedRockColliders[i];
+      if (!rc) continue;
+      if (rc.climbable) {
+        registerClimbableCircle(rc.x, rc.z, rc.r * 1.05, rc.topY, rc.minY);
+        registerCollider(rc.x, rc.z, rc.r * 0.85, rc.minY, rc.topY - 0.50, 'instanced_rock');
+      } else {
+        registerCollider(rc.x, rc.z, rc.r, rc.minY, rc.maxY, 'cave_pillar');
+      }
     }
   }
 
@@ -249,7 +281,7 @@
   };
 
   const lastValidPos = new THREE.Vector3(player.pos.x, player.pos.y, player.pos.z);
-  window.resolveHorizontalCollisions = function (pos, playerRadius = 0.52) {
+  window.resolveHorizontalCollisions = function (pos, playerRadius = 0.52, inCave = false) {
     if (campaign.onRaft) {
       lastValidPos.copy(pos);
       return;
@@ -272,10 +304,11 @@
       }
     }
 
+    const inCaveApproach = !!(window.isInCaveEntranceApproach && window.isInCaveEntranceApproach(pos.x, pos.z, 5.5, 26.0, 12.0));
     const stepDx = pos.x - lastValidPos.x;
     const stepDz = pos.z - lastValidPos.z;
     const stepDist = Math.hypot(stepDx, stepDz);
-    if (stepDist > 0.001 && !player.isSwimming) {
+    if (!inCave && !inCaveApproach && stepDist > 0.001 && !player.isSwimming) {
       const hPrev = getTerrainHeight(lastValidPos.x, lastValidPos.z);
       const hNext = getTerrainHeight(pos.x, pos.z);
       const supportNext = window.getSupportSurfaceY(pos.x, pos.z, pos.y);
@@ -1935,7 +1968,10 @@
         const wallOff = (pt.halfW || 4.2) * 0.62 * side;
         const vxNode = pt.x + pt.perpX * wallOff;
         const vzNode = pt.z + pt.perpZ * wallOff;
-        spawnObsidianNode(vxNode, pt.floorY - 0.05, vzNode, true);
+        const floorRelief = window.evalCaveFloorRelief
+          ? window.evalCaveFloorRelief(true, sVal * (lavaTubeCave.totalLength || 98.0), wallOff, pt.halfW || 4.2, vxNode, vzNode, sVal)
+          : 0.0;
+        spawnObsidianNode(vxNode, pt.floorY + floorRelief - 0.03, vzNode, true);
       });
     }
 
@@ -2005,12 +2041,15 @@
     const cave1 = window.CAVE_SYSTEMS && window.CAVE_SYSTEMS[0];
     if (cave1) {
       const cenotePt = cave1.getPoint(0.78);
+      const cenoteRelief = window.evalCaveFloorRelief
+        ? window.evalCaveFloorRelief(false, 0.78 * (cave1.totalLength || 92.0), 0.0, cenotePt.halfW || 7.2, cenotePt.x, cenotePt.z, 0.78)
+        : 0.0;
       spawnStoryCrate(
         cenotePt.x, cenotePt.z,
         'cavernRecorder',
         '📼 Flight 409 Black Box & Signal Amplifier',
         'Recovered the Signal Amplifier inside the Subterranean Cenote! (3/3 Radio Modules)',
-        cenotePt.floorY + 0.25
+        cenotePt.floorY + Math.max(0.0, cenoteRelief) + 0.25
       );
     }
   }
@@ -3015,7 +3054,7 @@
 
   // 7C. AAA Campfire-Grade Pitch Cavern Torch (Twisted Wrought-Iron Brazier Cage, Incandescent Pitch Knot,
   //     3D Volumetric FBM Blackbody Fire Shader Ribbons, Helical Rising Ember Sparks & Billowing Smoke Wisps)
-  const playerTorchLight = new THREE.PointLight(0xff9100, 0.0, 34.0, 1.35);
+  const playerTorchLight = new THREE.PointLight(0xffa44d, 0.0, 56.0, 1.05);
   playerTorchLight.visible = true; // Stay visible=true with intensity=0 when holstered so NUM_POINT_LIGHTS never changes!
   playerTorchLight.castShadow = false;
   camera.add(playerTorchLight);
@@ -3395,14 +3434,18 @@
       {
         id: 'karst_miner_cache',
         name: 'Deep Karst Blasting Tin (Subterranean Vault)',
-        x: cave1Pt.x, z: cave1Pt.z, yOverride: (cave1Pt.floorY !== undefined ? cave1Pt.floorY : (cave1Pt.y || 2.0)) + 0.05,
+        x: cave1Pt.x, z: cave1Pt.z,
+        yOverride: (cave1Pt.floorY !== undefined ? cave1Pt.floorY : (cave1Pt.y || 2.0)) +
+          (window.evalCaveFloorRelief ? Math.max(0.0, window.evalCaveFloorRelief(false, 0.76 * ((cave1 && cave1.totalLength) || 88.0), 0.0, cave1Pt.halfW || 6.4, cave1Pt.x, cave1Pt.z, 0.76)) : 0.0) + 0.05,
         loot: { dynamite: 2, rifleAmmo: 3, flares: 3 },
         desc: 'Recovered Deep Cavern 2 Dynamite Sticks, 3 Rifle Rounds & 3 Flares!'
       },
       {
         id: 'lavatube_hunter_pack',
         name: 'Lava Tube Hunter Field Pack',
-        x: cave2Pt.x, z: cave2Pt.z, yOverride: (cave2Pt.floorY !== undefined ? cave2Pt.floorY : (cave2Pt.y || 28.0)) + 0.05,
+        x: cave2Pt.x, z: cave2Pt.z,
+        yOverride: (cave2Pt.floorY !== undefined ? cave2Pt.floorY : (cave2Pt.y || 28.0)) +
+          (window.evalCaveFloorRelief ? Math.max(0.0, window.evalCaveFloorRelief(true, 0.72 * ((cave2 && cave2.totalLength) || 98.0), 0.0, cave2Pt.halfW || 6.5, cave2Pt.x, cave2Pt.z, 0.72)) : 0.0) + 0.05,
         loot: { unlock: 'bow', arrows: 8, sinew: 2, pistolAmmo: 2 },
         desc: 'Recovered Recurve Hunting Bow, 8 Feather Arrows & 2 Pistol Rounds!'
       }
@@ -3478,7 +3521,7 @@
     if (window.fpAxeMesh) {
       window.fpAxeMesh.visible = (toolId === 'hatchet');
     }
-    playerTorchLight.intensity = (toolId === 'torch') ? (2.85 + (window.caveDarknessFactor || 0.0) * 0.40) : 0.0;
+    playerTorchLight.intensity = (toolId === 'torch') ? (3.35 + (window.caveDarknessFactor || 0.0) * 3.85) : 0.0;
     buildGhost.visible = (toolId === 'build');
 
     const aimEl = document.getElementById('cc-bow-arc');
@@ -10185,8 +10228,9 @@
       if (campaign.activeTool === 'torch' && activeMesh.userData.flame) {
         const fScale = 0.94 + Math.sin(timeSec * 17.0) * 0.10;
         activeMesh.userData.flame.scale.set(fScale, 0.95 + Math.cos(timeSec * 21.0) * 0.14, fScale);
-        const caveTorchBoost = (window.caveDarknessFactor || 0.0) * 0.40;
-        playerTorchLight.intensity = 2.75 + caveTorchBoost + Math.sin(timeSec * 15.0) * 0.32 + Math.cos(timeSec * 23.0) * 0.15;
+        const cDark = window.caveDarknessFactor || 0.0;
+        const caveTorchBoost = cDark * 3.85;
+        playerTorchLight.intensity = 3.25 + caveTorchBoost + Math.sin(timeSec * 15.0) * 0.34 + Math.cos(timeSec * 23.0) * 0.16;
 
         // Animate rising helical ember sparks & billowing smoke wisps on the Pitch Torch
         const spPts = activeMesh.userData.sparkPoints;
@@ -10225,14 +10269,17 @@
       const cDark = window.caveDarknessFactor || 0.0;
       if (cDark > 0.55) {
         playerTorchLight.color.setHex(0x6ec6d8);
-        playerTorchLight.distance = 2.4;
-        playerTorchLight.intensity = (cDark - 0.55) * 0.32;
+        playerTorchLight.distance = 3.2;
+        playerTorchLight.decay = 1.35;
+        playerTorchLight.intensity = (cDark - 0.55) * 0.42;
       } else {
         playerTorchLight.intensity = 0.0;
       }
     } else {
-      playerTorchLight.color.setHex(0xff9c42);
-      playerTorchLight.distance = 28.0;
+      const cDark = window.caveDarknessFactor || 0.0;
+      playerTorchLight.color.setHex(cDark > 0.25 ? 0xffb366 : 0xff9c42);
+      playerTorchLight.distance = 36.0 + cDark * 26.0;
+      playerTorchLight.decay = 1.15 - cDark * 0.30;
     }
 
     // 3. Update Modular Builder Holographic Placement Ghost
