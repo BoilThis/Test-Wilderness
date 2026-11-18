@@ -3362,7 +3362,7 @@
             if (d < bestDist) { bestDist = d; bestPt = pt; }
           }
           if (bestPt && bestDist < bestPt.halfW + 3.5) {
-            const inVert = (playerY === null) || (playerY < bestPt.floorY + bestPt.ceilH + 1.8 && playerY > bestPt.floorY - 2.4);
+            const inVert = (playerY === null) || (playerY < bestPt.floorY + bestPt.ceilH + 1.8 && playerY > bestPt.floorY - 6.5);
             if (inVert) {
               const clearance = bestPt.halfW - bestDist;
               const yPen = (playerY !== null) ? Math.abs(playerY - bestPt.floorY) * 0.35 : 0.0;
@@ -3415,7 +3415,7 @@
           if (bDist < halfW + 2.4) {
             const floorY = a.floorY + (bPt.floorY - a.floorY) * bBestFrac;
             const ceilH = a.ceilH + (bPt.ceilH - a.ceilH) * bBestFrac;
-            const inVert = (playerY === null) || (playerY < floorY + ceilH + 1.8 && playerY > floorY - 2.4);
+            const inVert = (playerY === null) || (playerY < floorY + ceilH + 1.8 && playerY > floorY - 6.5);
             if (inVert) {
               const cx = a.x + (bPt.x - a.x) * bBestFrac;
               const cz = a.z + (bPt.z - a.z) * bBestFrac;
@@ -15146,7 +15146,32 @@
       if (window.resolveHorizontalCollisions && !caveNavPre) {
         window.resolveHorizontalCollisions(player.pos, 0.55);
       }
-      const caveNav = getCaveNavigationInfo(player.pos.x, player.pos.z, player.pos.y);
+      let caveNav = getCaveNavigationInfo(player.pos.x, player.pos.z, player.pos.y);
+      const surfaceHere = getTerrainHeight(player.pos.x, player.pos.z);
+      const buried = player.pos.y < surfaceHere - 2.6;
+      if (!caveNav && buried && player._lastCaveNav) {
+        const last = player._lastCaveNav;
+        const dx = player.pos.x - last.cx;
+        const dz = player.pos.z - last.cz;
+        const along = dx * last.dirX + dz * last.dirZ;
+        const lat = dx * last.perpX + dz * last.perpZ;
+        const maxLat = Math.max(0.55, (last.halfW || 1.4) * 0.85);
+        const maxAlong = last.branch ? 1.1 : 2.2;
+        const minAlong = last.branch ? -1.4 : -6;
+        const clAlong = Math.max(minAlong, Math.min(maxAlong, along));
+        const clLat = Math.max(-maxLat, Math.min(maxLat, lat));
+        if (clAlong !== along || clLat !== lat) {
+          player.pos.x = last.cx + last.dirX * clAlong + last.perpX * clLat;
+          player.pos.z = last.cz + last.dirZ * clAlong + last.perpZ * clLat;
+          player.vel.x = 0;
+          player.vel.z = 0;
+        }
+        caveNav = last;
+      } else if (caveNav && caveNav.s > 0.02) {
+        player._lastCaveNav = caveNav;
+      } else if (!buried) {
+        player._lastCaveNav = null;
+      }
       window._playerInsideCave = !!(caveNav && caveNav.s > 0.05);
 
       // Subterranean Cave Interior Portal Culling (culls underground tunnel/cenote/branch/speleothem meshes when >68m from all portals)
