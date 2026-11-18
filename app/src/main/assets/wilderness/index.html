@@ -1633,9 +1633,9 @@
       setLoop(name, volume) {
         if (!(window.AndroidBridge && AndroidBridge.setLoopVolume)) return;
         const rounded = Math.round(volume * 40) / 40;
-        if (this._loopName === name && this._loopVol === rounded) return;
-        this._loopName = name;
-        this._loopVol = rounded;
+        if (!this._loopVols) this._loopVols = {};
+        if (this._loopVols[name] === rounded) return;
+        this._loopVols[name] = rounded;
         try { AndroidBridge.setLoopVolume(name, rounded); } catch (err) {}
       },
       playChop() {
@@ -1668,15 +1668,15 @@
       playFootstep(sprinting) {
         try { if (!this.ctx) this.init(); } catch (err) {}
         if (!this.ctx && !(window.AndroidBridge && AndroidBridge.playAsset)) return;
-        const rate = (sprinting ? 1.06 : 0.96) + Math.random() * 0.08;
-        this._playBank('step', sprinting ? 0.9 : 0.75, rate);
+        const rate = 0.98 + Math.random() * 0.04;
+        this._playBank('step', sprinting ? 0.5 : 0.36, rate);
       },
       playSplash(kind) {
         try { if (!this.ctx || !this._splashBuffer) this.init(); } catch (err) {}
         const mode = kind || 'splash';
-        const rate = 0.92 + Math.random() * 0.14;
+        const rate = 0.98 + Math.random() * 0.04;
         let played = false;
-        if (mode === 'wade') played = this._playBank('wade', 0.85, rate);
+        if (mode === 'wade') played = this._playBank('wade', 0.28, rate);
         else if (mode === 'scoop') played = this._playBank('scoop', 0.8, rate);
         else played = this._playBank('splash', 0.95, rate);
         if (!played && this.ctx && this._splashBuffer) {
@@ -14957,7 +14957,7 @@
       }
 
       // Shallow steps only. Swimming is one splash on the way in, then quiet.
-      if (wInfo.isWater && !isSub && wish.lengthSq() > 0.05 && (timeSec - player.lastWaterStepTime > 0.48)) {
+      if (wInfo.isWater && !isSub && wish.lengthSq() > 0.05 && (timeSec - player.lastWaterStepTime > 0.72)) {
         player.lastWaterStepTime = timeSec;
         addWaterRipple(player.pos.x, player.pos.z, 0.55);
         AudioEngine.playSplash('wade');
@@ -15139,14 +15139,7 @@
       }
       player.effectiveEyeH = (player.effectiveEyeH || 1.88) + (targetEyeH - (player.effectiveEyeH || 1.88)) * Math.min(1.0, 8.0 * dt);
 
-      // Ambient coastal wind audio + subterranean drip, exit draft, pebble drop-brink & darkness warning cues
-      player.lastAmbientAudioTime = player.lastAmbientAudioTime || 0;
-      if (timeSec - player.lastAmbientAudioTime > 5.5) {
-        player.lastAmbientAudioTime = timeSec;
-        if (player.pos.y > 16.0 && !caveNav) {
-          AudioEngine.playWindGust();
-        }
-      }
+      // Shore and inland beds. One-shots sit on top of these instead of in silence.
       if (caveNav && caveNav.isInside) {
         if ((caveNav.portalDist || 0) > 8.0) {
           if (!animate._nextCaveDripTime || timeSec >= animate._nextCaveDripTime) {
@@ -15175,11 +15168,14 @@
       }
 
       let oceanVol = 0;
+      let windVol = 0;
       if (!(caveNav && caveNav.isInside)) {
-        if (wInfo.isWater && wInfo.surfaceY < 1.2) oceanVol = 0.42;
-        else if (!wInfo.isWater && terrY < 2.2 && player.pos.y < 6) oceanVol = 0.34 * (1 - terrY / 2.2);
+        if (wInfo.isWater && wInfo.surfaceY < 1.2) oceanVol = 0.26;
+        else if (!wInfo.isWater && terrY < 2.2 && player.pos.y < 6) oceanVol = 0.2 * (1 - terrY / 2.2);
+        if (oceanVol < 0.05) windVol = 0.08 + Math.min(0.06, Math.max(0, player.pos.y - 6) * 0.003);
       }
       AudioEngine.setLoop('ocean', oceanVol);
+      AudioEngine.setLoop('windbed', windVol);
 
       if (player.pos.y < effectiveGroundY) {
         player.pos.y = effectiveGroundY;

@@ -110,9 +110,8 @@ private object GameSfx {
   private val ready = HashSet<Int>()
   private val descriptors = HashMap<Int, android.content.res.AssetFileDescriptor>()
   private val pending = HashMap<String, Pair<Float, Float>>()
-  private var loopName: String? = null
-  private var loopStream = 0
-  private var loopWant = 0f
+  private val loopStream = HashMap<String, Int>()
+  private val loopWant = HashMap<String, Float>()
 
   fun warm(context: Context) {
     main.post {
@@ -147,14 +146,13 @@ private object GameSfx {
     val vol = volume.toFloat().coerceIn(0f, 1f)
     main.post {
       ensurePool(context.applicationContext)
-      loopName = name
-      loopWant = vol
+      loopWant[name] = vol
       val id = ids[name]
       if (id == null || !ready.contains(id)) {
         if (id == null) loadOne(name)
         return@post
       }
-      applyLoop(id, vol)
+      applyLoop(name, id, vol)
     }
   }
 
@@ -178,7 +176,7 @@ private object GameSfx {
         pending.remove(name)?.let { (vol, spd) ->
           created.play(sampleId, vol, vol, 1, 0, spd)
         }
-        if (loopName == name) applyLoop(sampleId, loopWant)
+        loopWant[name]?.let { applyLoop(name, sampleId, it) }
       }
     }
     pool = created
@@ -219,15 +217,17 @@ private object GameSfx {
     }
   }
 
-  private fun applyLoop(id: Int, vol: Float) {
+  private fun applyLoop(name: String, id: Int, vol: Float) {
     val created = pool ?: return
-    if (loopStream == 0) {
+    val stream = loopStream[name] ?: 0
+    if (stream == 0) {
       if (vol < 0.01f) return
-      loopStream = created.play(id, vol, vol, 2, -1, 1f)
+      val played = created.play(id, vol, vol, 2, -1, 1f)
+      if (played != 0) loopStream[name] = played
       return
     }
-    created.setVolume(loopStream, vol, vol)
-    if (vol < 0.01f) created.pause(loopStream) else created.resume(loopStream)
+    created.setVolume(stream, vol, vol)
+    if (vol < 0.01f) created.pause(stream) else created.resume(stream)
   }
 }
 

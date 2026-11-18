@@ -16,8 +16,8 @@ android {
     applicationId = "com.aistudio.sylvan.wldns"
     minSdk = 24
     targetSdk = 36
-    versionCode = 90
-    versionName = "90.0"
+    versionCode = 91
+    versionName = "91.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
