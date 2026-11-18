@@ -2427,10 +2427,10 @@
       z: 64.0,
       baseR: 112.0,
       rimR: 36.0,
-      poolEdgeR: 33.2,
+      poolEdgeR: 26.5,
       rimY: 168.0,
-      floorY: 162.5,
-      lavaY: 166.8,
+      floorY: 146.5,
+      lavaY: 155.5,
       footY: 12.0
     };
     window.MOUNT_CALDERA = MOUNT_CALDERA;
@@ -3589,34 +3589,14 @@
         const rimCrestY = MOUNT_CALDERA.rimY + rimUndulation - overlookDip;
         let volcH = footY + profile * (MOUNT_CALDERA.rimY - footY) + ribs + rimUndulation - overlookDip;
 
-        // Ash trail: east lava-tube trailhead (angle 0.05) climbing to the north overlook (angle 2.20).
-        const trailOuter = MOUNT_CALDERA.baseR * 0.74;
-        const trailInner = MOUNT_CALDERA.rimR + 2.4;
-        if (vcDist >= trailInner - 2.0 && vcDist <= trailOuter + 8.0) {
-          const trailStart = 0.05;
-          let uAng = ang - trailStart;
-          if (uAng < 0.0) uAng += Math.PI * 2.0;
-          const totalSweep = overlookAng - trailStart;
-          if (uAng <= totalSweep + 0.30) {
-            const sTrail = Math.max(0.0, Math.min(1.0, uAng / totalSweep));
-            const rTrail = trailOuter - sTrail * (trailOuter - trailInner);
-            const rDiff = Math.abs(vcDist - rTrail);
-            if (rDiff < 6.4) {
-              const trailBlend = (1.0 - smoothstep(2.3, 6.4, rDiff)) * smoothstep(0.0, 0.05, sTrail) * (1.0 - smoothstep(0.94, 1.0, sTrail) * 0.20);
-              const trailTargetY = (footY + 20.0) + sTrail * (MOUNT_CALDERA.rimY - footY - 21.2);
-              volcH = volcH * (1.0 - trailBlend * 0.90) + trailTargetY * (trailBlend * 0.90);
-            }
-          }
-        }
-
         const skirtW = smoothstep(MOUNT_CALDERA.baseR + 12.0, MOUNT_CALDERA.baseR - 28.0, vcDist);
         y = y * (1.0 - skirtW) + Math.max(y, volcH) * skirtW;
 
-        // Shallow crater bowl with broad rounded rim shoulder. Lava mesh sits at lavaY (166.8m), ~1m below the 167.8m-168m rim.
+        // Volcanic cauldron core: inner crater walls descend 12.5m from the 168m rim to the molten lava lake at 155.5m (floor at 146.5m)
         if (vcDist < MOUNT_CALDERA.rimR) {
-          const floorR = MOUNT_CALDERA.poolEdgeR * 0.65;
+          const floorR = 15.0;
           const wallSpan = Math.max(0.0, Math.min(1.0, (vcDist - floorR) / Math.max(0.01, MOUNT_CALDERA.rimR - floorR)));
-          // Smooth Hermite S-curve from floorY (162.5m) to rimCrestY (~167.8m) so radial slope is 0 at the rim lip (zero grid teeth)
+          // Smooth Hermite S-curve from floorY (146.5m) to rimCrestY (~167.8m) so radial slope is 0 at the rim lip and crosses lavaY (155.5m) at r = 26.5m
           const bowlFrac = wallSpan * wallSpan * (3.0 - 2.0 * wallSpan);
           const bowlTargetY = MOUNT_CALDERA.floorY + (rimCrestY - MOUNT_CALDERA.floorY) * bowlFrac;
           y = bowlTargetY;
@@ -4423,19 +4403,22 @@
         detailedCliff = mix(detailedCliff, vec3(0.20, 0.39, 0.15) * (0.8 + 0.4 * gMicro.g), ledgeMoss * 0.65);
         baseTerrain.rgb = mix(baseTerrain.rgb, detailedCliff, rockBlend);
 
-        // Dark scoria crest. The rim stays cooled basalt. The lava pool carries the fire.
+        // Dark scoria crest & steep interior cauldron cliff walls with triplanar basalt rock grain and deep magma uplighting
         if (bCaldera > 0.01) {
+          float rockGrain = clamp(cliffCol.r * 0.65 + sMicro.r * 0.35, 0.0, 1.0);
           float ashBand = smoothstep(28.0, 70.0, elev) * bCaldera;
-          vec3 basaltScoria = mix(vec3(0.11, 0.10, 0.10), vec3(0.20, 0.16, 0.14), sMicro.r);
-          baseTerrain.rgb = mix(baseTerrain.rgb, basaltScoria, ashBand * 0.94);
-          float crestBand = smoothstep(138.0, 168.0, elev) * (1.0 - smoothstep(32.0, 78.0, calderaDist));
-          vec3 darkLava = mix(vec3(0.045, 0.032, 0.028), vec3(0.12, 0.07, 0.05), macroNoise);
-          baseTerrain.rgb = mix(baseTerrain.rgb, darkLava, crestBand * 0.96);
-          float sulfurRim = smoothstep(158.0, 168.0, elev) * (1.0 - smoothstep(30.0, 48.0, calderaDist));
-          vec3 sulfurStain = mix(vec3(0.24, 0.18, 0.10), vec3(0.36, 0.24, 0.10), macroNoise);
-          baseTerrain.rgb = mix(baseTerrain.rgb, sulfurStain, sulfurRim * 0.22);
-          float poolGlow = (1.0 - smoothstep(28.0, 36.5, calderaDist)) * (1.0 - smoothstep(166.8, 168.2, elev)) * smoothstep(161.0, 165.5, elev);
-          baseTerrain.rgb += vec3(0.42, 0.07, 0.012) * poolGlow * (0.28 + 0.08 * sin(uTime * 1.6));
+          vec3 basaltScoria = mix(vec3(0.08, 0.078, 0.082), vec3(0.19, 0.175, 0.168), rockGrain);
+          baseTerrain.rgb = mix(baseTerrain.rgb, basaltScoria, ashBand * 0.95);
+          float innerWallMask = 1.0 - smoothstep(20.0, 38.5, calderaDist);
+          float crestBand = max(innerWallMask, smoothstep(125.0, 168.0, elev) * (1.0 - smoothstep(34.0, 82.0, calderaDist)));
+          vec3 darkLava = mix(vec3(0.038, 0.036, 0.040), vec3(0.135, 0.122, 0.118), rockGrain * 0.72 + macroNoise * 0.28);
+          baseTerrain.rgb = mix(baseTerrain.rgb, darkLava, crestBand * 0.98);
+          float sulfurRim = smoothstep(161.0, 168.0, elev) * (1.0 - smoothstep(32.0, 44.0, calderaDist));
+          vec3 sulfurStain = mix(vec3(0.18, 0.16, 0.11), vec3(0.28, 0.24, 0.14), rockGrain);
+          baseTerrain.rgb = mix(baseTerrain.rgb, sulfurStain, sulfurRim * 0.16);
+          // Warm molten magma uplighting along the interior cauldron walls right above the 155.5m lava lake
+          float poolGlow = (1.0 - smoothstep(22.0, 36.0, calderaDist)) * (1.0 - smoothstep(155.5, 166.5, elev)) * smoothstep(147.0, 155.0, elev);
+          baseTerrain.rgb += vec3(0.56, 0.11, 0.018) * poolGlow * (0.42 + 0.12 * sin(uTime * 1.6));
         }
 
         // Tree-canopy leaf-litter humus & fallen twig mosaic beneath forest groves
@@ -5954,15 +5937,23 @@
       });
     }
 
-    // Exact CPU mirror of Water.js 3D vertex wave equation so floating logs & swimmers ride visible crests
+    // Exact CPU mirror of Water.js 3D wide-swell vertex wave equation so floating logs, rafts & swimmers ride visible crests
     function getWaveHeight(wx, wz, waveTime, waveAmp) {
       const oceanMix = Math.max(0.0, Math.min(1.0, (-35.0 - wz) / 45.0));
       const amp = (0.36 + oceanMix * 1.38) * waveAmp;
-      const p1 = wx * 0.075 + wz * 0.055 + waveTime * 1.65;
-      const p2 = wx * -0.048 + wz * 0.105 + waveTime * 2.15;
-      const p3 = wx * 0.14 - wz * 0.12 + waveTime * 2.85;
-      const p4 = wx * 0.24 + wz * 0.20 - waveTime * 3.40;
-      return (Math.sin(p1) * 0.48 + Math.sin(p2) * 0.32 + Math.cos(p3) * 0.14 + Math.sin(p4) * 0.06) * amp;
+      const swellWarp = Math.sin(wx * 0.0065 - wz * 0.0085 + waveTime * 0.18) * 2.4
+                      + Math.cos(wx * 0.0110 + wz * 0.0052 - waveTime * 0.14) * 1.5
+                      + Math.sin((wx - wz) * 0.0042) * 3.1;
+      const groupEnv = 0.72 + 0.28 * Math.sin(wx * 0.0048 - wz * 0.0068 + Math.sin(wz * 0.0035) * 1.7);
+      const p1 = (wx * 0.036 + wz * 0.025) + swellWarp * 0.55 + waveTime * 1.35;
+      const p2 = (wx * 0.027 + wz * 0.013) - swellWarp * 0.38 + waveTime * 1.05;
+      const p3 = (wx * 0.042 + wz * 0.048) + Math.sin(wx * 0.009 - wz * 0.012) * 1.8 + waveTime * 1.75;
+      const p4 = (wx * 0.108 + wz * 0.064) + Math.cos(wz * 0.022) * 1.2 - waveTime * 2.35;
+      const s1 = Math.sin(p1);
+      const crest1 = s1 + 0.24 * (s1 * s1 - 0.5);
+      const s2 = Math.sin(p2);
+      const crest2 = s2 + 0.18 * (s2 * s2 - 0.5);
+      return (crest1 * 0.56 * groupEnv + crest2 * 0.24 + Math.cos(p3) * 0.13 + Math.sin(p4) * 0.07) * amp;
     }
 
     // Continuous 0m-180m offshore sea-band & shore-distance field (lee -> swell -> open, plus stronghold trench)
@@ -6302,12 +6293,12 @@
     window.ezTreePrototypes = [];
 
     function applyTropicalLeafTint(tree, id, x = 0, z = 0) {
-      const hex = (id === 'pine') ? 0x2e7d32 : (id === 'aspen' ? 0x7cb342 : (id === 'bush' ? 0x558b2f : 0x43a047));
+      const hex = (id === 'pine') ? 0x68bf64 : (id === 'aspen' ? 0xa4e058 : (id === 'bush' ? 0x76c64e : 0x7cd666));
       const h1 = hashTreeSeed(x, z);
       const h2 = hashTreeSeed(x * 1.7 + 13.0, z * 1.3 - 7.0);
       const h3 = hashTreeSeed(z * 2.1 - 5.0, x * 1.9 + 19.0);
       const tint = new THREE.Color(hex);
-      tint.offsetHSL((h1 - 0.5) * 0.064, (h2 - 0.5) * 0.16, (h3 - 0.5) * 0.14);
+      tint.offsetHSL((h1 - 0.5) * 0.055, (h2 - 0.5) * 0.12, (h3 - 0.5) * 0.10);
       if (tree.leavesMesh && tree.leavesMesh.material && tree.leavesMesh.material.color) {
         tree.leavesMesh.material.color.copy(tint);
       }
@@ -6374,11 +6365,11 @@
             const lz = posAttr.getZ(i) - cz;
             const radialRatio = Math.min(1.0, Math.hypot(lx, ly, lz) / (maxR * 0.78));
             const heightRatio = Math.max(0.0, Math.min(1.0, (posAttr.getY(i) - bb.min.y) / Math.max(1.0, bb.max.y - bb.min.y)));
-            // Deep interior foliage self-shadowing (0.62) -> bright sunlit outer crown tips (1.06)
-            const ao = 0.62 + 0.44 * (radialRatio * 0.65 + heightRatio * 0.35);
-            colArr[i * 3]     = ao * 0.96;
-            colArr[i * 3 + 1] = ao * 1.02;
-            colArr[i * 3 + 2] = ao * 0.92;
+            // Bright, sunlit interior foliage (0.85) -> vibrant sunlit outer crown tips (1.16)
+            const ao = 0.85 + 0.31 * (radialRatio * 0.60 + heightRatio * 0.40);
+            colArr[i * 3]     = ao * 1.02;
+            colArr[i * 3 + 1] = ao * 1.08;
+            colArr[i * 3 + 2] = ao * 0.94;
           }
           targetLeafGeo.setAttribute('color', new THREE.BufferAttribute(colArr, 3));
         }
@@ -6389,15 +6380,28 @@
       branchGeo.computeBoundingSphere();
       leafGeo.computeBoundingSphere();
 
+      // Warm up & brighten tree trunk/branch bark so trunks look naturally sunlit up close
+      if (branchMat) {
+        if (branchMat.color) branchMat.color.setHex(0xdcc8ae);
+        if (branchMat.emissive) {
+          branchMat.emissive.setHex(0x140f0a);
+          branchMat.emissiveIntensity = 0.38;
+        }
+        branchMat.needsUpdate = true;
+      }
+
       // Create 3 shared tropical canopy tint material variants per preset with baked vertexColors AO & fast harmonic wind shader
-      const baseHex = (id === 'pine') ? 0x2e7d32 : (id === 'aspen' ? 0x7cb342 : (id === 'bush' ? 0x558b2f : 0x43a047));
+      const baseHex = (id === 'pine') ? 0x68bf64 : (id === 'aspen' ? 0xa4e058 : (id === 'bush' ? 0x76c64e : 0x7cd666));
       // Build a clean static MeshPhongMaterial for LOD1 instanced leaves (no non-instanced ez-tree wind onBeforeCompile!)
       const lod1Col = new THREE.Color(baseHex);
-      lod1Col.offsetHSL(0.0, 0.02, 0.01);
+      lod1Col.offsetHSL(0.0, 0.03, 0.03);
       const lod1LeafMat = new THREE.MeshPhongMaterial({
         name: 'leaves_lod1',
         map: baseLeafMat.map,
         color: lod1Col,
+        emissive: new THREE.Color(0x183012),
+        emissiveIntensity: 0.45,
+        shininess: 14,
         side: THREE.DoubleSide,
         alphaTest: baseLeafMat.alphaTest || 0.35,
         vertexColors: true,
@@ -6428,9 +6432,9 @@
       }
 
       const hslOffsets = [
-        [-0.022,  0.05, -0.04],
-        [ 0.000,  0.02,  0.01],
-        [ 0.024, -0.03,  0.05]
+        [-0.018,  0.04, -0.01],
+        [ 0.000,  0.03,  0.03],
+        [ 0.020,  0.00,  0.06]
       ];
       const applyFastLeafWindShader = function(mat) {
         mat.onBeforeCompile = function(shader) {
@@ -6438,6 +6442,12 @@
           shader.uniforms.uWindStrength = { value: new THREE.Vector3(0.45, 0, 0.45) };
           shader.uniforms.uWindFrequency = { value: 0.5 };
           shader.vertexShader = 'uniform float uTime;\nuniform vec3 uWindStrength;\nuniform float uWindFrequency;\n' + shader.vertexShader;
+          // Blend leaf card normals upward toward the sky dome so double-sided foliage cards catch warm overhead sunlight instead of turning dark up close
+          shader.vertexShader = shader.vertexShader.replace(
+            '#include <defaultnormal_vertex>',
+            `objectNormal = normalize(mix(objectNormal, vec3(0.0, 1.0, 0.0), 0.58));
+            #include <defaultnormal_vertex>`
+          );
           shader.vertexShader = shader.vertexShader.replace(
             '#include <project_vertex>',
             `vec4 mvPosition = vec4(transformed, 1.0);
@@ -6464,6 +6474,10 @@
         const c = new THREE.Color(baseHex);
         c.offsetHSL(dh, ds, dl);
         if (m.color) m.color.copy(c);
+        if (m.emissive) {
+          m.emissive.setHex(0x183012);
+          m.emissiveIntensity = 0.45;
+        }
         m.needsUpdate = true;
         return m;
       });
@@ -6524,7 +6538,8 @@
       branchesMesh.castShadow = !isBush && nearSpawn;
       branchesMesh.receiveShadow = !isBush;
       leavesMesh.castShadow = !isBush && nearSpawn;
-      leavesMesh.receiveShadow = !isBush;
+      // Disable self-shadowing on alpha-tested leaf cards so close-up tree crowns stay bright, translucent & free of shadow-map acne
+      leavesMesh.receiveShadow = false;
       branchesMesh.raycast = () => {};
       leavesMesh.raycast = () => {};
 
@@ -8480,173 +8495,240 @@
       scene.add(snagMesh);
       if (yieldFn) await yieldFn();
 
-      // Dense Multi-Cluster Understory Forest Shrubs & Brambles along the Elderwood Floor (165 shrubs)
-      for (let b = 0; b < 165; b++) {
-        const bx = -32.0 - treeRand() * 204.0;
-        const bz = -16.0 + treeRand() * 176.0;
-        if (getForestTrailMask(bx, bz) > 0.28) continue;
-        if (Math.hypot(bx - (-68.0), bz - 44.0) < 10.0) continue;
+      // 3D. Understory Forest Shrubs & Brambles clustered in "Forest Mantle" Ecotones & Nurse-Tree Skirts (78 curated shrubs, down from 165)
+      for (let b = 0; b < 78; b++) {
+        let bx, bz;
+        if (b < 58 && forestPlacements.length > 0) {
+          // 75% of understory shrubs cluster naturally around the base skirt (1.8m..4.4m) of mature nurse trees
+          const parentTree = forestPlacements[(b * 7 + 3) % forestPlacements.length];
+          const ang = treeRand() * Math.PI * 2;
+          const dist = 1.8 + treeRand() * 2.6;
+          bx = parentTree.x + Math.cos(ang) * dist;
+          bz = parentTree.z + Math.sin(ang) * dist;
+        } else {
+          // Remaining 25% form the sunlit outer "forest mantle" transition edge along the Elderwood perimeter
+          const edgeSide = b % 2 === 0;
+          bx = edgeSide ? (-32.0 - treeRand() * 22.0) : (-36.0 - treeRand() * 195.0);
+          bz = edgeSide ? (-14.0 + treeRand() * 168.0) : (-16.0 + (b % 4 === 0 ? treeRand() * 24.0 : 148.0 + treeRand() * 22.0));
+        }
+        if (getForestTrailMask(bx, bz) > 0.16) continue;
+        if (Math.hypot(bx - (-68.0), bz - 44.0) < 12.5) continue;
+        if (Math.hypot(bx - (-22.0), bz - 24.0) < 10.0) continue;
         if (isInsideWaterfallChannel(bx, bz)) continue;
         const bh = getTerrainHeight(bx, bz);
-        if (bh > 2.1 && bh < 50.0 && isGentleSlope(bx, bz, 2.3)) {
-          spawnEZBush(bx, bz, 1 + (b % 3), 0.78 + treeRand() * 0.85);
+        if (bh > 2.2 && bh < 48.0 && isGentleSlope(bx, bz, 2.1)) {
+          spawnEZBush(bx, bz, 1 + (b % 3), 0.76 + treeRand() * 0.72);
         }
         if (yieldFn && b > 0 && b % 28 === 0) await yieldFn();
       }
       if (yieldFn) await yieldFn();
 
-      // 4. Dedicated Archipelago Islet Lush Groves, Understory Shrubs & Boulders across the 5 Close Starter Islets
+      // 4. Dedicated Archipelago Islet Lush Groves, Understory Shrubs & Headland Boulders across the 5 Close Starter Islets
       for (let idx = 0; idx < Math.min(5, archipelagoIslets.length); idx++) {
         const isl = archipelagoIslets[idx];
-        const count = 24 + (idx % 3) * 4;
+        const count = 18 + (idx % 3) * 3;
+        const islTreePts = [];
         for (let j = 0; j < count; j++) {
-          const ang = (j / count) * Math.PI * 2 + treeRand() * 0.55;
-          const rad = isl.r * (0.08 + Math.pow(treeRand(), 0.75) * 0.78);
+          const ang = (j / count) * Math.PI * 2 + treeRand() * 0.45;
+          const rad = isl.r * (0.08 + Math.pow(treeRand(), 0.82) * 0.68);
           const ix = isl.x + Math.cos(ang) * rad;
           const iz = isl.z + Math.sin(ang) * rad;
           const ih = getTerrainHeight(ix, iz);
-          if (ih > 1.35 && isGentleSlope(ix, iz, 2.5)) {
-            const sc = 0.38 + Math.pow(treeRand(), 1.2) * 0.94;
-            const pick = treeRand();
-            if (pick < 0.32) spawnEZOak(ix, iz, sc);
-            else if (pick < 0.58) spawnEZAsh(ix, iz, sc);
-            else if (pick < 0.80) spawnEZAspen(ix, iz, sc);
-            else spawnEZPine(ix, iz, sc);
+          if (ih > 1.65 && isGentleSlope(ix, iz, 2.3)) {
+            const sc = 0.42 + Math.pow(treeRand(), 1.2) * 0.88;
+            // Zoned island species: coastal/lowland Ash & Aspen on lower rings, Oak & Pine on interior crowns
+            if (ih < 3.2) {
+              if (treeRand() < 0.55) spawnEZAsh(ix, iz, sc);
+              else spawnEZAspen(ix, iz, sc);
+            } else if (ih > 6.5) {
+              if (treeRand() < 0.65) spawnEZPine(ix, iz, sc);
+              else spawnEZOak(ix, iz, sc);
+            } else {
+              if (treeRand() < 0.58) spawnEZOak(ix, iz, sc);
+              else spawnEZAsh(ix, iz, sc);
+            }
+            islTreePts.push({ x: ix, z: iz });
           }
         }
-        for (let b = 0; b < 16; b++) {
-          const ang = treeRand() * Math.PI * 2;
-          const rad = isl.r * (0.15 + treeRand() * 0.78);
-          const bx = isl.x + Math.cos(ang) * rad;
-          const bz = isl.z + Math.sin(ang) * rad;
-          if (getTerrainHeight(bx, bz) > 1.25) {
-            spawnEZBush(bx, bz, 1 + ((idx + b) % 3), 0.72 + treeRand() * 0.65);
+        // Cluster 8 understory bushes per starter islet around tree trunks (never on open sandy beaches)
+        for (let b = 0; b < 8; b++) {
+          let bx, bz;
+          if (islTreePts.length > 0) {
+            const tp = islTreePts[b % islTreePts.length];
+            const ang = treeRand() * Math.PI * 2;
+            const dist = 1.6 + treeRand() * 2.2;
+            bx = tp.x + Math.cos(ang) * dist;
+            bz = tp.z + Math.sin(ang) * dist;
+          } else {
+            const ang = treeRand() * Math.PI * 2;
+            const rad = isl.r * (0.18 + treeRand() * 0.48);
+            bx = isl.x + Math.cos(ang) * rad;
+            bz = isl.z + Math.sin(ang) * rad;
+          }
+          if (getTerrainHeight(bx, bz) > 1.85) {
+            spawnEZBush(bx, bz, 1 + ((idx + b) % 3), 0.70 + treeRand() * 0.58);
           }
         }
-        for (let r = 0; r < 14; r++) {
-          const ang = (r / 14) * Math.PI * 2 + treeRand() * 0.5;
-          const rad = isl.r * (0.25 + treeRand() * 0.78);
+        // Curated 5 headland/bluff boulders per starter islet (down from 14), placed only on steep rocky sides so sandy landing coves stay 100% clean
+        let placedIslRocks = 0;
+        for (let r = 0; r < 18 && placedIslRocks < 5; r++) {
+          const ang = (r / 18) * Math.PI * 2 + treeRand() * 0.35;
+          const rad = isl.r * (0.45 + treeRand() * 0.52);
           const rx = isl.x + Math.cos(ang) * rad;
           const rz = isl.z + Math.sin(ang) * rad;
           const rh = getTerrainHeight(rx, rz);
-          if (rh > 0.12) {
-            // Location-matched coastal tafoni, shore cobbles, ventifacts & interior crags on starter islets
+          const slope = Math.hypot(getTerrainHeight(rx + 1.4, rz) - rh, getTerrainHeight(rx, rz + 1.4) - rh);
+          // Require steep bluff or high interior ridge so flat sandy beaches remain pristine
+          if (rh > 0.35 && (slope > 0.38 || rh > 3.6)) {
             const sizeTier = treeRand();
-            const rSize = sizeTier < 0.35 ? (0.72 + treeRand() * 0.65) : (sizeTier < 0.78 ? (1.45 + treeRand() * 1.25) : (2.80 + treeRand() * 1.15));
-            const locSeed = rh < 2.2 ? (r % 3 === 0 ? 19 : (r % 3 === 1 ? 17 : 27)) : selectLocationRockSeed(rx, rz, rh, idx * 11 + r);
+            const rSize = sizeTier < 0.45 ? (0.85 + treeRand() * 0.65) : (1.55 + treeRand() * 1.15);
+            const locSeed = rh < 2.2 ? (r % 2 === 0 ? 19 : 17) : selectLocationRockSeed(rx, rz, rh, idx * 11 + r);
             const rock = createGraniteBoulder(rSize, locSeed);
-            rock.position.set(rx, getGroundedTreeY(rx, rz, rSize * 0.72, rSize * 0.28), rz);
-            rock.scale.set(0.88 + treeRand() * 0.32, 0.78 + treeRand() * 0.44, 0.88 + treeRand() * 0.32);
-            rock.rotation.set((treeRand() - 0.5) * 0.18, treeRand() * Math.PI * 2, (treeRand() - 0.5) * 0.18);
-            rock.userData = { type: 'boulder' };
+            rock.position.set(rx, getGroundedTreeY(rx, rz, rSize * 0.72, rSize * 0.34), rz);
+            rock.scale.set(0.88 + treeRand() * 0.28, 0.76 + treeRand() * 0.38, 0.88 + treeRand() * 0.28);
+            rock.rotation.set((treeRand() - 0.5) * 0.16, treeRand() * Math.PI * 2, (treeRand() - 0.5) * 0.16);
+            rock.userData = { type: 'boulder', health: 3 };
             scene.add(rock);
             interactiveTargets.push(rock);
+            placedIslRocks++;
           }
         }
         if (yieldFn) await yieldFn();
       }
 
-      // 5. Terraced Headlands, Windward Meadows, Eastern Canyon & Outer Coasts (285 trees across full 1200m central island)
+      // 5. Biome- & Elevation-Sorted Woodland Groves across Central Island (160 grove-clustered trees, down from 285 random mix)
+      // Leaves wide sunlit meadow corridors open while grouping trees by real hydrological & altitude ecology
       let spawnedExtra = 0;
-      for (let i = 0; i < 820 && spawnedExtra < 285; i++) {
-        const tx = (treeRand() - 0.5) * 640;
-        const tz = -210 + treeRand() * 570;
-        if (Math.hypot(tx - (-22), tz - 24) < 11.0) continue;
-        if (tx > -18 && tx < 28 && tz > -8 && tz < 22) continue;
+      const extraTreePts = [];
+      for (let i = 0; i < 980 && spawnedExtra < 160; i++) {
+        const tx = (treeRand() - 0.5) * 620;
+        const tz = -205 + treeRand() * 555;
+        if (Math.hypot(tx - (-22), tz - 24) < 14.0) continue;
+        if (tx > -22 && tx < 30 && tz > -12 && tz < 25) continue;
+        // Keep Elderwood core separate (already populated in 3B)
+        if (tx < -32 && tx > -242 && tz > -20 && tz < 164) continue;
+        // Exclude barren Mount Caldera volcanic ash cone & Eastern Karst Canyon limestone floor
+        if (Math.hypot(tx - MOUNT_CALDERA.x, tz - MOUNT_CALDERA.z) < MOUNT_CALDERA.baseR * 0.90) continue;
+        if (tx > 148 && tz > -30 && tz < 92) continue;
         if (isInsideWaterfallChannel(tx, tz)) continue;
-        if (getForestTrailMask(tx, tz) > 0.20) continue;
+        if (getForestTrailMask(tx, tz) > 0.15) continue;
 
         const th = getTerrainHeight(tx, tz);
-        if (th > 1.85 && th < 72.0 && isGentleSlope(tx, tz, 2.0)) {
-          const rScale = 0.32 + Math.pow(treeRand(), 1.35) * 1.02;
-          const pick = treeRand();
-          if (pick < 0.30) spawnEZOak(tx, tz, rScale);
-          else if (pick < 0.55) spawnEZAsh(tx, tz, rScale);
-          else if (pick < 0.78) spawnEZAspen(tx, tz, rScale);
-          else spawnEZPine(tx, tz, rScale);
-          spawnedExtra++;
-          if (yieldFn && (spawnedExtra % 4 === 0)) await yieldFn();
+        if (th <= 2.35 || th >= 58.0 || !isGentleSlope(tx, tz, 2.0)) continue;
+
+        // Check proximity to rivers/lakes for Riparian Groves vs low-frequency fBM Coppice Grove mask
+        const dEstuary = Math.abs(tx - getEstuaryCenter(tz));
+        const dLake1 = Math.hypot(tx - UPLAND_LAKE.x, tz - UPLAND_LAKE.z) - UPLAND_LAKE.rx;
+        const dLake2 = Math.hypot(tx - HEADWATERS_LAKE.x, tz - HEADWATERS_LAKE.z) - HEADWATERS_LAKE.rx;
+        const dPond  = Math.hypot(tx - VALLEY_POND.x, tz - VALLEY_POND.z) - VALLEY_POND.rx;
+        const isRiparian = (tz > -38 && tz < 125 && dEstuary < 24.0) || Math.min(dLake1, dLake2, dPond) < 18.0;
+
+        // Cohesive coppice grove mask so open meadows stay 80% unobstructed
+        const groveMask = fbm2(tx * 0.024 + 4.7, tz * 0.024 - 3.2, 2);
+        if (!isRiparian && groveMask < 0.08) continue;
+
+        const rScale = 0.42 + Math.pow(treeRand(), 1.25) * 0.92;
+        const pick = treeRand();
+        if (isRiparian) {
+          // Riparian moisture-loving Aspen & Ash groves along riverbanks and lake coves
+          if (pick < 0.56) spawnEZAspen(tx, tz, rScale);
+          else spawnEZAsh(tx, tz, rScale);
+        } else if (th > 24.0 || tz < -115.0) {
+          // Sub-alpine highland ridges & wind-swept coastal bluffs: Conifer (Pine) stands
+          if (pick < 0.78) spawnEZPine(tx, tz, rScale);
+          else spawnEZOak(tx, tz, rScale);
+        } else {
+          // Lowland & mid-slope broadleaf woodland coppices: Oak & Ash
+          if (pick < 0.58) spawnEZOak(tx, tz, rScale);
+          else if (pick < 0.90) spawnEZAsh(tx, tz, rScale);
+          else spawnEZAspen(tx, tz, rScale);
         }
+        extraTreePts.push({ x: tx, z: tz });
+        spawnedExtra++;
+        if (yieldFn && (spawnedExtra % 4 === 0)) await yieldFn();
       }
       if (yieldFn) await yieldFn();
 
-      // 6. Tropical Coastal & Terrace Bushes across all 6 central biomes
+      // 6. Ecotone & Nurse-Tree Skirt Shrubs across Central Biomes (48 curated shrubs, down from 100)
       const nearBushes = [
-        [-25.0, 27.5, 1, 1.0], [-17.5, 25.0, 2, 0.82], [-27.0, 19.5, 3, 1.05],
-        [-16.0, 19.0, 1, 0.76], [-21.0, 31.0, 2, 0.94]
+        [-33.2, 31.8, 1, 0.92], [-34.6, 17.2, 2, 0.80], [-14.2, 31.8, 3, 0.88]
       ];
       nearBushes.forEach(([x, z, idx, s]) => {
-        if (getTerrainHeight(x, z) > 1.4) spawnEZBush(x, z, idx, s);
+        if (getTerrainHeight(x, z) > 1.8) spawnEZBush(x, z, idx, s);
       });
-      for (let b = 0; b < 95; b++) {
-        const bx = (treeRand() - 0.5) * 580;
-        const bz = -195 + treeRand() * 540;
-        if (Math.hypot(bx - (-19.5), bz - 21.5) < 4.5) continue;
-        if (isInsideWaterfallChannel(bx, bz)) continue;
-        if (getForestTrailMask(bx, bz) > 0.25) continue;
-        const bh = getTerrainHeight(bx, bz);
-        if (bh > 1.5 && bh < 48.0 && isGentleSlope(bx, bz, 2.0)) {
-          spawnEZBush(bx, bz, 1 + (b % 3), 0.70 + treeRand() * 0.78);
+      for (let b = 0; b < 45; b++) {
+        let bx, bz;
+        if (extraTreePts.length > 0 && b < 36) {
+          // Anchor bushes directly to the sunny edge of woodland grove trees (2.0m..4.5m from trunk)
+          const tp = extraTreePts[(b * 5 + 1) % extraTreePts.length];
+          const ang = treeRand() * Math.PI * 2;
+          const dist = 2.0 + treeRand() * 2.5;
+          bx = tp.x + Math.cos(ang) * dist;
+          bz = tp.z + Math.sin(ang) * dist;
+        } else {
+          bx = (treeRand() - 0.5) * 520;
+          bz = -175 + treeRand() * 480;
         }
-        if (yieldFn && b > 0 && b % 30 === 0) await yieldFn();
+        if (Math.hypot(bx - (-19.5), bz - 21.5) < 8.5) continue;
+        if (isInsideWaterfallChannel(bx, bz)) continue;
+        if (getForestTrailMask(bx, bz) > 0.16) continue;
+        if (Math.hypot(bx - MOUNT_CALDERA.x, bz - MOUNT_CALDERA.z) < MOUNT_CALDERA.baseR * 0.92) continue;
+        const bh = getTerrainHeight(bx, bz);
+        if (bh > 2.2 && bh < 42.0 && isGentleSlope(bx, bz, 2.0)) {
+          spawnEZBush(bx, bz, 1 + (b % 3), 0.68 + treeRand() * 0.68);
+        }
+        if (yieldFn && b > 0 && b % 25 === 0) await yieldFn();
       }
       if (yieldFn) await yieldFn();
 
-      // 7. Multi-Scale Coastal Basalt Boulders, Stepped Canyon Slabs, Split-Fault Outcrops & Companion Rock Clusters
+      // 7. Curated Geomorphological Hero Boulder Triads (34 Parent-Anchored Outcrops = ~68 total stones with satellites, down from ~178)
+      // Every outcrop is anchored to a cliff toe, rocky headland, gorge rim, karst canyon wall, volcanic rib, or alpine bench
       const boulders = [
-        // Sunlit Coral Cove & Estuary Mouth (varying from 0.95m accent stones to 4.6m headland slabs)
-        [-31, 20, 2.2], [-14, 30, 1.6], [-35, 33, 3.2], [-28, 12, 1.05], [-9, 36, 1.35],
-        [18, -14, 3.1], [21, 18, 2.9], [-12, -26, 2.7], [12, -29, 1.25], [-24, -18, 4.3],
-        // Elderwood Rainforest & Sanctuary Glade Mossy Outcrops (small woodland stones to giant 5.4m split boulders)
-        [-62, 18, 3.8], [-54, 49, 2.8], [-82, 35, 3.6], [-74, 60, 3.1], [-44, 58, 4.4],
-        [-96, 24, 4.9], [-112, 68, 5.3], [-134, 42, 2.4], [-148, 88, 3.9], [-88, 92, 1.75],
-        [-162, 54, 4.6], [-122, 18, 1.35], [-104, 112, 3.5], [-66, 84, 2.1],
-        // Waterfall Gorge Rim, Alpine Tarn & Stratified Karst Canyon (stepped limestone slabs & tall crags)
-        [76, -24, 4.6], [84, 32, 5.1], [56, 62, 3.5], [112, -48, 4.2], [142, 14, 5.4],
-        [204, 35, 3.6], [228, 49, 4.5], [192, 52, 3.3], [244, 38, 4.1], [174, 12, 2.6],
-        [158, -28, 4.8], [186, -12, 1.85], [216, 16, 5.2], [164, 68, 3.1],
-        // Emerald Bamboo Wetlands & Southern Coast
-        [-78, -28, 3.6], [-48, -108, 3.2], [54, -128, 3.6], [-10, -184, 4.2],
-        [-118, -94, 4.5], [-142, -148, 2.8], [-92, -162, 1.9], [-168, -112, 3.9],
-        [195, -90, 3.7], [128, -144, 4.4], [82, -168, 2.3],
-        // Windward Valley Meadows, Grand Headwaters & Western Volcanic Flanks
-        [86, 232, 3.1], [134, 244, 3.8], [42, 198, 2.2], [18, 246, 4.7], [68, 268, 1.65],
-        [-288, 218, 2.6], [-292, 234, 3.4], [-180, 145, 4.1], [150, 165, 3.8], [-115, 255, 4.3],
-        [-218, 118, 4.8], [-244, 28, 3.5], [-206, -34, 2.7],
-        // Specialized Biome Landmark Stones: Columnar Basalt & Obsidian (Volcano), Karst Rillenkarren (Canyon), Glacial Erratics (Alpine), Coastal Tafoni & Trail Flagstones
-        [-196, 86, 3.4, 16], [-184, 52, 2.9, 18], [-212, 64, 3.8, 16], [-168, 118, 2.6, 18],
-        [182, 26, 3.9, 23], [212, 42, 4.3, 23], [236, 22, 3.2, 21], [168, 48, 3.5, 23],
-        [98, -28, 4.1, 20], [128, 28, 4.5, 20], [64, 18, 3.3, 21], [44, -12, 2.8, 21],
-        [-38, 27, 1.8, 22], [-50, 35, 1.9, 22], [-62, 42, 2.1, 24], [-76, 48, 3.7, 24],
-        [-8, -32, 2.5, 19], [14, -36, 2.3, 19], [-274, 226, 2.8, 19], [-258, 212, 2.2, 27]
+        // Rocky Headland Points & Cliff Bluffs (keeping Sunlit Coral Cove & SW Beach 100% clean sand)
+        [-36, 34, 3.2, 19], [20, -16, 3.0, 19], [-24, -19, 3.9, 8], [14, -36, 2.4, 19],
+        // Elderwood Rainforest Ravine Banks & Escarpment Toes (deeply embedded mossy pillow & split boulders)
+        [-62, 18, 3.6, 24], [-96, 24, 4.4, 11], [-112, 68, 4.8, 24], [-162, 54, 4.2, 10], [-104, 112, 3.4, 24],
+        // Waterfall Gorge Rim, Plunge Escarpment & Alpine Tarn Cliff Shoulder
+        [76, -24, 4.4, 21], [84, 32, 4.8, 20], [56, 62, 3.4, 21], [112, -48, 4.0, 20], [142, 14, 4.9, 6],
+        // Stratified Eastern Karst Canyon Stepped Walls & Cave Portals (keeping central canyon floor clear)
+        [204, 35, 3.6, 23], [228, 49, 4.4, 23], [158, -28, 4.5, 5], [216, 16, 4.8, 23], [182, 26, 3.8, 23], [236, 22, 3.2, 21],
+        // Southern Sea-Cliff Headlands & Bamboo Gorge Bluffs
+        [-78, -28, 3.5, 24], [-10, -184, 4.1, 8], [-118, -94, 4.2, 11], [128, -144, 4.2, 7],
+        // Northern Escarpment Toes & High Alpine Glacial Erratic Landmarks (zero mid-meadow clutter)
+        [134, 244, 3.8, 20], [18, 246, 4.5, 20], [-180, 145, 3.9, 16], [-115, 255, 4.1, 1],
+        // Mount Caldera Solidified Radial Basalt Ribs & Obsidian Dykes
+        [-196, 86, 3.5, 16], [-184, 52, 2.9, 18], [-212, 64, 3.8, 16], [-218, 118, 4.4, 16],
+        // Sanctuary Trail Entrance Stepping Stones
+        [-38, 27, 1.6, 22], [-76, 48, 3.4, 24]
       ];
       boulders.forEach(([x, z, r, explicitSeed], bIdx) => {
         const bh = getTerrainHeight(x, z);
         if (bh > 0.2) {
           const seed = (explicitSeed !== undefined) ? explicitSeed : selectLocationRockSeed(x, z, bh, bIdx);
           const rock = createGraniteBoulder(r, seed);
-          rock.position.set(x, getGroundedTreeY(x, z, r * 0.72, r * 0.28), z);
+          // Sink 42% into parent slope so outcrops look emerging from bedrock rather than sitting on top of turf
+          rock.position.set(x, getGroundedTreeY(x, z, r * 0.72, r * 0.36), z);
           rock.rotation.set(((bIdx % 5) - 2) * 0.06, (bIdx * 2.39996) % (Math.PI * 2), ((bIdx % 3) - 1) * 0.06);
-          rock.userData = { type: 'boulder' };
+          rock.userData = { type: 'boulder', health: 3 };
           scene.add(rock);
           interactiveTargets.push(rock);
 
-          // Spawn 1-2 smaller satellite companion rocks at the base of large boulders (r >= 3.0m) with matching local geology
-          if (r >= 3.0) {
+          // "Rule of Three" Rock Triad: 1-2 smaller companion stones tucked closely against the parent outcrop base
+          if (r >= 3.2) {
             const satCount = r >= 4.2 ? 2 : 1;
             for (let s = 0; s < satCount; s++) {
-              const sAng = bIdx * 1.9 + s * 2.4;
-              const sDist = r * (0.78 + s * 0.22);
+              const sAng = bIdx * 1.9 + s * 2.1;
+              const sDist = r * (0.68 + s * 0.18);
               const sx = x + Math.cos(sAng) * sDist;
               const sz = z + Math.sin(sAng) * sDist;
               const sh = getTerrainHeight(sx, sz);
               if (sh > 0.15) {
-                const sRad = r * (s === 0 ? 0.38 : 0.26);
+                const sRad = r * (s === 0 ? 0.36 : 0.24);
                 const satSeed = selectLocationRockSeed(sx, sz, sh, bIdx + 17 + s * 5);
                 const satRock = createGraniteBoulder(sRad, satSeed);
-                satRock.position.set(sx, getGroundedTreeY(sx, sz, sRad * 0.72, sRad * 0.30), sz);
+                satRock.position.set(sx, getGroundedTreeY(sx, sz, sRad * 0.72, sRad * 0.36), sz);
                 satRock.rotation.set(0.12 * (s + 1), sAng + 1.1, -0.08);
-                satRock.userData = { type: 'boulder' };
+                satRock.userData = { type: 'boulder', health: 2 };
                 scene.add(satRock);
                 interactiveTargets.push(satRock);
               }
@@ -8703,19 +8785,26 @@
           return seed / 4294967296;
         }
         const specs = [];
-        const baseCount = Math.max(26, Math.round((isl.treeCount || 22) * 1.45));
+        const baseCount = Math.max(18, Math.round((isl.treeCount || 20) * 1.15));
         for (let j = 0; j < baseCount; j++) {
-          const ang = (j / baseCount) * Math.PI * 2 + cRand() * 0.55;
-          const rad = isl.r * (0.08 + Math.pow(cRand(), 0.78) * 0.80);
+          // Group island trees into natural multi-tree groves with open meadow clearings between them
+          const groveAng = (Math.floor(j / 4) / Math.max(1, Math.ceil(baseCount / 4))) * Math.PI * 2 + (k * 0.7);
+          const ang = groveAng + (cRand() - 0.5) * 0.48;
+          const rad = isl.r * (0.10 + Math.pow(cRand(), 0.82) * 0.68);
           const ix = isl.x + Math.cos(ang) * rad;
           const iz = isl.z + Math.sin(ang) * rad;
           const ih = getTerrainHeight(ix, iz);
-          const sc = (0.48 + cRand() * 0.88) * 0.27;
+          const sc = (0.48 + cRand() * 0.86) * 0.27;
           const kindPick = cRand();
-          if (ih > 1.20) {
-            const preset = isl.isBasalt
-              ? (kindPick < 0.48 ? 'Pine Medium' : (kindPick < 0.78 ? 'Oak Medium' : 'Ash Medium'))
-              : (kindPick < 0.34 ? 'Oak Medium' : (kindPick < 0.64 ? 'Ash Medium' : (kindPick < 0.86 ? 'Aspen Medium' : 'Pine Medium')));
+          if (ih > 1.65) {
+            let preset;
+            if (isl.isBasalt || ih > 9.5) {
+              preset = kindPick < 0.72 ? 'Pine Medium' : 'Oak Medium';
+            } else if (ih < 3.4) {
+              preset = kindPick < 0.55 ? 'Ash Medium' : 'Aspen Medium';
+            } else {
+              preset = kindPick < 0.58 ? 'Oak Medium' : (kindPick < 0.88 ? 'Ash Medium' : 'Aspen Medium');
+            }
             const id = preset.startsWith('Pine') ? 'pine' : (preset.startsWith('Oak') ? 'oak' : (preset.startsWith('Ash') ? 'ash' : 'aspen'));
             specs.push({ x: ix, z: iz, y: ih, sc, preset, id, r: 4.2 + sc * 6.5 });
           }
@@ -8860,14 +8949,14 @@
 
           // Distant Horizon Foliage Crowns (automatically hidden when island hydrates into full 3D EZ-Trees)
           const cSlots = [];
-          const crownCount = Math.max(14, Math.round((isl.treeCount || 20) * 1.2));
+          const crownCount = Math.max(12, Math.round((isl.treeCount || 18) * 1.0));
           for (let j = 0; j < crownCount; j++) {
             const ang = (j / crownCount) * Math.PI * 2 + rnd() * 0.65;
-            const rad = isl.r * (0.12 + rnd() * 0.78);
+            const rad = isl.r * (0.12 + rnd() * 0.68);
             const wx = isl.x + Math.cos(ang) * rad;
             const wz = isl.z + Math.sin(ang) * rad;
             const wy = getTerrainHeight(wx, wz);
-            if (wy > 1.25) {
+            if (wy > 1.65) {
               const scXZ = 2.6 + rnd() * 2.8;
               const scY = 3.2 + rnd() * 3.8;
               dummy.position.set(wx, wy + scY * 0.65, wz);
@@ -8885,21 +8974,21 @@
           }
           horizonCanopySlots.set(k, cSlots);
 
-          // Distant Horizon Sea-Stacks (hidden when island hydrates into detailed sculpted granite/basalt boulders)
+          // Distant Horizon Sea-Stacks (curated 4-6 headland crags, hidden when island hydrates)
           const kSlots = [];
-          const cragTotal = isl.isVolcano || isl.isBasalt ? 11 : 7;
+          const cragTotal = isl.isVolcano || isl.isBasalt ? 6 : 4;
           for (let c = 0; c < cragTotal; c++) {
             const ang = (c / cragTotal) * Math.PI * 2 + rnd() * 0.4;
-            const rad = isl.r * (0.68 + rnd() * 0.56);
+            const rad = isl.r * (0.68 + rnd() * 0.42);
             const cx = isl.x + Math.cos(ang) * rad;
             const cz = isl.z + Math.sin(ang) * rad;
             const cy = getTerrainHeight(cx, cz);
-            if (cy > -0.8) {
-              const sx = 2.2 + rnd() * 3.4;
-              const sy = (isl.isBasalt || isl.isVolcano) ? (3.5 + rnd() * 5.2) : (1.6 + rnd() * 2.4);
-              dummy.position.set(cx, cy + sy * 0.22, cz);
-              dummy.scale.set(sx, sy, sx * (0.8 + rnd() * 0.5));
-              dummy.rotation.set((rnd() - 0.5) * 0.3, rnd() * Math.PI * 2, (rnd() - 0.5) * 0.3);
+            if (cy > -0.4) {
+              const sx = 2.0 + rnd() * 2.8;
+              const sy = (isl.isBasalt || isl.isVolcano) ? (3.2 + rnd() * 4.4) : (1.5 + rnd() * 2.1);
+              dummy.position.set(cx, cy + sy * 0.18, cz);
+              dummy.scale.set(sx, sy, sx * (0.8 + rnd() * 0.4));
+              dummy.rotation.set((rnd() - 0.5) * 0.25, rnd() * Math.PI * 2, (rnd() - 0.5) * 0.25);
               dummy.updateMatrix();
               const mCopy = dummy.matrix.clone();
               kSlots.push({ idx: cragMatrices.length, matrix: mCopy });
@@ -8957,11 +9046,26 @@
         }
       }
 
-      // Attach Main-Island Instanced Ground Cover (6-Blade Grass, 7-Frond Sword Ferns, 5-Petal Wildflowers, Coastal Reeds, Pebbles & Mushrooms)
+      // Attach Ecologically Zoned Ground Cover per Outer Island (Patchy Meadow Grass, Shade-Gated Ferns, Single-Species Flower Colonies & Root Mushrooms)
       function attachIslandGroundCover(k, isl, props) {
         const fa = window.sharedFloraAssets;
         if (!fa || props._hasGroundCover) return;
         props._hasGroundCover = true;
+
+        const { specs: treeSpecs } = getIslandTreeSpecs(isl, k);
+        function sampleIslCanopyAO(wx, wz) {
+          let ao = 0.0;
+          for (let t = 0; t < treeSpecs.length; t++) {
+            const fp = treeSpecs[t];
+            const dx = wx - fp.x, dz = wz - fp.z;
+            const d2 = dx * dx + dz * dz, r2 = fp.r * fp.r;
+            if (d2 < r2) {
+              const falloff = 1.0 - Math.sqrt(d2) / fp.r;
+              if (falloff * falloff > ao) ao = falloff * falloff;
+            }
+          }
+          return ao;
+        }
 
         let fSeed = ((k + 31) * 2654435761) >>> 0;
         function fRand() {
@@ -8971,22 +9075,26 @@
         const dummy = new THREE.Object3D();
         const tint = new THREE.Color();
 
-        // 1. Dense Clumped 6-Blade Tapered 3D Grass Carpet (up to 2,600 clumps = 15,600 thin curved blades per island)
-        const grassMax = isl.isSwimSafe ? 1400 : 2600;
+        // 1. Ecologically Patchy 6-Blade Grass (900..1,500 clumps per island, leaving beaches & deep canopy humus clear)
+        const grassMax = isl.isVolcano ? 650 : (isl.isSwimSafe ? 950 : 1500);
         const islGrass = new THREE.InstancedMesh(fa.grassGeo, fa.grassMat, grassMax);
         islGrass.castShadow = false;
         islGrass.receiveShadow = true;
         let placedG = 0;
-        for (let i = 0; i < 1100 && placedG < grassMax; i++) {
+        for (let i = 0; i < 950 && placedG < grassMax; i++) {
           const ang = fRand() * Math.PI * 2;
-          const rad = Math.sqrt(fRand()) * (isl.r * 1.04);
+          const rad = Math.sqrt(fRand()) * (isl.r * 0.88);
           const cx = isl.x + Math.cos(ang) * rad;
           const cz = isl.z + Math.sin(ang) * rad;
           const cy = getTerrainHeight(cx, cz);
-          if (cy <= 1.25 || cy >= 58.0) continue;
+          // Keep sandy beaches (cy <= 1.95m) and high volcanic ash cones grass-free
+          if (cy <= 1.95 || cy >= (isl.isVolcano ? 18.0 : 48.0)) continue;
+          // Natural fBM meadow patchiness so bare soil/sand breathers appear organically
+          const patchVal = fbm2(cx * 0.055 + k * 2.3, cz * 0.055 - k * 1.4, 2);
+          if (patchVal < 0.08) continue;
 
-          const clumpCount = 4 + Math.floor(fRand() * 5);
-          const clumpRad = 0.70 + fRand() * 1.35;
+          const clumpCount = 4 + Math.floor(fRand() * 4);
+          const clumpRad = 0.70 + fRand() * 1.25;
           const baseTone = fbm2(cx * 0.05, cz * 0.05, 2) * 0.5 + 0.5;
           for (let c = 0; c < clumpCount && placedG < grassMax; c++) {
             const rOff = c === 0 ? 0.0 : Math.pow(fRand(), 0.65) * clumpRad;
@@ -8994,14 +9102,19 @@
             const rx = cx + Math.cos(aOff) * rOff;
             const rz = cz + Math.sin(aOff) * rOff;
             const ry = getTerrainHeight(rx, rz);
-            if (ry <= 1.22) continue;
+            if (ry <= 1.90) continue;
             const hx = getTerrainHeight(rx + 0.65, rz);
             const hz = getTerrainHeight(rx, rz + 0.65);
-            if (Math.abs(hx - ry) > 0.85 || Math.abs(hz - ry) > 0.85) continue;
+            const slope = Math.hypot(hx - ry, hz - ry);
+            if (slope > 0.55) continue;
+            // Suppress turf grass under dense tree canopy shade
+            const cAO = sampleIslCanopyAO(rx, rz);
+            if (cAO > 0.35 && fRand() < (cAO - 0.25) * 1.35) continue;
 
             dummy.position.set(rx, ry - 0.03, rz);
-            const wScale = 0.78 + fRand() * 0.68;
-            const hScale = 0.72 + fRand() * 0.98;
+            const shadeHeightMult = Math.max(0.48, 1.0 - cAO * 0.55 - slope * 0.45);
+            const wScale = (0.76 + fRand() * 0.58) * (0.75 + 0.25 * shadeHeightMult);
+            const hScale = (0.68 + fRand() * 0.88) * shadeHeightMult;
             dummy.scale.set(wScale, hScale, wScale);
             dummy.rotation.set((fRand() - 0.5) * 0.22, fRand() * Math.PI * 2, (fRand() - 0.5) * 0.22);
             dummy.updateMatrix();
@@ -9023,28 +9136,38 @@
         scene.add(islGrass);
         props.push({ mesh: islGrass, interactive: false });
 
-        // 2. Lush 7-Frond 3D Tropical Sword Ferns & Bracken Rosettes (360 per island)
-        const fernMax = isl.isSwimSafe ? 190 : 360;
+        // 2. Shade-Gated 7-Frond Sword Ferns (95..165 per island, clustered in tree shade & damp gullies)
+        const fernMax = isl.isVolcano ? 45 : (isl.isSwimSafe ? 95 : 165);
         const islFerns = new THREE.InstancedMesh(fa.fernGeo, fa.fernMat, fernMax);
         islFerns.receiveShadow = true;
         let placedF = 0;
-        for (let i = 0; i < fernMax * 3 && placedF < fernMax; i++) {
-          const ang = fRand() * Math.PI * 2;
-          const rad = Math.pow(fRand(), 0.65) * (isl.r * 0.96);
-          const fx = isl.x + Math.cos(ang) * rad;
-          const fz = isl.z + Math.sin(ang) * rad;
+        for (let i = 0; i < fernMax * 4 && placedF < fernMax; i++) {
+          let fx, fz;
+          if (treeSpecs.length > 0 && i < fernMax * 3) {
+            // 80% of island ferns grow in the shaded understory skirt of trees
+            const tp = treeSpecs[i % treeSpecs.length];
+            const ang = fRand() * Math.PI * 2;
+            const dist = 0.85 + fRand() * (tp.r * 0.78);
+            fx = tp.x + Math.cos(ang) * dist;
+            fz = tp.z + Math.sin(ang) * dist;
+          } else {
+            const ang = fRand() * Math.PI * 2;
+            const rad = Math.pow(fRand(), 0.7) * (isl.r * 0.75);
+            fx = isl.x + Math.cos(ang) * rad;
+            fz = isl.z + Math.sin(ang) * rad;
+          }
           const fy = getTerrainHeight(fx, fz);
-          if (fy > 1.35 && fy < 52.0) {
+          if (fy > 2.0 && fy < 46.0) {
             const hx = getTerrainHeight(fx + 0.8, fz);
             const hz = getTerrainHeight(fx, fz + 0.8);
-            if (Math.hypot(hx - fy, hz - fy) > 1.15) continue;
+            if (Math.hypot(hx - fy, hz - fy) > 0.95) continue;
             dummy.position.set(fx, fy - 0.04, fz);
-            const fs = 0.78 + fRand() * 0.78;
-            dummy.scale.set(fs, fs * (0.84 + fRand() * 0.38), fs);
+            const fs = 0.76 + fRand() * 0.72;
+            dummy.scale.set(fs, fs * (0.84 + fRand() * 0.36), fs);
             dummy.rotation.set((fRand() - 0.5) * 0.22, fRand() * Math.PI * 2, (fRand() - 0.5) * 0.22);
             dummy.updateMatrix();
             islFerns.setMatrixAt(placedF, dummy.matrix);
-            const fShade = 0.78 + fRand() * 0.36;
+            const fShade = 0.78 + fRand() * 0.34;
             tint.setRGB(fShade * 0.90, fShade * 1.04, fShade * 0.82);
             islFerns.setColorAt(placedF, tint);
             placedF++;
@@ -9056,27 +9179,40 @@
         scene.add(islFerns);
         props.push({ mesh: islFerns, interactive: false });
 
-        // 3. Vibrant 5-Petal Tropical Wildflowers on Stems (340 per island)
-        const flowerMax = isl.isSwimSafe ? 180 : 340;
+        // 3. Single-Species Wildflower Colonies in Sunlit Clearings (85..155 per island, grouped by color drift)
+        const flowerMax = isl.isVolcano ? 35 : (isl.isSwimSafe ? 85 : 155);
         const islFlowers = new THREE.InstancedMesh(fa.flowerGeo, fa.flowerMat, flowerMax);
         let placedFl = 0;
-        for (let i = 0; i < flowerMax * 3 && placedFl < flowerMax; i++) {
+        for (let i = 0; i < 90 && placedFl < flowerMax; i++) {
           const ang = fRand() * Math.PI * 2;
-          const rad = Math.sqrt(fRand()) * (isl.r * 0.95);
-          const rx = isl.x + Math.cos(ang) * rad;
-          const rz = isl.z + Math.sin(ang) * rad;
-          const ry = getTerrainHeight(rx, rz);
-          if (ry > 1.45 && ry < 48.0) {
+          const rad = Math.sqrt(fRand()) * (isl.r * 0.80);
+          const cx = isl.x + Math.cos(ang) * rad;
+          const cz = isl.z + Math.sin(ang) * rad;
+          const cy = getTerrainHeight(cx, cz);
+          if (cy <= 2.15 || cy >= 40.0) continue;
+          // Wildflowers require open sunlight (avoid deep tree canopy shade)
+          if (sampleIslCanopyAO(cx, cz) > 0.28) continue;
+          // Pick ONE dominant species color for this entire 2.5m colony drift
+          const colonyColor = fa.flowerPalette[(k * 3 + Math.floor((fbm2(cx * 0.08, cz * 0.08, 2) + 1.0) * 4.5)) % fa.flowerPalette.length];
+          const colonyCount = 5 + Math.floor(fRand() * 7);
+          const colonyRad = 1.2 + fRand() * 1.8;
+          for (let c = 0; c < colonyCount && placedFl < flowerMax; c++) {
+            const rOff = Math.pow(fRand(), 0.7) * colonyRad;
+            const aOff = fRand() * Math.PI * 2;
+            const rx = cx + Math.cos(aOff) * rOff;
+            const rz = cz + Math.sin(aOff) * rOff;
+            const ry = getTerrainHeight(rx, rz);
+            if (ry <= 2.10) continue;
             const hx = getTerrainHeight(rx + 0.65, rz);
             const hz = getTerrainHeight(rx, rz + 0.65);
-            if (Math.abs(hx - ry) > 0.82 || Math.abs(hz - ry) > 0.82) continue;
+            if (Math.hypot(hx - ry, hz - ry) > 0.58) continue;
             dummy.position.set(rx, ry - 0.02, rz);
-            const sc = 0.95 + fRand() * 0.78;
+            const sc = 0.92 + fRand() * 0.68;
             dummy.scale.set(sc, sc, sc);
             dummy.rotation.set((fRand() - 0.5) * 0.18, fRand() * Math.PI * 2, (fRand() - 0.5) * 0.18);
             dummy.updateMatrix();
             islFlowers.setMatrixAt(placedFl, dummy.matrix);
-            islFlowers.setColorAt(placedFl, fa.flowerPalette[Math.floor(fRand() * fa.flowerPalette.length)]);
+            islFlowers.setColorAt(placedFl, colonyColor);
             placedFl++;
           }
         }
@@ -9086,20 +9222,22 @@
         scene.add(islFlowers);
         props.push({ mesh: islFlowers, interactive: false });
 
-        // 4. Coastal Reeds & Littoral Sedges along the Upper Beach & Dune Fringe (160 per island)
-        const reedMax = 160;
+        // 4. Coastal Reeds & Littoral Sedges along Sheltered Marsh/Lagoon Margins (95 per island)
+        const reedMax = 95;
         const islReeds = new THREE.InstancedMesh(fa.reedGeo, fa.reedMat, reedMax);
         islReeds.receiveShadow = true;
         let placedR = 0;
-        for (let i = 0; i < 650 && placedR < reedMax; i++) {
+        for (let i = 0; i < 420 && placedR < reedMax; i++) {
           const ang = fRand() * Math.PI * 2;
-          const rad = isl.r * (0.62 + fRand() * 0.52);
+          // Cluster reeds in 2-3 sheltered cove arcs rather than ringing the entire beach
+          if (Math.sin(ang * 2.0 + k) < 0.15) continue;
+          const rad = isl.r * (0.64 + fRand() * 0.42);
           const rx = isl.x + Math.cos(ang) * rad;
           const rz = isl.z + Math.sin(ang) * rad;
           const ry = getTerrainHeight(rx, rz);
-          if (ry > 0.25 && ry < 2.25) {
+          if (ry > 0.25 && ry < 1.95) {
             dummy.position.set(rx, ry - 0.05, rz);
-            const rs = 0.75 + fRand() * 0.55;
+            const rs = 0.75 + fRand() * 0.52;
             dummy.scale.set(rs, rs * (0.85 + fRand() * 0.35), rs);
             dummy.rotation.set((fRand() - 0.5) * 0.14, fRand() * Math.PI * 2, (fRand() - 0.5) * 0.14);
             dummy.updateMatrix();
@@ -9111,22 +9249,24 @@
         scene.add(islReeds);
         props.push({ mesh: islReeds, interactive: false });
 
-        // 5. Shoreline Pebbles & Woodland Mushroom Trios (140 pebbles + 65 mushroom clusters per island)
-        const pebMax = 140;
+        // 5. Headland Cobble Pebbles & Shaded Tree-Root Mushrooms (55 pebbles + 32 mushroom clusters per island)
+        const pebMax = 55;
         const islPebbles = new THREE.InstancedMesh(fa.pebbleGeo, fa.pebbleMat, pebMax);
         islPebbles.receiveShadow = true;
         let placedP = 0;
-        for (let i = 0; i < 520 && placedP < pebMax; i++) {
+        for (let i = 0; i < 280 && placedP < pebMax; i++) {
           const ang = fRand() * Math.PI * 2;
-          const rad = isl.r * (0.65 + fRand() * 0.55);
+          const rad = isl.r * (0.68 + fRand() * 0.45);
           const rx = isl.x + Math.cos(ang) * rad;
           const rz = isl.z + Math.sin(ang) * rad;
           const ry = getTerrainHeight(rx, rz);
-          if (ry > -0.25 && ry < 1.95) {
-            dummy.position.set(rx, ry + 0.04, rz);
-            const sc = 0.72 + fRand() * 0.62;
-            dummy.scale.set(sc, sc * 0.7, sc * 1.2);
-            dummy.rotation.set(fRand() * 0.4, fRand() * Math.PI * 2, fRand() * 0.4);
+          const slope = Math.hypot(getTerrainHeight(rx + 1.2, rz) - ry, getTerrainHeight(rx, rz + 1.2) - ry);
+          // Only place pebbles near steeper rocky headland transitions, leaving flat sandy beaches clean
+          if (ry > -0.15 && ry < 1.85 && slope > 0.24) {
+            dummy.position.set(rx, ry + 0.03, rz);
+            const sc = 0.68 + fRand() * 0.55;
+            dummy.scale.set(sc, sc * 0.68, sc * 1.15);
+            dummy.rotation.set(fRand() * 0.35, fRand() * Math.PI * 2, fRand() * 0.35);
             dummy.updateMatrix();
             islPebbles.setMatrixAt(placedP++, dummy.matrix);
           }
@@ -9136,25 +9276,27 @@
         scene.add(islPebbles);
         props.push({ mesh: islPebbles, interactive: false });
 
-        const mushMax = 65;
+        const mushMax = 32;
         const islMush = new THREE.InstancedMesh(fa.mushGeo, fa.mushMat, mushMax);
         islMush.castShadow = true;
         islMush.receiveShadow = true;
         let placedM = 0;
-        for (let i = 0; i < 280 && placedM < mushMax; i++) {
+        for (let i = 0; i < 160 && placedM < mushMax && treeSpecs.length > 0; i++) {
+          // Strictly colonize damp tree-root flares
+          const tp = treeSpecs[i % treeSpecs.length];
           const ang = fRand() * Math.PI * 2;
-          const rad = Math.sqrt(fRand()) * (isl.r * 0.82);
-          const mx = isl.x + Math.cos(ang) * rad;
-          const mz = isl.z + Math.sin(ang) * rad;
+          const dist = 0.65 + fRand() * 1.65;
+          const mx = tp.x + Math.cos(ang) * dist;
+          const mz = tp.z + Math.sin(ang) * dist;
           const my = getTerrainHeight(mx, mz);
-          if (my > 1.8 && my < 45.0) {
-            const sc = 0.85 + fRand() * 0.82;
+          if (my > 1.9 && my < 45.0) {
+            const sc = 0.82 + fRand() * 0.75;
             dummy.position.set(mx, my - 0.01, mz);
             dummy.scale.set(sc, sc * (0.85 + fRand() * 0.35), sc);
             dummy.rotation.set((fRand() - 0.5) * 0.16, fRand() * Math.PI * 2, (fRand() - 0.5) * 0.16);
             dummy.updateMatrix();
             islMush.setMatrixAt(placedM, dummy.matrix);
-            islMush.setColorAt(placedM, fa.mushPalette[Math.floor(fRand() * fa.mushPalette.length)]);
+            islMush.setColorAt(placedM, fa.mushPalette[(k + i) % fa.mushPalette.length]);
             placedM++;
           }
         }
@@ -9178,7 +9320,7 @@
           return seed / 4294967296;
         }
 
-        // 1. Dense Multi-Species Canopy EZ-Trees (26..48 per island, synced with baked aCanopyAO humus)
+        // 1. Grove-Clustered Multi-Species Canopy EZ-Trees (synced with baked aCanopyAO humus)
         const needColliders = !colliderRegisteredIslands.has(k);
         if (needColliders) colliderRegisteredIslands.add(k);
         for (let j = 0; j < treeSpecs.length; j++) {
@@ -9192,69 +9334,82 @@
           }
         }
 
-        // 2. Lush Understory Shrubs & Coastal Bushes (16..24 per island)
-        const bushCount = isl.isSwimSafe ? 14 : 22;
+        // 2. Tree-Skirt Understory Shrubs (7..11 per island, anchored around tree bases rather than open meadows)
+        const bushCount = isl.isSwimSafe ? 7 : 11;
         for (let s = 0; s < bushCount; s++) {
-          const ang = cRand() * Math.PI * 2;
-          const rad = isl.r * (0.12 + cRand() * 0.82);
-          const bx = isl.x + Math.cos(ang) * rad;
-          const bz = isl.z + Math.sin(ang) * rad;
+          let bx, bz;
+          if (treeSpecs.length > 0) {
+            const tp = treeSpecs[(s * 3 + k) % treeSpecs.length];
+            const ang = cRand() * Math.PI * 2;
+            const dist = 1.6 + cRand() * 2.4;
+            bx = tp.x + Math.cos(ang) * dist;
+            bz = tp.z + Math.sin(ang) * dist;
+          } else {
+            const ang = cRand() * Math.PI * 2;
+            const rad = isl.r * (0.20 + cRand() * 0.55);
+            bx = isl.x + Math.cos(ang) * rad;
+            bz = isl.z + Math.sin(ang) * rad;
+          }
           const bh = getTerrainHeight(bx, bz);
-          if (bh > 1.25) {
-            const bush = spawnEZBush(bx, bz, 1 + ((k + s) % 3), 0.74 + cRand() * 0.68, false);
+          if (bh > 1.85) {
+            const bush = spawnEZBush(bx, bz, 1 + ((k + s) % 3), 0.72 + cRand() * 0.58, false);
             if (bush) props.push({ mesh: bush, interactive: false });
           }
         }
 
-        // 3. Multi-Scale Sculpted Coastal Basalt/Granite Outcrops, Stepped Slabs & Ridge Boulders (16..24 per island)
-        const rockCount = isl.isSwimSafe ? 16 : 24;
-        for (let b = 0; b < rockCount; b++) {
-          const ang = (b / rockCount) * Math.PI * 2 + cRand() * 0.45;
-          const rad = isl.r * (0.22 + cRand() * 0.84);
+        // 3. Curated Headland & Ridge Outcrop Boulders (5..8 per island, down from 16..24 — keeping landing beaches clear)
+        const rockTarget = isl.isSwimSafe ? 5 : 8;
+        let placedIslBoulders = 0;
+        for (let b = 0; b < rockTarget * 4 && placedIslBoulders < rockTarget; b++) {
+          const ang = (b / (rockTarget * 4)) * Math.PI * 2 + cRand() * 0.35;
+          const rad = isl.r * (0.35 + cRand() * 0.65);
           const rx = isl.x + Math.cos(ang) * rad;
           const rz = isl.z + Math.sin(ang) * rad;
           const rh = getTerrainHeight(rx, rz);
-          if (rh > 0.05) {
+          const slope = Math.hypot(getTerrainHeight(rx + 1.4, rz) - rh, getTerrainHeight(rx, rz + 1.4) - rh);
+          // Only place boulders on steep coastal headlands or high ridge spines (never on flat sandy landing beaches)
+          if (rh > 0.25 && (slope > 0.36 || rh > isl.h * 0.52)) {
             const tier = cRand();
-            const rSize = tier < 0.36 ? (0.68 + cRand() * 0.72) : (tier < 0.78 ? (1.45 + cRand() * 1.35) : (2.85 + cRand() * 1.65));
+            const rSize = tier < 0.45 ? (0.82 + cRand() * 0.68) : (1.55 + cRand() * 1.35);
             let islSeed;
             if (isl.isVolcano || isl.isBasalt) {
-              const vSeeds = [16, 18, 7, 8, 9, 19]; // Columnar Basalt, Obsidian Shard, Tall Basalt Crag, Coastal Tafoni
+              const vSeeds = [16, 18, 7, 8, 9, 19];
               islSeed = vSeeds[(k + b) % vSeeds.length];
             } else if (rh < 2.2) {
-              const cSeeds = [19, 17, 27, 4, 22]; // Wave-Notched Tafoni, Shore Cobble, Dune Ventifact, Shelf Slab, Flat Flagstone
+              const cSeeds = [19, 17, 4, 21];
               islSeed = cSeeds[(k + b) % cSeeds.length];
             } else if (isl.isBamboo) {
-              const bSeeds = [24, 22, 23, 5, 11]; // Mossy Pillow Boulder, Trail Flagstone, Karst Pinnacle, Limestone Slab
+              const bSeeds = [24, 23, 5, 11];
               islSeed = bSeeds[(k + b) % bSeeds.length];
             } else {
-              islSeed = (k * 7 + b) % 28;
+              islSeed = selectLocationRockSeed(rx, rz, rh, k * 7 + b);
             }
             const rock = createGraniteBoulder(rSize, islSeed);
-            rock.position.set(rx, getGroundedTreeY(rx, rz, rSize * 0.72, rSize * 0.28), rz);
-            rock.scale.set(0.86 + cRand() * 0.36, 0.74 + cRand() * 0.48, 0.86 + cRand() * 0.36);
-            rock.rotation.set((cRand() - 0.5) * 0.20, cRand() * Math.PI * 2, (cRand() - 0.5) * 0.20);
-            rock.userData = { type: 'boulder' };
+            rock.position.set(rx, getGroundedTreeY(rx, rz, rSize * 0.72, rSize * 0.35), rz);
+            rock.scale.set(0.86 + cRand() * 0.30, 0.74 + cRand() * 0.40, 0.86 + cRand() * 0.30);
+            rock.rotation.set((cRand() - 0.5) * 0.18, cRand() * Math.PI * 2, (cRand() - 0.5) * 0.18);
+            rock.userData = { type: 'boulder', health: 3 };
             scene.add(rock);
             props.push({ mesh: rock, interactive: true });
             if (window.registerInteractiveTarget) window.registerInteractiveTarget(rock);
+            placedIslBoulders++;
           }
         }
 
-        // 4. Sun-Bleached Shoreline Driftwood & Fallen Forest Logs (6 per island)
+        // 4. Sun-Bleached Shoreline Driftwood & Fallen Nurse Logs (3 per island, down from 6)
         const dwGeo = new THREE.CylinderGeometry(0.16, 0.22, 3.2, 7);
         dwGeo.rotateZ(Math.PI / 2);
-        const driftCount = 6;
+        const driftCount = 3;
         for (let d = 0; d < driftCount; d++) {
           const ang = (d / driftCount) * Math.PI * 2 + cRand() * 0.9;
-          const rad = isl.r * (0.72 + cRand() * 0.38);
+          const rad = isl.r * (0.72 + cRand() * 0.28);
           const dx = isl.x + Math.cos(ang) * rad;
           const dz = isl.z + Math.sin(ang) * rad;
           const dy = getTerrainHeight(dx, dz);
-          if (dy > 0.15 && dy < 3.2) {
+          if (dy > 0.25 && dy < 2.4) {
             const log = new THREE.Mesh(dwGeo, islDriftMat);
-            log.position.set(dx, dy + 0.14, dz);
-            log.rotation.set(0.06, cRand() * Math.PI, (cRand() - 0.5) * 0.12);
+            log.position.set(dx, dy + 0.12, dz);
+            log.rotation.set(0.05, cRand() * Math.PI, (cRand() - 0.5) * 0.10);
             log.receiveShadow = true;
             scene.add(log);
             props.push({ mesh: log, interactive: false, disposableGeo: d === 0 ? dwGeo : null });
@@ -9339,26 +9494,32 @@
           }
         }
       }
+      // Expose fast O(1) spatial canopy-shade sampler for ecological grass, flower, fern & mushroom placement
+      window.sampleCanopyAO = function (wx, wz) {
+        const key = Math.floor(wx / cellSize) + ',' + Math.floor(wz / cellSize);
+        const nearby = buckets.get(key);
+        if (!nearby) return 0.0;
+        let ao = 0.0;
+        for (let j = 0; j < nearby.length; j++) {
+          const fp = nearby[j];
+          const dx = wx - fp.x;
+          const dz = wz - fp.z;
+          const d2 = dx * dx + dz * dz;
+          const r2 = fp.r * fp.r;
+          if (d2 < r2) {
+            const falloff = 1.0 - Math.sqrt(d2) / fp.r;
+            const val = falloff * falloff;
+            if (val > ao) ao = val;
+          }
+        }
+        return ao;
+      };
       const pos = terrainGeo.attributes.position;
       for (let i = 0; i < pos.count; i++) {
         const vx = pos.getX(i);
         const vz = pos.getZ(i);
-        const key = Math.floor(vx / cellSize) + ',' + Math.floor(vz / cellSize);
-        const nearby = buckets.get(key);
-        if (nearby) {
-          let ao = 0.0;
-          for (let j = 0; j < nearby.length; j++) {
-            const fp = nearby[j];
-            const dx = vx - fp.x;
-            const dz = vz - fp.z;
-            const d2 = dx * dx + dz * dz;
-            const r2 = fp.r * fp.r;
-            if (d2 < r2) {
-              const d = Math.sqrt(d2);
-              const falloff = 1.0 - d / fp.r;
-              ao = Math.max(ao, falloff * falloff);
-            }
-          }
+        const ao = window.sampleCanopyAO(vx, vz);
+        if (ao > 0.0) {
           canopyAttr.setX(i, ao);
         }
         if (yieldFn && i > 0 && i % 25000 === 0) await yieldFn();
@@ -9599,8 +9760,8 @@
         );
       };
 
-      // Ultra-Dense Grass Carpet: 130,000 clumps = 780,000 individual thin tapered blades
-      const maxGrassCount = 130000;
+      // Ecologically Zoned Meadow Grass Drifts: 58,000 clumps with positive fBM patch culling & canopy-shade suppression
+      const maxGrassCount = 58000;
       const grassMesh = new THREE.InstancedMesh(grassGeo, grassMat, maxGrassCount);
       grassMesh.castShadow = false;
       grassMesh.receiveShadow = true;
@@ -9622,20 +9783,29 @@
           const cx = minX + pseudoRand() * (maxX - minX);
           const cz = minZ + pseudoRand() * (maxZ - minZ);
 
-          // Skip campfire stone pit, waterfall streambed & upland spring lake
-          if (Math.hypot(cx - (-19.5), cz - 21.5) < 2.2) continue;
+          // Skip campfire stone pit, waterfall streambed & walking trails
+          if (Math.hypot(cx - (-19.5), cz - 21.5) < 2.5) continue;
           if (isInsideWaterfallChannel(cx, cz)) continue;
+          if (getForestTrailMask(cx, cz) > 0.14) continue;
 
-          // Non-grid organic fBM meadow patchiness (zero orthogonal wave bands)
-          const patchVal = fbm2(cx * 0.042 + 7.3, cz * 0.042 - 4.1, 2) * 1.45;
-          if (patchVal < patchThreshold * 0.45) continue;
+          // Positive fBM meadow patchiness so natural bare-soil breathers separate lush grass drifts
+          const patchVal = fbm2(cx * 0.046 + 7.3, cz * 0.046 - 4.1, 2);
+          if (patchVal < patchThreshold) continue;
 
           const cy = sampleTerrainMeshHeight(cx, cz);
-          if (cy <= 1.75 || cy >= 62.0) continue;
+          // Exclude sandy beach zone (< 2.10m) and sub-alpine rock zone (> 52.0m)
+          if (cy <= 2.10 || cy >= 52.0) continue;
+          // Exclude Eastern Karst Limestone Canyon floor & Mount Caldera volcanic ash cone
+          if (cx > 145.0 && cz > -32.0 && cz < 92.0 && cy > 7.5 && cy < 28.0) continue;
+          if (Math.hypot(cx - MOUNT_CALDERA.x, cz - MOUNT_CALDERA.z) < MOUNT_CALDERA.baseR * 0.90 && cy > 22.0) continue;
 
-          // Spawn natural organic clumps (4 to 9 tufts per clump) instead of isolated lattice points
-          const clumpCount = 4 + Math.floor(pseudoRand() * 6);
-          const clumpRadius = 0.75 + pseudoRand() * 1.45;
+          // Canopy-shade suppression (photosynthetically active radiation limit under closed tree crowns)
+          const centerAO = window.sampleCanopyAO ? window.sampleCanopyAO(cx, cz) : 0.0;
+          if (centerAO > 0.30 && pseudoRand() < Math.min(0.88, (centerAO - 0.18) * 1.45)) continue;
+
+          // Spawn natural organic clumps (4 to 8 tufts per clump)
+          const clumpCount = 4 + Math.floor(pseudoRand() * 5);
+          const clumpRadius = 0.72 + pseudoRand() * 1.35;
           const baseTone = (fbm2(cx * 0.05, cz * 0.05, 2) * 0.5 + 0.5);
 
           for (let c = 0; c < clumpCount && placedGrass < targetTotal; c++) {
@@ -9644,19 +9814,28 @@
             const rx = cx + Math.cos(ang) * rad;
             const rz = cz + Math.sin(ang) * rad;
 
-            if (Math.hypot(rx - (-19.5), rz - 21.5) < 2.0) continue;
+            if (Math.hypot(rx - (-19.5), rz - 21.5) < 2.2) continue;
             if (isInsideWaterfallChannel(rx, rz)) continue;
+            if (getForestTrailMask(rx, rz) > 0.14) continue;
 
             const ry = sampleTerrainMeshHeight(rx, rz);
-            if (ry <= 1.75 || ry >= 62.0) continue;
+            if (ry <= 2.10 || ry >= 52.0) continue;
+            if (rx > 145.0 && rz > -32.0 && rz < 92.0 && ry > 7.5 && ry < 28.0) continue;
+            if (Math.hypot(rx - MOUNT_CALDERA.x, rz - MOUNT_CALDERA.z) < MOUNT_CALDERA.baseR * 0.90 && ry > 22.0) continue;
 
             const hx = sampleTerrainMeshHeight(rx + 0.65, rz);
             const hz = sampleTerrainMeshHeight(rx, rz + 0.65);
-            if (Math.abs(hx - ry) > 0.78 || Math.abs(hz - ry) > 0.78) continue;
+            const slope = Math.hypot(hx - ry, hz - ry);
+            // Exclude steep cliff faces where topsoil cannot accumulate
+            if (slope > 0.52) continue;
+
+            const cAO = window.sampleCanopyAO ? window.sampleCanopyAO(rx, rz) : centerAO;
+            if (cAO > 0.34 && pseudoRand() < Math.min(0.88, (cAO - 0.20) * 1.45)) continue;
 
             dummy.position.set(rx, ry - 0.03, rz);
-            const wScale = 0.75 + pseudoRand() * 0.65;
-            const hScale = 0.68 + pseudoRand() * 0.98;
+            const wScale = 0.74 + pseudoRand() * 0.62;
+            const shadeHeightFactor = Math.max(0.45, 1.0 - cAO * 0.55 - slope * 0.42);
+            const hScale = (0.66 + pseudoRand() * 0.94) * shadeHeightFactor;
             dummy.scale.set(wScale, hScale, wScale);
             dummy.rotation.set(
               (pseudoRand() - 0.5) * 0.22,
@@ -9678,33 +9857,32 @@
         }
       }
 
-      // Zone 0: Continuous lush clumped turf around Coral Overlook & Southern Terrace (42,000 clumps)
-      await tryScatterGrassZone(42000, -60, 24, -10, 68, 35000, -1.12);
+      // Zone 0: Sunlit meadow drifts on Coral Overlook & Southern Terrace (18,000 clumps)
+      await tryScatterGrassZone(18000, -60, 24, -10, 68, 22000, 0.14);
       if (yieldFn) await yieldFn();
-      // Zone 1: Surrounding Estuary Banks & East/West Terraced Headlands (48,000 -> 90,000)
-      await tryScatterGrassZone(90000, -170, 160, -70, 150, 42000, -0.82);
+      // Zone 1: Surrounding Estuary Meadows & East/West Terraced Headlands (18,000 -> 38,000)
+      await tryScatterGrassZone(38000, -170, 160, -70, 150, 28000, 0.18);
       if (yieldFn) await yieldFn();
-      // Zone 2: Dense Clumped Tropical Grass directly centered on each of the 5 Close Starter Islets (k = 0..4)
+      // Zone 2: Patchy Coastal Turf on each of the 5 Close Starter Islets (k = 0..4)
       for (let sIdx = 0; sIdx < Math.min(5, archipelagoIslets.length); sIdx++) {
         const sIsl = archipelagoIslets[sIdx];
-        const targetAfter = Math.min(115000, placedGrass + 4600);
-        await tryScatterGrassZone(targetAfter, sIsl.x - sIsl.r * 1.15, sIsl.x + sIsl.r * 1.15, sIsl.z - sIsl.r * 1.15, sIsl.z + sIsl.r * 1.15, 7500, -1.15);
+        const targetAfter = Math.min(46000, placedGrass + 1500);
+        await tryScatterGrassZone(targetAfter, sIsl.x - sIsl.r * 1.15, sIsl.x + sIsl.r * 1.15, sIsl.z - sIsl.r * 1.15, sIsl.z + sIsl.r * 1.15, 4200, 0.16);
       }
       if (yieldFn) await yieldFn();
-      // Zone 3: Broad 1200m Island Meadows, Canyons & Coastal Ridges
-      await tryScatterGrassZone(maxGrassCount, -410, 410, -320, 390, 46000, -0.58);
+      // Zone 3: Broad 1200m Island Meadows & Sunlit Valley Clearings
+      await tryScatterGrassZone(maxGrassCount, -410, 410, -320, 390, 32000, 0.22);
       if (yieldFn) await yieldFn();
 
       window.maxGrassCount = placedGrass;
-      // Default Balanced tier renders 95,000 clumps (570,000 thin tapered blades)
-      grassMesh.count = Math.min(placedGrass, 95000);
+      grassMesh.count = Math.min(placedGrass, 52000);
       grassMesh.instanceMatrix.needsUpdate = true;
       if (grassMesh.instanceColor) grassMesh.instanceColor.needsUpdate = true;
       scene.add(grassMesh);
       window.instancedGrass = grassMesh;
 
 
-      // 2. Wildflowers Instanced Mesh (6,500 Vibrant Tropical 5-Petal Blossoms on Stems)
+      // 2. Wildflowers Instanced Mesh (3,800 Single-Species Botanical Colonies in Sunlit Meadows)
       const fPos = [];
       const fNorm = [];
       const fCol = [];
@@ -9750,7 +9928,7 @@
       flowerGeo.setAttribute('color', new THREE.Float32BufferAttribute(fCol, 3));
       flowerGeo.setIndex(fIdx);
 
-      const flowerCount = 8500;
+      const flowerCount = 3800;
       const flowerMat = new THREE.MeshStandardMaterial({
         vertexColors: true,
         roughness: 0.48,
@@ -9788,35 +9966,56 @@
       let placedFlowers = 0;
       async function tryScatterFlowers(targetTotal, minX, maxX, minZ, maxZ, maxAttempts) {
         for (let i = 0; i < maxAttempts && placedFlowers < targetTotal; i++) {
-          if (yieldFn && i > 0 && i % 1500 === 0) await yieldFn();
-          const rx = minX + pseudoRand() * (maxX - minX);
-          const rz = minZ + pseudoRand() * (maxZ - minZ);
-          if (Math.hypot(rx - (-19.5), rz - 21.5) < 2.2) continue;
-          if (isInsideWaterfallChannel(rx, rz)) continue;
-          const ry = sampleTerrainMeshHeight(rx, rz);
-          if (ry > 1.85 && ry < 54.0) {
+          if (yieldFn && i > 0 && i % 800 === 0) await yieldFn();
+          const cx = minX + pseudoRand() * (maxX - minX);
+          const cz = minZ + pseudoRand() * (maxZ - minZ);
+          if (Math.hypot(cx - (-19.5), cz - 21.5) < 2.5) continue;
+          if (isInsideWaterfallChannel(cx, cz)) continue;
+          if (getForestTrailMask(cx, cz) > 0.14) continue;
+          const cy = sampleTerrainMeshHeight(cx, cz);
+          if (cy <= 2.20 || cy >= 44.0) continue;
+          if (cx > 145.0 && cz > -32.0 && cz < 92.0 && cy > 7.5 && cy < 28.0) continue;
+          if (Math.hypot(cx - MOUNT_CALDERA.x, cz - MOUNT_CALDERA.z) < MOUNT_CALDERA.baseR * 0.90 && cy > 20.0) continue;
+
+          // Wildflowers require sunlit meadows or forest-edge ecotones (low canopy shade)
+          const cAO = window.sampleCanopyAO ? window.sampleCanopyAO(cx, cz) : 0.0;
+          if (cAO > 0.28) continue;
+          if (fbm2(cx * 0.052 + 3.4, cz * 0.052 - 2.8, 2) < 0.24) continue;
+
+          // Cohesive single-species botanical colony (6 to 12 blossoms of the SAME species color)
+          const colonyColor = flowerPalette[Math.floor(pseudoRand() * flowerPalette.length)];
+          const colonyCount = 6 + Math.floor(pseudoRand() * 7);
+          const colonyRadius = 1.35 + pseudoRand() * 2.25;
+          for (let c = 0; c < colonyCount && placedFlowers < targetTotal; c++) {
+            const rad = (c === 0) ? 0.0 : Math.pow(pseudoRand(), 0.70) * colonyRadius;
+            const ang = pseudoRand() * Math.PI * 2;
+            const rx = cx + Math.cos(ang) * rad;
+            const rz = cz + Math.sin(ang) * rad;
+            if (isInsideWaterfallChannel(rx, rz) || getForestTrailMask(rx, rz) > 0.14) continue;
+            const ry = sampleTerrainMeshHeight(rx, rz);
+            if (ry <= 2.20 || ry >= 44.0) continue;
             const hx = sampleTerrainMeshHeight(rx + 0.65, rz);
             const hz = sampleTerrainMeshHeight(rx, rz + 0.65);
-            if (Math.abs(hx - ry) > 0.78 || Math.abs(hz - ry) > 0.78) continue;
+            if (Math.hypot(hx - ry, hz - ry) > 0.50) continue;
             dummy.position.set(rx, ry - 0.02, rz);
-            const sc = 0.95 + pseudoRand() * 0.75;
+            const sc = 0.92 + pseudoRand() * 0.72;
             dummy.scale.set(sc, sc, sc);
             dummy.rotation.set((pseudoRand() - 0.5) * 0.18, pseudoRand() * Math.PI * 2, (pseudoRand() - 0.5) * 0.18);
             dummy.updateMatrix();
             flowerMesh.setMatrixAt(placedFlowers, dummy.matrix);
-            flowerMesh.setColorAt(placedFlowers, flowerPalette[Math.floor(pseudoRand() * flowerPalette.length)]);
+            flowerMesh.setColorAt(placedFlowers, colonyColor);
             placedFlowers++;
           }
         }
       }
-      // Dense tropical wildflower fields on Coral Overlook, Headlands, 5 Starter Islets, Windward Valley & 1200m Outer Ridges
-      await tryScatterFlowers(2200, -55, 22, -10, 62, 10000);
-      await tryScatterFlowers(4500, -160, 150, -65, 140, 12000);
+      // Cohesive single-species wildflower colonies in sunlit meadows & forest edges
+      await tryScatterFlowers(1100, -55, 22, -10, 62, 3200);
+      await tryScatterFlowers(2300, -160, 150, -65, 140, 4800);
       for (let sIdx = 0; sIdx < Math.min(5, archipelagoIslets.length); sIdx++) {
         const sIsl = archipelagoIslets[sIdx];
-        await tryScatterFlowers(Math.min(6200, placedFlowers + 340), sIsl.x - sIsl.r, sIsl.x + sIsl.r, sIsl.z - sIsl.r, sIsl.z + sIsl.r, 2400);
+        await tryScatterFlowers(Math.min(2850, placedFlowers + 110), sIsl.x - sIsl.r, sIsl.x + sIsl.r, sIsl.z - sIsl.r, sIsl.z + sIsl.r, 900);
       }
-      await tryScatterFlowers(flowerCount, -330, 340, -220, 360, 16000);
+      await tryScatterFlowers(flowerCount, -330, 340, -220, 360, 6500);
       if (yieldFn) await yieldFn();
 
       flowerMesh.count = placedFlowers;
@@ -9825,8 +10024,8 @@
       scene.add(flowerMesh);
       window.instancedFlowers = flowerMesh;
 
-      // 3. Coral Shoreline, River & Valley Pond Pebbles Instanced Mesh (750 Love-Rocks Sculpted Stones)
-      const pebbleCount = 750;
+      // 3. Fluvial Point-Bar & Lake Spillway Gravel Pebbles (220 water-sorted stones, zero open-beach clutter)
+      const pebbleCount = 220;
       const pebbleGeo = buildLoveRockGeometry(0.14, 1, 3);
       pebbleGeo.scale(1.25, 0.58, 1.05);
       const pebbleMat = applyAAARockShader(new THREE.MeshStandardMaterial({
@@ -9838,40 +10037,36 @@
       pebbleMesh.receiveShadow = true;
 
       let placedPebbles = 0;
-      for (let i = 0; i < 4200 && placedPebbles < 520; i++) {
-        const rz = -50 + pseudoRand() * 185;
+      // River estuary inner point-bars & gravel shoals only
+      for (let i = 0; i < 1800 && placedPebbles < 150; i++) {
+        const rz = -35 + pseudoRand() * 165;
         const riverCenter = getEstuaryCenter(rz);
-        const rx = riverCenter + (pseudoRand() - 0.5) * 44;
+        const side = pseudoRand() > 0.5 ? 1 : -1;
+        const rx = riverCenter + side * (8.5 + pseudoRand() * 7.5);
         const ry = sampleTerrainMeshHeight(rx, rz);
-        if (ry > -0.2 && ry < 2.2) {
-          dummy.position.set(rx, ry + 0.04, rz);
-          const sc = 0.7 + pseudoRand() * 0.55;
-          dummy.scale.set(sc, sc * 0.7, sc * 1.2);
-          dummy.rotation.set(pseudoRand() * 0.4, pseudoRand() * Math.PI * 2, pseudoRand() * 0.4);
+        if (ry > -0.15 && ry < 0.85) {
+          dummy.position.set(rx, ry + 0.03, rz);
+          const sc = 0.65 + pseudoRand() * 0.50;
+          dummy.scale.set(sc, sc * 0.68, sc * 1.18);
+          dummy.rotation.set(pseudoRand() * 0.35, pseudoRand() * Math.PI * 2, pseudoRand() * 0.35);
           dummy.updateMatrix();
           pebbleMesh.setMatrixAt(placedPebbles, dummy.matrix);
           placedPebbles++;
         }
       }
-      // Valley Pond & SW Sheltered Cove pebbles
-      for (let i = 0; i < 1600 && placedPebbles < pebbleCount; i++) {
-        let rx, rz;
-        if (i < 800) {
-          const ang = pseudoRand() * Math.PI * 2;
-          const j = 0.88 + pseudoRand() * 0.20;
-          const pt = sampleLakeShorePt(VALLEY_POND, ang, j);
-          rx = pt.x;
-          rz = pt.z;
-        } else {
-          rx = -315 + pseudoRand() * 55;
-          rz = 195 + pseudoRand() * 58;
-        }
+      // Valley Pond spillway gravel bar only
+      for (let i = 0; i < 900 && placedPebbles < pebbleCount; i++) {
+        const ang = VALLEY_POND.spillAng + (pseudoRand() - 0.5) * 0.55;
+        const j = 0.90 + pseudoRand() * 0.14;
+        const pt = sampleLakeShorePt(VALLEY_POND, ang, j);
+        const rx = pt.x;
+        const rz = pt.z;
         const ry = sampleTerrainMeshHeight(rx, rz);
-        if (ry > -0.4 && ry < VALLEY_POND.waterY + 1.1) {
-          dummy.position.set(rx, ry + 0.04, rz);
-          const sc = 0.75 + pseudoRand() * 0.65;
-          dummy.scale.set(sc, sc * 0.7, sc * 1.2);
-          dummy.rotation.set(pseudoRand() * 0.4, pseudoRand() * Math.PI * 2, pseudoRand() * 0.4);
+        if (ry > VALLEY_POND.waterY - 0.35 && ry < VALLEY_POND.waterY + 0.65) {
+          dummy.position.set(rx, ry + 0.03, rz);
+          const sc = 0.68 + pseudoRand() * 0.55;
+          dummy.scale.set(sc, sc * 0.68, sc * 1.18);
+          dummy.rotation.set(pseudoRand() * 0.35, pseudoRand() * Math.PI * 2, pseudoRand() * 0.35);
           dummy.updateMatrix();
           pebbleMesh.setMatrixAt(placedPebbles, dummy.matrix);
           placedPebbles++;
@@ -9882,7 +10077,7 @@
       scene.add(pebbleMesh);
       window.instancedPebbles = pebbleMesh;
 
-      // 4. Coastal Reeds & River Sedges Instanced Mesh (750 tall reeds along estuary banks & hilltop lake shore)
+      // 4. Coastal Reeds & River Sedges Instanced Mesh (980 tall reeds along sheltered estuary & lake banks)
       const reedPos = [];
       const reedNorm = [];
       const reedCol = [];
@@ -9948,7 +10143,7 @@
             vec4 instWorldOrigin = modelMatrix * vec4(position, 1.0);
             float wPhase = position.x * 0.22 + uGrassTime * 2.1;
           #endif
-          float tipWeight = clamp(position.y / 1.15, 0.0, 1.0);
+          float tipWeight = clamp(position.y / 1.15, 0.0, 1.1);
           tipWeight = tipWeight * tipWeight;
           float gust = (sin(wPhase) * 0.14 + sin(wPhase * 2.3 + 0.7) * 0.05) * uGrassWind;
           transformed.x += gust * tipWeight;
@@ -9974,25 +10169,25 @@
         );
       };
 
-      const reedMax = 1200;
+      const reedMax = 980;
       const reedMesh = new THREE.InstancedMesh(reedGeo, reedMat, reedMax);
       reedMesh.receiveShadow = true;
       let placedReeds = 0;
 
-      // Scatter reed tufts along Estuary banks (580 clusters)
-      for (let i = 0; i < 4200 && placedReeds < 580; i++) {
+      // Scatter reed tufts along sheltered Estuary banks (460 clusters)
+      for (let i = 0; i < 3400 && placedReeds < 460; i++) {
         const rz = -42 + pseudoRand() * 175;
         const center = getEstuaryCenter(rz);
         const side = pseudoRand() > 0.5 ? 1 : -1;
-        const rx = center + side * (12.0 + pseudoRand() * 24.0);
+        const rx = center + side * (12.0 + pseudoRand() * 22.0);
         const ry = sampleTerrainMeshHeight(rx, rz);
-        if (ry > 0.02 && ry < 1.25) {
+        if (ry > 0.02 && ry < 1.15) {
           const clumps = 2 + Math.floor(pseudoRand() * 4);
-          for (let c = 0; c < clumps && placedReeds < 580; c++) {
+          for (let c = 0; c < clumps && placedReeds < 460; c++) {
             const jx = rx + (pseudoRand() - 0.5) * 1.6;
             const jz = rz + (pseudoRand() - 0.5) * 1.6;
             const jy = sampleTerrainMeshHeight(jx, jz);
-            if (jy > -0.05 && jy < 1.30) {
+            if (jy > -0.05 && jy < 1.20) {
               dummy.position.set(jx, jy - 0.05, jz);
               const rs = 0.78 + pseudoRand() * 0.55;
               dummy.scale.set(rs, rs * (0.85 + pseudoRand() * 0.35), rs);
@@ -10005,10 +10200,9 @@
       }
       // Scatter lakeside sedges in sheltered multi-lobe coves around Cliff-Top Tarn, Grand Headwaters Tarn & Windward Lagoon
       const lakeListForReeds = [UPLAND_LAKE, HEADWATERS_LAKE, VALLEY_POND];
-      for (let i = 0; i < 2800 && placedReeds < 920; i++) {
+      for (let i = 0; i < 2400 && placedReeds < 760; i++) {
         const lk = lakeListForReeds[i % 3];
         const ang = pseudoRand() * Math.PI * 2;
-        // Exclude fast-flowing spillway throats and rocky headlands; cluster in sheltered coves
         const dSpill = Math.abs(Math.atan2(Math.sin(ang - lk.spillAng), Math.cos(ang - lk.spillAng)));
         if (dSpill < 0.45) continue;
         const covePatch = Math.sin(ang * 3.0 + lk.p2) + Math.cos(ang * 5.0 - lk.p3);
@@ -10029,9 +10223,9 @@
           reedMesh.setMatrixAt(placedReeds++, dummy.matrix);
         }
       }
-      // Scatter reeds along the Inland Winding Valley River & Winding Streams (up to 1200)
+      // Scatter reeds along the Inland Winding Valley River (up to 980)
       const riverPts = (INLAND_RIVER_CACHE && INLAND_RIVER_CACHE.pts) ? INLAND_RIVER_CACHE.pts : [];
-      for (let i = 0; i < 1200 && placedReeds < reedMax && riverPts.length > 0; i++) {
+      for (let i = 0; i < 1100 && placedReeds < reedMax && riverPts.length > 0; i++) {
         const pt = riverPts[Math.floor(pseudoRand() * riverPts.length)];
         const side = pseudoRand() > 0.5 ? 1 : -1;
         const off = ((pt.w || 6.0) * 0.82) + pseudoRand() * 3.8;
@@ -10055,7 +10249,7 @@
       window.instancedReeds = reedMesh;
       if (yieldFn) await yieldFn();
 
-      // 5. Lush 3D Tropical Sword Ferns & Gorge Bracken Rosettes (1,350 multi-frond understory clusters)
+      // 5. Lush 3D Tropical Sword Ferns & Gorge Bracken Rosettes (1,450 multi-frond clusters gated strictly to canopy shade & gorge mist)
       const fernPos = [];
       const fernNorm = [];
       const fernCol = [];
@@ -10080,7 +10274,6 @@
           fernNorm.push(nx / l, ny / l, nz / l);
           fernCol.push(col[0], col[1], col[2]);
         }
-        // 7-vertex arching diamond-tapered fern frond
         pushFV(0.03,        0.02,         -w1 * 0.4, fRootCol);
         pushFV(0.03,        0.02,          w1 * 0.4, fRootCol);
         pushFV(fLen * 0.38, fArch * 0.78, -w2,       fMidCol);
@@ -10155,23 +10348,23 @@
         );
       };
 
-      const fernMax = 2600;
+      const fernMax = 1450;
       const fernMesh = new THREE.InstancedMesh(fernGeo, fernMat, fernMax);
       fernMesh.receiveShadow = true;
       let placedFerns = 0;
 
-      // A: Dense damp bracken & sword ferns lining both rims of the Waterfall Gorge & Plunge Pool (480 clusters)
-      for (let i = 0; i < 3600 && placedFerns < 480; i++) {
+      // A: Damp bracken & sword ferns lining the mist-sprayed rims of the Waterfall Gorge & Plunge Pool (320 clusters)
+      for (let i = 0; i < 2400 && placedFerns < 320; i++) {
         const fx = 18.0 + pseudoRand() * 78.0;
         const wfZ = getWaterfallCenterZ(fx);
         const side = pseudoRand() > 0.5 ? 1.0 : -1.0;
-        const fz = wfZ + side * (5.2 + pseudoRand() * 11.5);
+        const fz = wfZ + side * (5.2 + pseudoRand() * 10.5);
         if (isInsideWaterfallChannel(fx, fz)) continue;
         const fy = sampleTerrainMeshHeight(fx, fz);
         if (fy > 0.8 && fy < 38.0) {
           const hx = sampleTerrainMeshHeight(fx + 0.8, fz);
           const hz = sampleTerrainMeshHeight(fx, fz + 0.8);
-          if (Math.hypot(hx - fy, hz - fy) > 1.15) continue;
+          if (Math.hypot(hx - fy, hz - fy) > 1.05) continue;
           dummy.position.set(fx, fy - 0.04, fz);
           const fs = 0.76 + pseudoRand() * 0.68;
           dummy.scale.set(fs, fs * (0.85 + pseudoRand() * 0.35), fs);
@@ -10185,32 +10378,31 @@
         }
       }
 
-      // B: Thick Multi-Strata Rainforest Understory Ferns & Stream-Bank Bracken (up to 2,600)
-      for (let i = 0; i < 12000 && placedFerns < fernMax; i++) {
+      // B: Shaded Forest Understory Ferns strictly under tree crowns (canopyAO > 0.22) or within tree root skirts (up to 1,450)
+      for (let i = 0; i < 9500 && placedFerns < fernMax; i++) {
         if (yieldFn && i > 0 && i % 2500 === 0) await yieldFn();
         let fx, fz;
-        if (i < 5800 && treeFootprints.length > 0) {
+        if (i < 6400 && treeFootprints.length > 0) {
           const fp = treeFootprints[Math.floor(pseudoRand() * treeFootprints.length)];
           const ang = pseudoRand() * Math.PI * 2;
-          const dist = 0.85 + pseudoRand() * (fp.r * 0.90);
+          const dist = 0.80 + pseudoRand() * (fp.r * 0.88);
           fx = fp.x + Math.cos(ang) * dist;
           fz = fp.z + Math.sin(ang) * dist;
-        } else if (i < 8800) {
-          // Dense Elderwood Rainforest floor sweep (-32..-245, -20..168)
+        } else {
+          // Shaded Elderwood Rainforest floor sweep (-32..-245, -20..168)
           fx = -32.0 - pseudoRand() * 213.0;
           fz = -20.0 + pseudoRand() * 188.0;
-        } else {
-          fx = -315 + pseudoRand() * 640;
-          fz = -210 + pseudoRand() * 565;
+          const cAO = window.sampleCanopyAO ? window.sampleCanopyAO(fx, fz) : 0.0;
+          if (cAO < 0.24) continue;
         }
         if (Math.hypot(fx - (-19.5), fz - 21.5) < 2.6) continue;
-        if (getForestTrailMask(fx, fz) > 0.42) continue;
+        if (getForestTrailMask(fx, fz) > 0.18) continue;
         if (isInsideWaterfallChannel(fx, fz)) continue;
         const fy = sampleTerrainMeshHeight(fx, fz);
-        if (fy > 1.8 && fy < 58.0) {
+        if (fy > 2.0 && fy < 54.0) {
           const hx = sampleTerrainMeshHeight(fx + 0.8, fz);
           const hz = sampleTerrainMeshHeight(fx, fz + 0.8);
-          if (Math.hypot(hx - fy, hz - fy) > 1.05) continue;
+          if (Math.hypot(hx - fy, hz - fy) > 0.95) continue;
           dummy.position.set(fx, fy - 0.04, fz);
           const fs = 0.78 + pseudoRand() * 0.78;
           dummy.scale.set(fs, fs * (0.82 + pseudoRand() * 0.40), fs);
@@ -10230,7 +10422,7 @@
       window.instancedFerns = fernMesh;
       if (yieldFn) await yieldFn();
 
-      // 6. 3D Woodland Mushroom Clusters (580 instanced 3-stem mushroom trios across expanded Elderwood Forest & damp gorge)
+      // 6. 3D Woodland Mushroom Clusters (420 instanced 3-stem trios strictly at tree root flares & deep shaded forest floor)
       const mushPos = [];
       const mushNorm = [];
       const mushCol = [];
@@ -10243,7 +10435,6 @@
       let mVertOffset = 0;
       const segs = 8;
       trioSpecs.forEach(sp => {
-        // Stem cylinder (2 rings of 8 vertices)
         for (let ring = 0; ring <= 1; ring++) {
           const t = ring;
           const y = t * sp.h;
@@ -10255,7 +10446,6 @@
             const nx = Math.cos(a), nz = Math.sin(a);
             mushPos.push(cx + nx * rad, y, cz + nz * rad);
             mushNorm.push(nx, 0.1, nz);
-            // Warm cream-ivory stalk color
             mushCol.push(0.92, 0.88, 0.78);
           }
         }
@@ -10267,14 +10457,13 @@
         }
         mVertOffset += segs * 2;
 
-        // Dome cap (center apex + mid ring + rim ring)
         const topX = sp.ox + sp.leanX;
         const topY = sp.h + sp.rCap * 0.48;
         const topZ = sp.oz + sp.leanZ;
         const apexIdx = mVertOffset++;
         mushPos.push(topX, topY, topZ);
         mushNorm.push(0, 1, 0);
-        mushCol.push(1.0, 0.96, 0.92); // Bright cap crown highlight
+        mushCol.push(1.0, 0.96, 0.92);
 
         for (let ring = 0; ring <= 1; ring++) {
           const rScale = ring === 0 ? 0.62 : 1.0;
@@ -10285,9 +10474,9 @@
             mushPos.push(topX + nx * sp.rCap * rScale, sp.h + yOff, topZ + nz * sp.rCap * rScale);
             mushNorm.push(nx * 0.55, 0.83, nz * 0.55);
             if (ring === 0 && (s % 2 === 0)) {
-              mushCol.push(1.0, 0.98, 0.92); // Cream Amanita spot highlight
+              mushCol.push(1.0, 0.98, 0.92);
             } else {
-              mushCol.push(0.95, 0.45, 0.32); // Rich cap base (tinted by instanceColor)
+              mushCol.push(0.95, 0.45, 0.32);
             }
           }
         }
@@ -10314,7 +10503,7 @@
         metalness: 0.02,
         side: THREE.DoubleSide
       });
-      const mushMax = 580;
+      const mushMax = 420;
       const mushMesh = new THREE.InstancedMesh(mushGeo, mushMat, mushMax);
       mushMesh.castShadow = true;
       mushMesh.receiveShadow = true;
@@ -10325,24 +10514,23 @@
         new THREE.Color(0xe85d35)  // Copper Cap
       ];
       let placedMush = 0;
-      for (let i = 0; i < 3600 && placedMush < mushMax; i++) {
+      for (let i = 0; i < 3200 && placedMush < mushMax; i++) {
         let mx, mz;
-        if (i < 2200) {
-          // Concentrate across the full Ancient Elderwood Rainforest & Sanctuary glade
-          mx = -232.0 + pseudoRand() * 198.0;
-          mz = -14.0 + pseudoRand() * 170.0;
-        } else if (treeFootprints.length > 0) {
+        if (treeFootprints.length > 0 && i < 2400) {
           const fp = treeFootprints[Math.floor(pseudoRand() * treeFootprints.length)];
           const ang = pseudoRand() * Math.PI * 2;
-          const dist = 0.75 + pseudoRand() * 2.1;
+          const dist = 0.65 + pseudoRand() * 1.95;
           mx = fp.x + Math.cos(ang) * dist;
           mz = fp.z + Math.sin(ang) * dist;
         } else {
-          continue;
+          mx = -232.0 + pseudoRand() * 198.0;
+          mz = -14.0 + pseudoRand() * 170.0;
+          const cAO = window.sampleCanopyAO ? window.sampleCanopyAO(mx, mz) : 0.0;
+          if (cAO < 0.30) continue;
         }
-        if (isInsideWaterfallChannel(mx, mz)) continue;
+        if (isInsideWaterfallChannel(mx, mz) || getForestTrailMask(mx, mz) > 0.16) continue;
         const my = sampleTerrainMeshHeight(mx, mz);
-        if (my > 1.8 && my < 54.0) {
+        if (my > 2.0 && my < 54.0) {
           const sc = 0.85 + pseudoRand() * 0.85;
           dummy.position.set(mx, my - 0.01, mz);
           dummy.scale.set(sc, sc * (0.85 + pseudoRand() * 0.35), sc);
@@ -10373,7 +10561,7 @@
       }
     }
 
-    // --- GEOLOGICAL SHORELINE & CLIFF-TOE DRESSING (SMOOTH ROUNDED BASALT & SUBMERGED REEF SHELVES) ---
+    // --- GEOMORPHOLOGICAL ROCK & DEADWOOD FORMATION PLACEMENT (PARENT-CLIFF TALUS APRONS, HEADLANDS & FLUVIAL RIFFLES) ---
     async function initInstancedGeologicalDetails(yieldFn) {
       const dummy = new THREE.Object3D();
       const tint = new THREE.Color();
@@ -10385,7 +10573,23 @@
         return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
       }
 
-      // 1. Love-Rocks Multi-Scale Coastal Honeycomb Tafoni, Wave-Notched Shore Stones & Cliff-Toe Slabs (1,050 instances)
+      // Geomorphological Parent-Feature Filter: checks local slope + uphill parent cliff within 8m..15m
+      function analyzeRockFormationSite(rx, rz, ry) {
+        const hx = sampleTerrainMeshHeight(rx + 1.2, rz);
+        const hz = sampleTerrainMeshHeight(rx, rz + 1.2);
+        const slopeMag = Math.hypot(hx - ry, hz - ry);
+        let maxUpslope = 0.0;
+        const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1], [0.7, 0.7], [-0.7, 0.7], [0.7, -0.7], [-0.7, -0.7]];
+        for (let d = 0; d < 8; d++) {
+          const dh8 = sampleTerrainMeshHeight(rx + dirs[d][0] * 8.0, rz + dirs[d][1] * 8.0) - ry;
+          const dh15 = sampleTerrainMeshHeight(rx + dirs[d][0] * 15.0, rz + dirs[d][1] * 15.0) - ry;
+          if (dh8 > maxUpslope) maxUpslope = dh8;
+          if (dh15 > maxUpslope) maxUpslope = dh15;
+        }
+        return { slopeMag, maxUpslope };
+      }
+
+      // 1. Love-Rocks Coastal Headland Tafoni & Cliff-Toe Talus Apron Stones (260 curated instances, down from 1,050)
       const talusGeo = buildLoveRockGeometry(1.0, 2, 19);         // Coastal Honeycomb Tafoni & Wave-Notched Rock
       const streamRockGeo = buildLoveRockGeometry(1.0, 2, 17);    // Smooth Water-Worn River & Cascade Cobble
       const forestBoulderGeo = buildLoveRockGeometry(1.0, 2, 24); // Mossy Forest Pillow Hummock Boulder
@@ -10395,40 +10599,39 @@
         roughness: 0.84,
         metalness: 0.05
       }));
-      const talusCount = 1050;
+      const talusCount = 260;
       const talusMesh = new THREE.InstancedMesh(talusGeo, talusMat, talusCount);
       talusMesh.castShadow = true;
       talusMesh.receiveShadow = true;
 
       let placedTalus = 0;
-      for (let i = 0; i < 28000 && placedTalus < talusCount; i++) {
-        if (yieldFn && i > 0 && i % 4500 === 0) await yieldFn();
+      for (let i = 0; i < 16000 && placedTalus < talusCount; i++) {
+        if (yieldFn && i > 0 && i % 4000 === 0) await yieldFn();
         const rx = -335 + geoRand() * 670;
         const rz = -250 + geoRand() * 615;
-        if (Math.hypot(rx - (-22), rz - 24) < 9.0) continue;
+        if (Math.hypot(rx - (-22), rz - 24) < 11.0) continue;
         if (isInsideWaterfallChannel(rx, rz)) continue;
+        if (getForestTrailMask(rx, rz) > 0.16) continue;
         const ry = sampleTerrainMeshHeight(rx, rz);
         if (ry < -0.10 || ry > 36.0) continue;
 
-        const hx = sampleTerrainMeshHeight(rx + 1.2, rz);
-        const hz = sampleTerrainMeshHeight(rx, rz + 1.2);
-        const slopeMag = Math.hypot(hx - ry, hz - ry);
+        const site = analyzeRockFormationSite(rx, rz, ry);
+        if (site.slopeMag > 0.60) continue;
 
-        // Only place rocks on flat beaches or gentle cliff toes so none ever float mid-cliff
-        if (slopeMag > 0.62) continue;
-        const isShoreRock = ry >= -0.05 && ry <= 1.35;
-        const isToeRock = ry > 1.35 && slopeMag > 0.35 && slopeMag <= 0.62;
-        if (!isShoreRock && !isToeRock) continue;
+        // Require either a protruding rocky headland backed by a bluff (maxUpslope > 4.2m) OR a true cliff-toe talus apron (maxUpslope > 5.8m)
+        const isRockyHeadland = ry >= -0.05 && ry <= 1.85 && site.maxUpslope > 4.2 && site.slopeMag > 0.16;
+        const isCliffToeApron = ry > 1.85 && site.slopeMag >= 0.22 && site.slopeMag <= 0.58 && site.maxUpslope > 5.8;
+        if (!isRockyHeadland && !isCliffToeApron) continue;
 
-        // Varying sizes from small 0.22m beach stones to 1.85m broad coastal ledges
+        // Kinetic size sorting: larger blocks roll slightly further down the talus apron
         const sizeRoll = geoRand();
-        const sc = isShoreRock
-          ? (sizeRoll < 0.55 ? (0.22 + geoRand() * 0.45) : (0.68 + geoRand() * 0.92))
-          : (sizeRoll < 0.45 ? (0.35 + geoRand() * 0.55) : (0.90 + geoRand() * 0.95));
-        // Sink 40% into ground so boulders sit firmly embedded in sand/soil
-        dummy.position.set(rx, ry - sc * 0.28, rz);
+        const sc = isRockyHeadland
+          ? (sizeRoll < 0.52 ? (0.28 + geoRand() * 0.45) : (0.75 + geoRand() * 0.90))
+          : (sizeRoll < 0.45 ? (0.40 + geoRand() * 0.55) : (0.95 + geoRand() * 0.95));
+        // Embed 42% into ground so rocks look weathered out of the parent substrate
+        dummy.position.set(rx, ry - sc * 0.42, rz);
         dummy.scale.set(sc * (0.85 + geoRand() * 0.55), sc * (0.48 + geoRand() * 0.52), sc * (0.82 + geoRand() * 0.50));
-        dummy.rotation.set((geoRand() - 0.5) * 0.28, geoRand() * Math.PI * 2, (geoRand() - 0.5) * 0.28);
+        dummy.rotation.set((geoRand() - 0.5) * 0.26, geoRand() * Math.PI * 2, (geoRand() - 0.5) * 0.26);
         dummy.updateMatrix();
         talusMesh.setMatrixAt(placedTalus, dummy.matrix);
 
@@ -10448,33 +10651,31 @@
       window.instancedTalus = talusMesh;
       if (yieldFn) await yieldFn();
 
-      // 2. Wet Waterfall Gorge Cobblestones, Step-Pool Riffle Stones & Spillway Lip Rocks (820 instances)
-      const streamRockCount = 820;
+      // 2. Waterfall Plunge-Pool Cobbles, Step-Pool Riffle Stones & Spillway Lip Rocks (280 curated instances, down from 820)
+      const streamRockCount = 280;
       const streamRockMesh = new THREE.InstancedMesh(streamRockGeo, talusMat, streamRockCount);
       streamRockMesh.castShadow = true;
       streamRockMesh.receiveShadow = true;
       let placedStreamRocks = 0;
 
-      // A: Line the S-curved waterfall gorge banks, step-pool shelves & submerged cascade bed
-      for (let i = 0; i < 4500 && placedStreamRocks < 620; i++) {
+      // A: Line the S-curved waterfall gorge plunge pools & cascade riffles (200 instances)
+      for (let i = 0; i < 1800 && placedStreamRocks < 200; i++) {
         const sx = 20.0 + geoRand() * 75.5;
         const wfZ = getWaterfallCenterZ(sx);
-        // Cluster both along the rocky banks (3.2..7.2m) and as submerged riverbed cobbles (-2.8..2.8m)
         const isBank = geoRand() > 0.36;
         const side = geoRand() > 0.5 ? 1.0 : -1.0;
-        const zOff = isBank ? side * (2.6 + geoRand() * 4.8) : (geoRand() - 0.5) * 5.2;
+        const zOff = isBank ? side * (2.6 + geoRand() * 4.4) : (geoRand() - 0.5) * 4.8;
         const sz = wfZ + zOff;
         const sy = sampleTerrainMeshHeight(sx, sz);
-        const sc = isBank ? (0.28 + Math.pow(geoRand(), 0.75) * 1.15) : (0.16 + geoRand() * 0.48);
-        // Submerged bed cobbles sit slightly tucked so clear emerald water flows right over them
-        const ySink = isBank ? (sc * 0.26) : (sc * 0.42);
+        const sc = isBank ? (0.30 + Math.pow(geoRand(), 0.75) * 1.10) : (0.18 + geoRand() * 0.45);
+        const ySink = isBank ? (sc * 0.36) : (sc * 0.46);
         dummy.position.set(sx, sy - ySink, sz);
         dummy.scale.set(
           sc * (0.88 + geoRand() * 0.52),
           sc * (isBank ? (0.48 + geoRand() * 0.48) : (0.34 + geoRand() * 0.24)),
           sc * (0.85 + geoRand() * 0.48)
         );
-        dummy.rotation.set((geoRand() - 0.5) * 0.3, geoRand() * Math.PI * 2, (geoRand() - 0.5) * 0.3);
+        dummy.rotation.set((geoRand() - 0.5) * 0.28, geoRand() * Math.PI * 2, (geoRand() - 0.5) * 0.28);
         dummy.updateMatrix();
         streamRockMesh.setMatrixAt(placedStreamRocks, dummy.matrix);
         const rTone = isBank ? (0.64 + geoRand() * 0.24) : (0.46 + geoRand() * 0.18);
@@ -10483,24 +10684,26 @@
         placedStreamRocks++;
       }
 
-      // B: Rocky shoreline cobbles around the 70m x 90m Cliff-Top Alpine Lake & Plunge Pool rim (up to 820)
-      for (let i = 0; i < 2400 && placedStreamRocks < streamRockCount; i++) {
-        const isLake = geoRand() > 0.32;
-        const ang = geoRand() * Math.PI * 2;
+      // B: Rocky spillway lip & plunge-pool rim cobbles (up to 280)
+      for (let i = 0; i < 900 && placedStreamRocks < streamRockCount; i++) {
+        const isLake = geoRand() > 0.42;
         let rx, rz;
         if (isLake) {
-          const jitter = 0.90 + geoRand() * 0.16;
+          // Concentrate near the lake spillway lip & rocky northern shore
+          const ang = UPLAND_LAKE.spillAng + (geoRand() - 0.5) * 1.15;
+          const jitter = 0.90 + geoRand() * 0.14;
           const pt = sampleLakeShorePt(UPLAND_LAKE, ang, jitter);
           rx = pt.x;
           rz = pt.z;
         } else {
-          const rad = 6.5 + geoRand() * 6.5;
+          const ang = geoRand() * Math.PI * 2;
+          const rad = 6.2 + geoRand() * 5.8;
           rx = 21.5 + Math.cos(ang) * rad;
           rz = 2.0 + Math.sin(ang) * rad;
         }
         const ry = sampleTerrainMeshHeight(rx, rz);
-        const sc = 0.24 + Math.pow(geoRand(), 0.8) * 0.95;
-        dummy.position.set(rx, ry - sc * 0.30, rz);
+        const sc = 0.26 + Math.pow(geoRand(), 0.8) * 0.90;
+        dummy.position.set(rx, ry - sc * 0.38, rz);
         dummy.scale.set(sc * (0.9 + geoRand() * 0.5), sc * (0.45 + geoRand() * 0.38), sc * (0.85 + geoRand() * 0.45));
         dummy.rotation.set((geoRand() - 0.5) * 0.25, geoRand() * Math.PI * 2, (geoRand() - 0.5) * 0.25);
         dummy.updateMatrix();
@@ -10517,7 +10720,7 @@
       window.instancedStreamRocks = streamRockMesh;
       if (yieldFn) await yieldFn();
 
-      // 3. Weathered Fallen Forest Deadwood & Mossy Woodland Logs (380 instances)
+      // 3. Weathered Fallen Forest Deadwood & Nurse Logs (180 instances anchored to parent trees & estuary driftwood bars, zero open-meadow logs)
       const { woodBarkTex: deadBarkTex } = getWoodTextures();
       const deadwoodGeo = new THREE.CylinderGeometry(0.15, 0.21, 2.8, 9);
       deadwoodGeo.rotateZ(Math.PI / 2);
@@ -10533,43 +10736,45 @@
         color: 0xffffff,
         roughness: 0.88
       });
-      const deadwoodCount = 380;
+      const deadwoodCount = 180;
       const deadwoodMesh = new THREE.InstancedMesh(deadwoodGeo, deadwoodMat, deadwoodCount);
       deadwoodMesh.castShadow = true;
       deadwoodMesh.receiveShadow = true;
       let placedDeadwood = 0;
-      for (let i = 0; i < 4600 && placedDeadwood < deadwoodCount; i++) {
+      for (let i = 0; i < 2400 && placedDeadwood < deadwoodCount; i++) {
         let lx, lz;
-        if (i < 1800) {
-          // Focus mossy fallen nurse logs across the dense Elderwood Rainforest
-          lx = -34.0 - geoRand() * 204.0;
-          lz = -16.0 + geoRand() * 174.0;
-        } else if (i < 3400 && treeFootprints.length > 0) {
+        if (i < 2000 && treeFootprints.length > 0) {
+          // 85% anchored right next to parent trees inside shaded woodland
           const fp = treeFootprints[Math.floor(geoRand() * treeFootprints.length)];
           const ang = geoRand() * Math.PI * 2;
-          const dist = 1.6 + geoRand() * (fp.r * 0.85);
+          const dist = 1.4 + geoRand() * (fp.r * 0.78);
           lx = fp.x + Math.cos(ang) * dist;
           lz = fp.z + Math.sin(ang) * dist;
         } else {
-          lx = -310 + geoRand() * 625;
-          lz = -210 + geoRand() * 555;
+          // 15% sun-bleached driftwood deposited at river-mouth point bars
+          lz = -38.0 + geoRand() * 65.0;
+          const side = geoRand() > 0.5 ? 1 : -1;
+          lx = getEstuaryCenter(lz) + side * (11.0 + geoRand() * 9.0);
         }
-        if (Math.hypot(lx - (-22), lz - 24) < 8.5) continue;
-        if (getForestTrailMask(lx, lz) > 0.36) continue;
+        if (Math.hypot(lx - (-22), lz - 24) < 10.0) continue;
+        if (getForestTrailMask(lx, lz) > 0.20) continue;
         if (isInsideWaterfallChannel(lx, lz)) continue;
         const ly = sampleTerrainMeshHeight(lx, lz);
-        if (ly < 0.35 || ly > 52.0) continue;
+        if (ly < 0.25 || ly > 52.0) continue;
+        if (ly >= 1.8) {
+          const cAO = window.sampleCanopyAO ? window.sampleCanopyAO(lx, lz) : 0.0;
+          if (cAO < 0.20) continue;
+        }
         const hx = sampleTerrainMeshHeight(lx + 1.2, lz);
         const hz = sampleTerrainMeshHeight(lx, lz + 1.2);
-        if (Math.hypot(hx - ly, hz - ly) > 0.56) continue;
+        if (Math.hypot(hx - ly, hz - ly) > 0.52) continue;
 
-        const sc = 0.72 + geoRand() * 0.92;
-        dummy.position.set(lx, ly + 0.05 * sc, lz);
+        const sc = 0.72 + geoRand() * 0.90;
+        dummy.position.set(lx, ly + 0.04 * sc, lz);
         dummy.scale.set(sc * (0.85 + geoRand() * 0.65), sc, sc);
         dummy.rotation.set((geoRand() - 0.5) * 0.14, geoRand() * Math.PI * 2, (geoRand() - 0.5) * 0.14);
         dummy.updateMatrix();
         deadwoodMesh.setMatrixAt(placedDeadwood, dummy.matrix);
-        // Sun-bleached driftwood near shore vs rich mossy bark under forest canopy
         if (ly < 1.8) {
           tint.setRGB(0.68 + geoRand() * 0.14, 0.62 + geoRand() * 0.12, 0.52 + geoRand() * 0.10);
         } else {
@@ -10587,37 +10792,32 @@
       window.instancedDeadwood = deadwoodMesh;
       if (yieldFn) await yieldFn();
 
-      // 3B. Mossy Forest Granite Outcrops & Woodland Boulder Clusters (640 instances across Elderwood, Meadows & Canyon)
-      const forestBoulderCount = 640;
+      // 3B. Mossy Forest Ravine & Hillside Toe Boulders (140 curated instances on sloped woodland bluffs, down from 640)
+      const forestBoulderCount = 140;
       const forestBoulderMesh = new THREE.InstancedMesh(forestBoulderGeo, talusMat, forestBoulderCount);
       forestBoulderMesh.castShadow = true;
       forestBoulderMesh.receiveShadow = true;
       let placedForestBoulders = 0;
-      for (let i = 0; i < 5200 && placedForestBoulders < forestBoulderCount; i++) {
-        let bx, bz;
-        if (i < 3400) {
-          bx = -32.0 - geoRand() * 212.0;
-          bz = -18.0 + geoRand() * 182.0;
-        } else {
-          bx = -280.0 + geoRand() * 540.0;
-          bz = -180.0 + geoRand() * 440.0;
-        }
-        if (getForestTrailMask(bx, bz) > 0.34) continue;
-        if (Math.hypot(bx - (-68.0), bz - 44.0) < 10.0) continue;
-        if (Math.hypot(bx - (-22.0), bz - 24.0) < 12.0) continue;
+      for (let i = 0; i < 4200 && placedForestBoulders < forestBoulderCount; i++) {
+        const bx = -32.0 - geoRand() * 212.0;
+        const bz = -18.0 + geoRand() * 182.0;
+        if (getForestTrailMask(bx, bz) > 0.22) continue;
+        if (Math.hypot(bx - (-68.0), bz - 44.0) < 12.0) continue;
+        if (Math.hypot(bx - (-22.0), bz - 24.0) < 14.0) continue;
         if (isInsideWaterfallChannel(bx, bz)) continue;
         const by = sampleTerrainMeshHeight(bx, bz);
-        if (by < 2.2 || by > 68.0) continue;
-        const hx = sampleTerrainMeshHeight(bx + 1.0, bz);
-        const hz = sampleTerrainMeshHeight(bx, bz + 1.0);
-        if (Math.hypot(hx - by, hz - by) > 0.78) continue;
+        if (by < 3.0 || by > 62.0) continue;
 
-        // Wide size variation from 0.35m woodland rocks to 2.45m mossy forest outcrops
+        // Require a shaded woodland ravine bank or hillside toe (never flat open meadow)
+        const site = analyzeRockFormationSite(bx, bz, by);
+        if (site.slopeMag > 0.62) continue;
+        if (site.maxUpslope < 4.8 && site.slopeMag < 0.28) continue;
+
         const fTier = geoRand();
-        const sc = fTier < 0.45 ? (0.35 + geoRand() * 0.48) : (fTier < 0.85 ? (0.85 + geoRand() * 0.75) : (1.62 + geoRand() * 0.85));
-        dummy.position.set(bx, by - sc * 0.26, bz);
+        const sc = fTier < 0.45 ? (0.42 + geoRand() * 0.48) : (fTier < 0.85 ? (0.90 + geoRand() * 0.72) : (1.62 + geoRand() * 0.78));
+        dummy.position.set(bx, by - sc * 0.40, bz);
         dummy.scale.set(sc * (0.85 + geoRand() * 0.55), sc * (0.48 + geoRand() * 0.56), sc * (0.85 + geoRand() * 0.50));
-        dummy.rotation.set((geoRand() - 0.5) * 0.28, geoRand() * Math.PI * 2, (geoRand() - 0.5) * 0.28);
+        dummy.rotation.set((geoRand() - 0.5) * 0.26, geoRand() * Math.PI * 2, (geoRand() - 0.5) * 0.26);
         dummy.updateMatrix();
         forestBoulderMesh.setMatrixAt(placedForestBoulders, dummy.matrix);
         const mShade = 0.54 + geoRand() * 0.26;
@@ -10634,15 +10834,15 @@
       window.instancedForestBoulders = forestBoulderMesh;
       if (yieldFn) await yieldFn();
 
-      // 3C. Dedicated Location-Specific Geological Stone & Rock Layers across the Environment (Columnar Basalt, Karst Pinnacles, Cantilevered Slate, Trail Flagstones & Dune Ventifacts)
+      // 3C. Dedicated Location-Specific Geological Stone & Rock Layers (310 curated instances strictly on matching geological formations, down from 1,400)
       const locSpecs = [
-        { seed: 16, count: 220, name: 'columnarBasalt' },  // Hexagonal Columnar Basalt Prisms on Mount Caldera & volcanic coasts
-        { seed: 18, count: 180, name: 'obsidianShard' },   // Jagged Obsidian Shards on volcanic slopes & ash trails
-        { seed: 23, count: 210, name: 'karstPinnacle' },   // Fluted Rillenkarren Karst Limestone in Eastern Canyon & cave mouths
-        { seed: 21, count: 190, name: 'cantileverSlate' }, // Overhanging Cantilevered Slate Ledges on gorge & hillside bluffs
-        { seed: 22, count: 260, name: 'flagstonePaver' },  // Flat Natural Trail Flagstones along forest trails, camps & stream banks
-        { seed: 20, count: 160, name: 'glacialErratic' },  // Glacial Striated V-Cleft Monoliths on Alpine Tarn & Headwaters plateaus
-        { seed: 27, count: 180, name: 'duneVentifact' }    // Wind-Carved Dreikanter Ventifacts on sandy spits & outer beaches
+        { seed: 16, count: 55, name: 'columnarBasalt' },  // Hexagonal Columnar Basalt Prisms on Mount Caldera dykes & volcanic coasts
+        { seed: 18, count: 40, name: 'obsidianShard' },   // Jagged Obsidian Shards on upper volcanic cone & lava vents
+        { seed: 23, count: 50, name: 'karstPinnacle' },   // Fluted Rillenkarren Karst Limestone on Eastern Canyon walls & cave portals
+        { seed: 21, count: 45, name: 'cantileverSlate' }, // Overhanging Cantilevered Slate Ledges on gorge & escarpment bluffs
+        { seed: 22, count: 50, name: 'flagstonePaver' },  // Flat Natural Trail Flagstones along steep trail switchbacks & fords
+        { seed: 20, count: 30, name: 'glacialErratic' },  // Solitary Glacial Striated Monoliths on high alpine tarn benches
+        { seed: 27, count: 40, name: 'duneVentifact' }    // Wind-Carved Dreikanter Ventifacts at rocky headland-to-dune transitions
       ];
       window.instancedLocationRocks = [];
       for (let ls = 0; ls < locSpecs.length; ls++) {
@@ -10653,75 +10853,59 @@
         lMesh.receiveShadow = true;
         lMesh.layers.set(1);
         let placedLoc = 0;
-        for (let a = 0; a < spec.count * 12 && placedLoc < spec.count; a++) {
-          let lx, lz, scMin = 0.35, scMax = 1.65;
+        for (let a = 0; a < spec.count * 24 && placedLoc < spec.count; a++) {
+          let lx, lz, scMin = 0.45, scMax = 1.75;
           if (spec.seed === 16 || spec.seed === 18) {
-            // Volcanic Wastes & Mount Caldera slopes + volcanic archipelago islands
-            if (a % 4 === 0 && archipelagoIslets.length > 5) {
-              const vIsl = archipelagoIslets[5 + (a % (archipelagoIslets.length - 5))];
-              const ang = geoRand() * Math.PI * 2;
-              const rad = vIsl.r * (0.20 + geoRand() * 0.78);
-              lx = vIsl.x + Math.cos(ang) * rad;
-              lz = vIsl.z + Math.sin(ang) * rad;
-            } else {
-              const ang = geoRand() * Math.PI * 2;
-              const rad = (MOUNT_CALDERA.rimR + 8.0) + geoRand() * (MOUNT_CALDERA.baseR - MOUNT_CALDERA.rimR + 24.0);
-              lx = MOUNT_CALDERA.x + Math.cos(ang) * rad;
-              lz = MOUNT_CALDERA.z + Math.sin(ang) * rad;
-            }
-            scMin = 0.45; scMax = 2.15;
+            // Volcanic Wastes & Mount Caldera basal skirt apron (keep off steep upper cone walls)
+            const ridgeAng = ((a % 7) / 7) * Math.PI * 2 + (geoRand() - 0.5) * 0.28;
+            const rad = (MOUNT_CALDERA.baseR * 0.82) + geoRand() * 28.0;
+            lx = MOUNT_CALDERA.x + Math.cos(ridgeAng) * rad;
+            lz = MOUNT_CALDERA.z + Math.sin(ridgeAng) * rad;
+            scMin = 0.55; scMax = 1.95;
           } else if (spec.seed === 23) {
-            // Stratified Eastern Karst Limestone Canyon (x = 152..272, z = -32..96) & cave portals
+            // Stratified Eastern Karst Limestone Canyon walls (x = 152..272, z = -32..96)
             lx = 152.0 + geoRand() * 120.0;
             lz = -32.0 + geoRand() * 128.0;
-            scMin = 0.50; scMax = 2.25;
+            scMin = 0.60; scMax = 2.25;
           } else if (spec.seed === 21) {
-            // Waterfall Gorge Rims, Southern Headwaters Escarpment & Steep Hillside Bluffs
+            // Waterfall Gorge Rims & Southern Headwaters Escarpment bluffs
             if (a % 2 === 0) {
               lx = 22.0 + geoRand() * 68.0;
-              lz = getWaterfallCenterZ(lx) + (geoRand() > 0.5 ? 1 : -1) * (5.5 + geoRand() * 12.0);
+              lz = getWaterfallCenterZ(lx) + (geoRand() > 0.5 ? 1 : -1) * (5.5 + geoRand() * 9.5);
             } else {
-              lx = -24.0 + geoRand() * 165.0;
-              lz = 122.0 + geoRand() * 48.0;
+              lx = -18.0 + geoRand() * 155.0;
+              lz = 124.0 + geoRand() * 44.0;
             }
-            scMin = 0.55; scMax = 1.95;
+            scMin = 0.60; scMax = 1.95;
           } else if (spec.seed === 22) {
-            // Flat Stepping Flagstones along Elderwood Trail, Overlook Paths & Stream Banks
-            if (a % 2 === 0) {
-              lx = -26.0 - geoRand() * 58.0;
-              lz = getForestTrailZ(lx) + (geoRand() - 0.5) * 4.8;
-            } else {
-              lx = -95.0 + geoRand() * 240.0;
-              lz = -25.0 + geoRand() * 195.0;
-            }
-            scMin = 0.32; scMax = 1.15;
+            // Flat Stepping Flagstones strictly along Elderwood Trail switchbacks & stream ford
+            lx = -26.0 - geoRand() * 58.0;
+            lz = getForestTrailZ(lx) + (geoRand() - 0.5) * 2.8;
+            scMin = 0.36; scMax = 1.05;
           } else if (spec.seed === 20) {
-            // Glacial Striated Erratics on High Alpine Plateaus (y > 20m)
-            lx = 62.0 + geoRand() * 115.0;
-            lz = -48.0 + geoRand() * 235.0;
-            scMin = 0.65; scMax = 2.40;
+            // Solitary Glacial Striated Erratics on High Alpine Plateaus (y > 24m)
+            lx = 68.0 + geoRand() * 105.0;
+            lz = -38.0 + geoRand() * 215.0;
+            scMin = 0.85; scMax = 2.45;
           } else {
-            // Wind-Carved Dreikanter Ventifacts along sandy spits, beaches & island shorelines
-            if (a % 3 === 0) {
-              const isl = archipelagoIslets[a % archipelagoIslets.length];
-              const ang = geoRand() * Math.PI * 2;
-              const rad = isl.r * (0.68 + geoRand() * 0.34);
-              lx = isl.x + Math.cos(ang) * rad;
-              lz = isl.z + Math.sin(ang) * rad;
-            } else {
-              lx = -325.0 + geoRand() * 650.0;
-              lz = -245.0 + geoRand() * 560.0;
-            }
-            scMin = 0.28; scMax = 1.35;
+            // Wind-Carved Dreikanter Ventifacts strictly at rocky headland-to-dune transitions
+            lx = -315.0 + geoRand() * 630.0;
+            lz = -235.0 + geoRand() * 530.0;
+            scMin = 0.34; scMax = 1.25;
           }
           const ly = sampleTerrainMeshHeight(lx, lz);
-          if (spec.seed === 27 && (ly < 0.05 || ly > 2.45)) continue;
-          if (spec.seed === 20 && ly < 18.0) continue;
-          if (spec.seed !== 27 && (ly < 0.25 || ly > 148.0)) continue;
+          if (spec.seed === 27 && (ly < 0.25 || ly > 2.40)) continue;
+          if (spec.seed === 20 && ly < 24.0) continue;
+          if (spec.seed !== 27 && (ly < 0.35 || ly > 148.0)) continue;
           if (isInsideWaterfallChannel(lx, lz)) continue;
 
+          const site = analyzeRockFormationSite(lx, lz, ly);
+          if (spec.seed === 23 && site.slopeMag < 0.32 && site.maxUpslope < 5.5) continue;
+          if (spec.seed === 21 && site.maxUpslope < 5.2) continue;
+          if (spec.seed === 27 && site.maxUpslope < 3.4) continue;
+
           const sc = scMin + Math.pow(geoRand(), 0.85) * (scMax - scMin);
-          dummy.position.set(lx, ly - sc * (spec.seed === 22 ? 0.12 : 0.28), lz);
+          dummy.position.set(lx, ly - sc * (spec.seed === 22 ? 0.14 : 0.38), lz);
           dummy.scale.set(sc * (0.88 + geoRand() * 0.28), sc * (0.82 + geoRand() * 0.36), sc * (0.88 + geoRand() * 0.28));
           dummy.rotation.set((geoRand() - 0.5) * (spec.seed === 22 ? 0.08 : 0.22), geoRand() * Math.PI * 2, (geoRand() - 0.5) * (spec.seed === 22 ? 0.08 : 0.22));
           dummy.updateMatrix();
@@ -10752,7 +10936,7 @@
       }
       if (yieldFn) await yieldFn();
 
-      // 4. Submerged Coral-Bommie Reef Rocks (seed 26), Brain Coral Heads & Staghorn/Plate Corals across Inter-Island Channels & Reefs
+      // 4. Submerged Coral-Bommie Reef Rocks (seed 26, 420 instances), Brain Coral Heads & Staghorn/Plate Corals across Inter-Island Channels & Reefs
       const reefGeo = buildLoveRockGeometry(1.0, 2, 26);
 
       const reefMat = applyAAARockShader(new THREE.MeshStandardMaterial({
@@ -10760,7 +10944,7 @@
         roughness: 0.82,
         metalness: 0.04
       }));
-      const reefCount = 780;
+      const reefCount = 420;
       const reefMesh = new THREE.InstancedMesh(reefGeo, reefMat, reefCount);
       reefMesh.receiveShadow = true;
 
@@ -10886,7 +11070,7 @@
         const pickType = i % 3;
         if (placedReefs < reefCount && (pickType === 0 || (placedBrain >= brainMax && placedStag >= stagMax))) {
           const sc = 0.85 + Math.pow(geoRand(), 0.75) * 2.85;
-          dummy.position.set(rx, ry - sc * 0.22, rz);
+          dummy.position.set(rx, ry - sc * 0.28, rz);
           dummy.scale.set(sc * (0.88 + geoRand() * 0.36), sc * (0.55 + geoRand() * 0.55), sc * (0.85 + geoRand() * 0.35));
           dummy.rotation.set((geoRand() - 0.5) * 0.18, geoRand() * Math.PI * 2, (geoRand() - 0.5) * 0.18);
           dummy.updateMatrix();
@@ -10937,7 +11121,7 @@
     }
 
     function assignMicroFloraLayer1() {
-      // Assign ground-cover micro-flora to Layer 1 so Water planar reflections skip 100,000+ blades/flowers/pebbles
+      // Assign ground-cover micro-flora to Layer 1 so Water planar reflections skip 50,000+ blades/flowers/pebbles
       [
         window.instancedGrass, window.instancedFlowers, window.instancedPebbles,
         window.instancedReeds, window.instancedFerns, window.instancedMushrooms,
@@ -11084,28 +11268,28 @@
       }), true);
       window.caveDynamicMats.push({ mat: rubbleMat, mouthEnv: 0.22 });
 
-      // 1. Instanced Fallen Rockfall Slabs & Stepped Cavern Scree (340 instances, Love-Rocks slab archetype)
+      // 1. Instanced Fallen Rockfall Slabs & Stepped Cavern Scree (140 curated instances along outer wall margins, down from 340)
       const rubbleGeo = buildLoveRockGeometry(0.68, 2, 5);
       rubbleGeo.scale(1.32, 0.58, 1.12);
       rubbleGeo.computeVertexNormals();
-      const rubbleMax = 340;
+      const rubbleMax = 140;
       const rubbleMesh = new THREE.InstancedMesh(rubbleGeo, rubbleMat, rubbleMax);
       rubbleMesh.receiveShadow = true;
       rubbleMesh.layers.set(1);
       let rubbleIdx = 0;
 
-      // 2. Massive Subterranean Breakdown Boulders & Split-Fault Cavern Outcrops (190 instances, Love-Rocks split-fault archetype)
+      // 2. Subterranean Breakdown Boulders & Split-Fault Cavern Outcrops (75 curated instances, down from 190)
       const caveBoulderGeo = buildLoveRockGeometry(1.12, 2, 11);
-      const caveBoulderMax = 190;
+      const caveBoulderMax = 75;
       const caveBoulderMesh = new THREE.InstancedMesh(caveBoulderGeo, rubbleMat, caveBoulderMax);
       caveBoulderMesh.receiveShadow = true;
       caveBoulderMesh.castShadow = true;
       caveBoulderMesh.layers.set(1);
       let caveBoulderIdx = 0;
 
-      // 3. Tiered Cavern Flowstone & Dripstone Mounds + Fluted Karst Wall-Buttress Crags (190 instances, seed 25 flowstone mound archetype)
+      // 3. Tiered Cavern Flowstone & Dripstone Mounds + Fluted Karst Wall-Buttress Crags (75 curated instances, down from 190)
       const caveCragGeo = buildLoveRockGeometry(0.92, 2, 25);
-      const caveCragMax = 190;
+      const caveCragMax = 75;
       const caveCragMesh = new THREE.InstancedMesh(caveCragGeo, rubbleMat, caveCragMax);
       caveCragMesh.receiveShadow = true;
       caveCragMesh.castShadow = true;
@@ -11187,10 +11371,10 @@
               speleoMesh.setMatrixAt(speleoIdx++, dummy.matrix);
             }
 
-            // Subterranean Cavern Rocks along tunnel margins (varying sizes, matching damp karst/basalt cavern walls, keeping walk lane clear)
-            if (i >= 6 && i <= lengthSteps - 4) {
-              const sideSign = ((i + cIndex) % 4 === 0) ? 1.0 : -1.0;
-              const wallLat = sideSign * Math.max(2.15, halfW * (0.64 + ((i * 3) % 5) * 0.05));
+            // Subterranean Cavern Rocks tucked into the outer 72%..92% wall perimeter so the central walk corridor stays 100% unobstructed
+            if (i >= 8 && i <= lengthSteps - 6 && i % 4 === 0) {
+              const sideSign = ((i + cIndex) % 8 === 0) ? 1.0 : -1.0;
+              const wallLat = sideSign * Math.max(2.35, halfW * (0.72 + ((i * 3) % 5) * 0.04));
               const rx = cx + pt.perpX * wallLat;
               const rz = cz + pt.perpZ * wallLat;
               const shade = 0.72 + ((i * 7) % 9) * 0.035;
@@ -11200,10 +11384,10 @@
                 rockTint.setRGB(shade * 0.90, shade * 0.95, shade * 0.98);
               }
 
-              // A: Fallen breakdown slabs & talus scree of varying sizes (0.30m .. 1.35m)
+              // A: Fallen breakdown slabs & talus scree tucked along wall base (0.32m .. 1.25m)
               if (rubbleIdx < rubbleMax) {
-                const rSc = 0.30 + ((i * 5 + cIndex * 3) % 11) * 0.095;
-                dummy.position.set(rx, floorY + rSc * 0.14, rz);
+                const rSc = 0.32 + ((i * 5 + cIndex * 3) % 10) * 0.09;
+                dummy.position.set(rx, floorY + rSc * 0.12, rz);
                 dummy.scale.set(rSc * (0.9 + (i % 3) * 0.22), rSc * (0.55 + (i % 4) * 0.18), rSc * (0.88 + (i % 2) * 0.25));
                 dummy.rotation.set(((i % 3) - 1) * 0.18, i * 1.37, ((i % 2) - 0.5) * 0.22);
                 dummy.updateMatrix();
@@ -11212,13 +11396,13 @@
                 rubbleIdx++;
               }
 
-              // B: Large split-fault cavern boulders & shelf outcrops tucked into chamber walls (0.65m .. 1.95m)
-              if (i % 4 === 0 && caveBoulderIdx < caveBoulderMax) {
-                const bSide = -sideSign * Math.max(2.35, halfW * 0.74);
+              // B: Large split-fault cavern boulders tucked into chamber wall alcoves (0.65m .. 1.85m)
+              if (i % 8 === 0 && caveBoulderIdx < caveBoulderMax) {
+                const bSide = -sideSign * Math.max(2.45, halfW * 0.78);
                 const bx = cx + pt.perpX * bSide;
                 const bz = cz + pt.perpZ * bSide;
-                const bSc = 0.65 + ((i * 3 + cIndex * 5) % 9) * 0.145;
-                dummy.position.set(bx, floorY + bSc * 0.22, bz);
+                const bSc = 0.65 + ((i * 3 + cIndex * 5) % 8) * 0.145;
+                dummy.position.set(bx, floorY + bSc * 0.20, bz);
                 dummy.scale.set(bSc * (0.92 + (i % 3) * 0.18), bSc * (0.62 + (i % 4) * 0.22), bSc * (0.90 + (i % 2) * 0.20));
                 dummy.rotation.set(((i % 3) - 1) * 0.14, i * 2.15, ((i % 2) - 0.5) * 0.16);
                 dummy.updateMatrix();
@@ -11227,13 +11411,13 @@
                 caveBoulderIdx++;
               }
 
-              // C: Upright angular wall-buttress crags anchoring cavern ribs (0.52m .. 1.68m)
-              if (i % 4 === 2 && caveCragIdx < caveCragMax) {
-                const cSide = -sideSign * Math.max(2.40, halfW * 0.78);
+              // C: Upright flowstone & dripstone wall-buttress crags anchoring cavern ribs (0.52m .. 1.62m)
+              if (i % 8 === 4 && caveCragIdx < caveCragMax) {
+                const cSide = -sideSign * Math.max(2.50, halfW * 0.82);
                 const crx = cx + pt.perpX * cSide;
                 const crz = cz + pt.perpZ * cSide;
-                const cSc = 0.52 + ((i * 7 + cIndex * 3) % 8) * 0.15;
-                dummy.position.set(crx, floorY + cSc * 0.34, crz);
+                const cSc = 0.52 + ((i * 7 + cIndex * 3) % 8) * 0.14;
+                dummy.position.set(crx, floorY + cSc * 0.30, crz);
                 dummy.scale.set(cSc * 0.88, cSc * (0.95 + (i % 3) * 0.28), cSc * 0.92);
                 dummy.rotation.set(sideSign * 0.12, i * 1.75, -sideSign * 0.10);
                 dummy.updateMatrix();
@@ -12452,7 +12636,7 @@
         renderer.shadowMap.enabled = false;
         if (window.instancedGrass) {
           window.instancedGrass.visible = true;
-          window.instancedGrass.count = Math.min(window.maxGrassCount || 130000, 38000);
+          window.instancedGrass.count = Math.min(window.maxGrassCount || 58000, 28000);
         }
         if (window.instancedFlowers) window.instancedFlowers.visible = false;
         if (window.instancedPebbles) window.instancedPebbles.visible = false;
@@ -12468,7 +12652,7 @@
         renderer.shadowMap.type = THREE.PCFShadowMap;
         if (window.instancedGrass) {
           window.instancedGrass.visible = true;
-          window.instancedGrass.count = Math.min(window.maxGrassCount || 130000, 95000);
+          window.instancedGrass.count = Math.min(window.maxGrassCount || 58000, 52000);
         }
         if (window.instancedFlowers) window.instancedFlowers.visible = true;
         if (window.instancedPebbles) window.instancedPebbles.visible = true;
@@ -12484,7 +12668,7 @@
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         if (window.instancedGrass) {
           window.instancedGrass.visible = true;
-          window.instancedGrass.count = window.maxGrassCount || 130000;
+          window.instancedGrass.count = window.maxGrassCount || 58000;
         }
         if (window.instancedFlowers) window.instancedFlowers.visible = true;
         if (window.instancedPebbles) window.instancedPebbles.visible = true;
@@ -12732,11 +12916,28 @@
           }
         }
         showToast("🪵 Collected felled timber log! +2 Timber");
-      } else if (targetedObject && targetedObject.userData.type === 'rock') {
-        player.inventory.stone += 2;
+      } else if (targetedObject && (targetedObject.userData.type === 'rock' || targetedObject.userData.type === 'boulder')) {
+        const hitRock = targetedObject;
+        player.inventory.stone += 3;
         const stoneEl = document.getElementById('stone-count');
         if (stoneEl) stoneEl.innerText = player.inventory.stone;
-        showToast("⛏️ Basalt boulder chipped! +2 Stone");
+        spawnWoodchipBurst(hitRock.position.x, player.pos.y + 0.75, hitRock.position.z, 0x7c8288, 9);
+        if (typeof hitRock.userData.health === 'number') {
+          hitRock.userData.health--;
+          if (hitRock.userData.health <= 0) {
+            player.inventory.flint = (player.inventory.flint || 0) + 1;
+            const idx = interactiveTargets.indexOf(hitRock);
+            if (idx !== -1) interactiveTargets.splice(idx, 1);
+            if (typeof window.removeInteractiveTarget === 'function') window.removeInteractiveTarget(hitRock);
+            if (hitRock.parent) hitRock.parent.remove(hitRock);
+            targetedObject = null;
+            showToast("⛏️ Outcrop quarried! +3 Stone & +1 Flint");
+          } else {
+            showToast("⛏️ Outcrop chipped! +3 Stone");
+          }
+        } else {
+          showToast("⛏️ Basalt boulder chipped! +3 Stone");
+        }
       } else {
         const w = getWaterInfo(camera.position.x, camera.position.z, performance.now() * 0.001);
         if (w.isWater) {

@@ -134,16 +134,29 @@
 					float shoreCalm = smoothstep( 0.0, 0.95, aWaterDepth );
 					float amp = ( 0.36 + oceanMix * 1.38 ) * uWaveAmp * shoreCalm;
 
-					float p1 = wx * 0.075 + wz * 0.055 + time * 1.65;
-					float p2 = wx * -0.048 + wz * 0.105 + time * 2.15;
-					float p3 = wx * 0.14 - wz * 0.12 + time * 2.85;
-					float p4 = wx * 0.24 + wz * 0.20 - time * 3.40;
+					// Wide, long-crested trade-wind ocean swell trains with organic phase curvature & group envelopes
+					float swellWarp = sin( wx * 0.0065 - wz * 0.0085 + time * 0.18 ) * 2.4
+					                + cos( wx * 0.0110 + wz * 0.0052 - time * 0.14 ) * 1.5
+					                + sin( ( wx - wz ) * 0.0042 ) * 3.1;
+					float groupEnv = 0.72 + 0.28 * sin( wx * 0.0048 - wz * 0.0068 + sin( wz * 0.0035 ) * 1.7 );
 
-					float waveY = ( sin( p1 ) * 0.48 + sin( p2 ) * 0.32 + cos( p3 ) * 0.14 + sin( p4 ) * 0.06 ) * amp;
+					float p1 = ( wx * 0.036 + wz * 0.025 ) + swellWarp * 0.55 + time * 1.35;
+					float p2 = ( wx * 0.027 + wz * 0.013 ) - swellWarp * 0.38 + time * 1.05;
+					float p3 = ( wx * 0.042 + wz * 0.048 ) + sin( wx * 0.009 - wz * 0.012 ) * 1.8 + time * 1.75;
+					float p4 = ( wx * 0.108 + wz * 0.064 ) + cos( wz * 0.022 ) * 1.2 - time * 2.35;
 
-					// Analytical slope for 3D wave normal tilting
-					float dwdx = ( cos( p1 ) * 0.075 * 0.48 + cos( p2 ) * -0.048 * 0.32 - sin( p3 ) * 0.14 * 0.14 + cos( p4 ) * 0.24 * 0.06 ) * amp;
-					float dwdz = ( cos( p1 ) * 0.055 * 0.48 + cos( p2 ) * 0.105 * 0.32 + sin( p3 ) * 0.12 * 0.14 + cos( p4 ) * 0.20 * 0.06 ) * amp;
+					float s1 = sin( p1 );
+					float crest1 = s1 + 0.24 * ( s1 * s1 - 0.5 );
+					float dc1 = cos( p1 ) * ( 1.0 + 0.48 * s1 );
+					float s2 = sin( p2 );
+					float crest2 = s2 + 0.18 * ( s2 * s2 - 0.5 );
+					float dc2 = cos( p2 ) * ( 1.0 + 0.36 * s2 );
+
+					float waveY = ( crest1 * 0.56 * groupEnv + crest2 * 0.24 + cos( p3 ) * 0.13 + sin( p4 ) * 0.07 ) * amp;
+
+					// Analytical slope for 3D wide-swell normal tilting
+					float dwdx = ( dc1 * 0.036 * 0.56 * groupEnv + dc2 * 0.027 * 0.24 - sin( p3 ) * 0.042 * 0.13 + cos( p4 ) * 0.108 * 0.07 ) * amp;
+					float dwdz = ( dc1 * 0.025 * 0.56 * groupEnv + dc2 * 0.013 * 0.24 - sin( p3 ) * 0.048 * 0.13 + cos( p4 ) * 0.064 * 0.07 ) * amp;
 
 					vWaveHeight = waveY;
 					vWaveSlope = vec2( dwdx, dwdz );
@@ -180,6 +193,7 @@
 				uniform vec4 uRipples[8];
 				uniform float uRainIntensity;
 				uniform float uFoamIntensity;
+				uniform float uWaveAmp;
 
 				varying vec4 mirrorCoord;
 				varying vec4 worldPosition;
@@ -200,9 +214,15 @@
 				}
 
 				vec4 getNoiseFar( vec2 uv ) {
-					vec2 uv0 = ( uv / 103.0 ) + vec2(time / 17.0, time / 29.0);
-					vec2 uv2 = uv / vec2( 8907.0, 9803.0 ) + vec2( time / 101.0, time / 97.0 );
-					vec4 noise = ( texture2D( normalSampler, uv0 ) + texture2D( normalSampler, uv2 ) ) * 2.0;
+					vec2 warp = vec2(
+						sin( uv.y * 0.0045 + time * 0.09 ),
+						cos( uv.x * 0.0038 - time * 0.08 )
+					) * 34.0;
+					vec2 wUv = uv + warp;
+					vec2 uv0 = ( wUv / vec2( 265.0, 145.0 ) ) + vec2( time / 24.0, time / 36.0 );
+					vec2 uv1 = ( ( wUv.yx - warp * 0.55 ) / vec2( 390.0, 215.0 ) ) - vec2( time / 31.0, -time / 42.0 );
+					vec2 uv2 = ( wUv / vec2( 8907.0, 9803.0 ) ) + vec2( time / 101.0, time / 97.0 );
+					vec4 noise = ( texture2D( normalSampler, uv0 ) * 0.85 + texture2D( normalSampler, uv1 ) * 0.65 + texture2D( normalSampler, uv2 ) * 0.50 ) * 2.0;
 					return noise * 0.5 - 1.0;
 				}
 
@@ -327,9 +347,17 @@
 					vec3 scatter = max( 0.0, dot( surfaceNormal, eyeDirection ) ) * depthTint;
 					vec3 albedo = mix( ( sunColor * diffuseLight * 0.35 + scatter + sssGlow ) * getShadowMask(), ( vec3( 0.04 ) + reflCol * 0.94 + reflCol * specularLight ), reflectance * shallowReflFade );
 
-					// Dynamic 3D wave crest whitecaps & current foam
+					// Dynamic 3D wide-crest ocean whitecaps & wind-streaked foam lace (eliminates repetitive oval blobs from high altitude)
 					float waveCrest = clamp( noise.x * noise.z * 2.2, 0.0, 1.0 );
-					float swellWhitecap = smoothstep( 0.35, 1.35, vWaveHeight ) * ( 0.24 + uFoamIntensity * 0.56 );
+					float normWaveH = vWaveHeight / max( 0.42, uWaveAmp );
+					float streakCoord = worldPosition.x * 0.036 - worldPosition.z * 0.052 + noise.x * 2.4;
+					float foamLace = smoothstep( 0.22, 0.74,
+						noise.x * 0.85 + noise.z * 0.85 + 0.36
+						+ sin( streakCoord * 2.4 + time * 0.85 ) * 0.24
+						+ cos( ( worldPosition.x * 0.09 + worldPosition.z * 0.065 ) - time * 1.25 ) * 0.20
+					);
+					float altSoften = 1.0 - smoothstep( 160.0, 640.0, camDist ) * 0.55;
+					float swellWhitecap = smoothstep( 0.64, 1.18, normWaveH ) * foamLace * altSoften * ( 0.16 + uFoamIntensity * 0.34 );
 
 					// Smoothly feathered shoreline surf wash & lapping edge foam (fades smoothly to 0.0 right at depth = 0.0!)
 					float inShore = smoothstep( 0.03, 0.18, depth ) * ( 1.0 - smoothstep( 0.22, 1.25, depth ) );
@@ -337,7 +365,7 @@
 					float edgeLace = smoothstep( 0.02, 0.10, depth ) * ( 1.0 - smoothstep( 0.10, 0.32, depth ) ) * ( 0.55 + 0.45 * sin( worldPosition.x * 1.8 + worldPosition.z * 1.6 + time * 2.2 ) );
 					float shoreFoam = ( inShore * surfBands * ( 0.48 + uFoamIntensity * 0.32 ) + edgeLace * 0.42 );
 
-					float foam = pow( waveCrest, 3.0 ) * ( 0.18 + uFoamIntensity * 0.35 ) * shallowReflFade + swellWhitecap + shoreFoam;
+					float foam = pow( waveCrest, 3.2 ) * ( 0.14 + uFoamIntensity * 0.26 ) * shallowReflFade * altSoften + swellWhitecap + shoreFoam;
 					albedo += vec3( foam );
 
 					// Zero-seam shoreline alpha: feathers smoothly from 0.0 at depth=0.0 to translucent aqua to deep water

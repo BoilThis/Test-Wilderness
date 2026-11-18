@@ -47,7 +47,7 @@
     flint: 3,
     fat: 0,
     arrows: 6,
-    bolts: 0,
+    bolts: 6,
     pistolAmmo: 0,
     rifleAmmo: 0,
     dynamite: 0,
@@ -1054,7 +1054,7 @@
       ezBamboo.loadPreset('Aspen Medium');
       ezBamboo.options.seed = 24680;
       ezBamboo.options.bark.type = 'birch';
-      ezBamboo.options.bark.tint = 0x6d7a38;
+      ezBamboo.options.bark.tint = 0x92a84e;
       ezBamboo.options.bark.textureScale = { x: 1, y: 2.4 };
       ezBamboo.options.branch.levels = 2;
       ezBamboo.options.branch.length = { 0: 56, 1: 10.5, 2: 7.5, 3: 1 };
@@ -1067,7 +1067,7 @@
       ezBamboo.options.branch.segments = { 0: 6, 1: 3, 2: 3, 3: 3 };
       ezBamboo.options.leaves.type = 'ash';
       ezBamboo.options.leaves.billboard = 'double';
-      ezBamboo.options.leaves.tint = 0x4c8632;
+      ezBamboo.options.leaves.tint = 0x78c852;
       ezBamboo.options.leaves.size = 3.05;
       ezBamboo.options.leaves.count = 10;
       ezBamboo.options.leaves.alphaTest = 0.5;
@@ -1075,14 +1075,27 @@
 
       stalkGeo = ezBamboo.branchesMesh.geometry;
       stalkMat = ezBamboo.branchesMesh.material;
+      if (stalkMat && stalkMat.emissive) {
+        stalkMat.emissive.setHex(0x14180a);
+        stalkMat.emissiveIntensity = 0.35;
+      }
       crownGeo = ezBamboo.leavesMesh.geometry;
       crownMat = ezBamboo.leavesMesh.material;
-      // Fix EZ-Tree leaf shader stripping #ifdef USE_INSTANCING (which caused all 360 bamboo crowns to float at world origin (0,0,0))
+      if (crownMat && crownMat.emissive) {
+        crownMat.emissive.setHex(0x183012);
+        crownMat.emissiveIntensity = 0.45;
+      }
+      // Fix EZ-Tree leaf shader stripping #ifdef USE_INSTANCING & blend leaf normals upward for bright close-up foliage
       crownMat.onBeforeCompile = function(shader) {
         shader.uniforms.uTime = { value: 0 };
         shader.uniforms.uWindStrength = { value: new THREE.Vector3(0.42, 0, 0.42) };
         shader.uniforms.uWindFrequency = { value: 0.5 };
         shader.vertexShader = 'uniform float uTime;\nuniform vec3 uWindStrength;\nuniform float uWindFrequency;\n' + shader.vertexShader;
+        shader.vertexShader = shader.vertexShader.replace(
+          '#include <defaultnormal_vertex>',
+          `objectNormal = normalize(mix(objectNormal, vec3(0.0, 1.0, 0.0), 0.58));
+          #include <defaultnormal_vertex>`
+        );
         shader.vertexShader = shader.vertexShader.replace(
           '#include <project_vertex>',
           `vec4 mvPosition = vec4(transformed, 1.0);
@@ -1120,7 +1133,7 @@
       crownGeo = new THREE.BufferGeometry();
       crownGeo.setAttribute('position', new THREE.Float32BufferAttribute(cardPos, 3));
       crownGeo.computeVertexNormals();
-      crownMat = new THREE.MeshStandardMaterial({ color: 0x3f7a2e, roughness: 0.82, side: THREE.DoubleSide });
+      crownMat = new THREE.MeshStandardMaterial({ color: 0x72c24e, emissive: 0x183012, emissiveIntensity: 0.42, roughness: 0.75, side: THREE.DoubleSide });
     }
 
     instBambooStalks = new THREE.InstancedMesh(stalkGeo, stalkMat, maxStalks);
@@ -1130,7 +1143,7 @@
 
     instBambooCrowns = new THREE.InstancedMesh(crownGeo, crownMat, maxStalks);
     instBambooCrowns.castShadow = false;
-    instBambooCrowns.receiveShadow = true;
+    instBambooCrowns.receiveShadow = false;
     instBambooCrowns.layers.set(3);
 
     const dummy = new THREE.Object3D();
@@ -1392,13 +1405,13 @@
   // --- 5E. MOUNT CALDERA VOLCANO CRATER, WALL-TO-WALL MAGMA CAULDRON, PLUMES & OBSIDIAN NODES ---
   function buildVolcanicCalderaBiome() {
     const mc = window.MOUNT_CALDERA || {
-      x: -302.0, z: 64.0, baseR: 112.0, rimR: 36.0, poolEdgeR: 33.2, rimY: 168.0, floorY: 162.5, lavaY: 166.8, footY: 12.0
+      x: -302.0, z: 64.0, baseR: 112.0, rimR: 36.0, poolEdgeR: 26.5, rimY: 168.0, floorY: 146.5, lavaY: 155.5, footY: 12.0
     };
     const vx = mc.x, vz = mc.z;
-    const lavaY = mc.lavaY || 166.8;
+    const lavaY = mc.lavaY || 155.5;
 
-    // Build subdivided concentric radial magma disc (12 radial rings x 64 angular segments)
-    // Radius = 21.0m embeds cleanly 2m+ into the 16.4–17.4m sloped basalt cauldron wall around 360° -> zero gaps!
+    // Build subdivided concentric radial magma disc (14 radial rings x 64 angular segments)
+    // Radius = 30.3m embeds cleanly into the inner basalt cauldron wall around 360° -> zero gaps!
     function createRadialMagmaGeometry(radius, rings, segs) {
       const positions = [0, 0, 0];
       const uvs = [0.5, 0.5];
@@ -1436,13 +1449,13 @@
       return geo;
     }
 
-    const lavaRadius = (mc.poolEdgeR || 33.2) + 2.2;
+    const lavaRadius = (mc.poolEdgeR || 26.5) + 3.8;
     const lavaGeo = createRadialMagmaGeometry(lavaRadius, 14, 64);
     const lavaShaderMat = new THREE.ShaderMaterial({
       uniforms: {
         uTime: window.fireShaderTime || { value: 0.0 },
         uCalderaCenter: { value: new THREE.Vector2(vx, vz) },
-        uPoolEdgeR: { value: mc.poolEdgeR || 33.2 },
+        uPoolEdgeR: { value: mc.poolEdgeR || 26.5 },
         uLavaRadius: { value: lavaRadius }
       },
       vertexShader: `
@@ -1549,52 +1562,47 @@
     worldLandmarksGroup.add(calderaLight);
     registerManagedLight(calderaLight, 78.0);
 
-    // Low, weathered basalt boulders embedded on the outer crater shoulder (none inside the cauldron wall)
-    const rimAngs = [0.25, 1.15, 2.05, 3.05, 4.05, 4.95];
-    rimAngs.forEach((ra, rIdx) => {
-      const rx = vx + Math.cos(ra) * ((mc.rimR || 36.0) + 2.6);
-      const rz = vz + Math.sin(ra) * ((mc.rimR || 36.0) + 2.6);
-      const ry = getTerrainHeight(rx, rz);
-      const spire = window.createGraniteBoulder(1.8 + (rIdx % 2) * 0.5);
-      spire.material = spire.material.clone();
-      spire.material.color.set(0x241f1c);
-      spire.scale.set(1.25, 0.52, 1.15);
-      spire.position.set(rx, ry - 0.55, rz);
-      spire.rotation.set(Math.sin(ra) * 0.12, ra, Math.cos(ra) * -0.12);
-      spire.castShadow = true;
-      spire.raycast = () => {};
-      worldLandmarksGroup.add(spire);
-    });
-
+    // Low, deeply embedded weathered basalt slabs on the lower basal apron only (none sticking out on the smooth upper cone)
     for (let s = 0; s < 5; s++) {
-      const a = s * 1.25 + 0.5;
-      const rad = 58 + (s % 3) * 16;
+      const a = s * 1.25 + 0.25;
+      const rad = (mc.baseR || 112.0) * 0.88 + (s % 2) * 8.0;
       const sx = vx + Math.cos(a) * rad;
       const sz = vz + Math.sin(a) * rad;
       const sy = getTerrainHeight(sx, sz);
-      const slopeRock = window.createGraniteBoulder(1.5 + (s % 2) * 1.2);
+      if (sy < 2.0) continue;
+      const slopeRock = window.createGraniteBoulder(1.4 + (s % 2) * 0.9);
       slopeRock.material = slopeRock.material.clone();
       slopeRock.material.color.set(0x3a332e);
-      slopeRock.position.set(sx, sy - 0.55, sz);
+      slopeRock.scale.set(1.25, 0.55, 1.15);
+      slopeRock.position.set(sx, sy - 0.85, sz);
       slopeRock.rotation.y = a;
       worldLandmarksGroup.add(slopeRock);
     }
 
-    // --- Volcanic Rising Ash Smoke Column, White Rim Fumarole Steam & Cauldron Embers ---
+    // --- Multi-Plume Dark & Gray Volcanic Smoke Billowing Directly from the Molten Lava Surface ---
     const vfx = window.getCampfireVFXAssets ? window.getCampfireVFXAssets() : null;
     let updateVolcanoPlumeFn = null;
     if (vfx && vfx.sharedSmokeTex) {
       const plumeGroup = new THREE.Group();
-      plumeGroup.position.set(vx, lavaY + 1.5, vz);
+      plumeGroup.position.set(vx, lavaY + 0.6, vz);
       worldLandmarksGroup.add(plumeGroup);
 
-      // Layer A: Towering Dark Volcanic Ash & Sulfur Smoke Column (26 billboard puffs rising up to +84m above cauldron)
+      // 5 distinct smoke-generating convection vents across the 26.5m-radius molten lava lake inside the volcano core
+      const lavaPlumeVents = [
+        { ox:  0.0,  oz:  0.0,  spreadScale: 1.00, heightScale: 1.06 }, // Central main cauldron plume
+        { ox:  10.5, oz:  4.2,  spreadScale: 0.84, heightScale: 0.90 }, // ENE lava core plume
+        { ox: -8.8,  oz:  9.8,  spreadScale: 0.88, heightScale: 0.94 }, // NW lava core plume
+        { ox: -11.0, oz: -8.2,  spreadScale: 0.82, heightScale: 0.86 }, // SW lava core plume
+        { ox:  7.6,  oz: -11.2, spreadScale: 0.86, heightScale: 0.92 }  // SSE lava core plume
+      ];
+
+      // Layer A: 112 Multi-Plume Dark Soot, Charcoal & Ash-Gray Smoke Puffs boiling off the lava surface
       const ashPuffs = [];
-      const ashCount = 48;
+      const ashCount = 112;
       for (let i = 0; i < ashCount; i++) {
         const aMat = new THREE.SpriteMaterial({
           map: vfx.sharedSmokeTex,
-          color: 0x3b383d,
+          color: 0x2b292e,
           transparent: true,
           opacity: 0.0,
           depthWrite: false
@@ -1602,13 +1610,21 @@
         const sp = new THREE.Sprite(aMat);
         sp.raycast = () => {};
         plumeGroup.add(sp);
+        const vent = lavaPlumeVents[i % lavaPlumeVents.length];
+        const isSurfaceFume = (i % 4 === 0); // 25% of puffs roll thickly across the lava surface & inner rim
         ashPuffs.push({
           sprite: sp,
           mat: aMat,
-          phase: i / ashCount,
-          speed: 0.055 + (i % 5) * 0.008,
+          ventOx: vent.ox,
+          ventOz: vent.oz,
+          spreadScale: vent.spreadScale,
+          heightScale: vent.heightScale,
+          isSurfaceFume,
+          shadeTier: i % 4, // 0: deep soot black, 1: dark charcoal, 2: slate gray, 3: medium-light ash gray
+          phase: (i / ashCount + (i % 7) * 0.13) % 1.0,
+          speed: isSurfaceFume ? (0.075 + (i % 5) * 0.012) : (0.048 + (i % 6) * 0.009),
           angle: (i * 2.39996),
-          radialJitter: 0.25 + (i % 4) * 0.22,
+          radialJitter: 0.30 + (i % 5) * 0.18,
           rotOff: (i * 1.17) % (Math.PI * 2),
           rotSpeed: ((i % 2 === 0 ? 1 : -1) * (0.14 + (i % 3) * 0.06))
         });
@@ -1634,24 +1650,24 @@
           phase: Math.random(),
           speed: 0.5 + (i % 5) * 0.09,
           ang: (i / flameCount) * Math.PI * 2 + (i % 3) * 0.4,
-          rad: 1.5 + (i % 7) * 1.6
+          rad: 1.5 + (i % 7) * 2.2
         });
       }
 
-      // Layer B: White Hydrothermal Rim Fumarole Steam Vents (5 fissures around rim crevices x 4 wisps = 20 sprites)
+      // Layer B: Gray-White Rim Fumarole Smoke & Steam Vents (6 fissures around rim crevices x 5 wisps = 30 sprites)
       const steamGroup = new THREE.Group();
       worldLandmarksGroup.add(steamGroup);
-      const rimVentAngles = [0.42, 1.48, 2.55, 3.65, 4.78];
+      const rimVentAngles = [0.42, 1.48, 2.35, 3.25, 4.18, 5.15];
       const steamPuffs = [];
       rimVentAngles.forEach((va, vIdx) => {
-        const vRad = (mc.rimR || 36.0) + 0.6 + (vIdx % 2) * 0.8;
+        const vRad = (mc.rimR || 36.0) + 0.4 + (vIdx % 2) * 0.6;
         const svx = vx + Math.cos(va) * vRad;
         const svz = vz + Math.sin(va) * vRad;
-        const svy = getTerrainHeight(svx, svz) + 0.3;
-        for (let k = 0; k < 4; k++) {
+        const svy = getTerrainHeight(svx, svz) + 0.25;
+        for (let k = 0; k < 5; k++) {
           const stMat = new THREE.SpriteMaterial({
             map: vfx.sharedSmokeTex,
-            color: 0xeef4f8,
+            color: (k % 2 === 0) ? 0x6a6e75 : 0x9aa0a8,
             transparent: true,
             opacity: 0.0,
             depthWrite: false
@@ -1663,9 +1679,9 @@
             sprite: stSp,
             mat: stMat,
             bx: svx, by: svy, bz: svz,
-            phase: (k / 4 + vIdx * 0.19) % 1.0,
-            speed: 0.22 + (k % 3) * 0.04,
-            ang: va + (k - 1.5) * 0.35
+            phase: (k / 5 + vIdx * 0.17) % 1.0,
+            speed: 0.18 + (k % 3) * 0.04,
+            ang: va + (k - 2.0) * 0.28
           });
         }
       });
@@ -1681,7 +1697,7 @@
         cinderData = new Array(cinderCount);
         function initCinder(idx, randAge) {
           const ang = Math.random() * Math.PI * 2;
-          const rad = Math.sqrt(Math.random()) * 13.5;
+          const rad = Math.sqrt(Math.random()) * 16.5;
           const maxLife = 1.6 + Math.random() * 1.9;
           const age = randAge ? Math.random() * maxLife : 0.0;
           const vy = 4.2 + Math.random() * 4.8;
@@ -1710,9 +1726,12 @@
         cinderPoints.userData.respawn = initCinder;
       }
 
-      const _colThroat = new THREE.Color(0x883b1e);
-      const _colAsh    = new THREE.Color(0x343136);
-      const _colHigh   = new THREE.Color(0x6d6a70);
+      const _colThroat       = new THREE.Color(0x582414);
+      const _colSootBlack    = new THREE.Color(0x18171b);
+      const _colDarkCharcoal = new THREE.Color(0x2d2c32);
+      const _colSlateGray    = new THREE.Color(0x50535a);
+      const _colAshGray      = new THREE.Color(0x787c84);
+      const _colSilverSmoke  = new THREE.Color(0x969aa2);
 
       updateVolcanoPlumeFn = function (dt, timeSec, camPos, windMult, partScale) {
         if (window._playerInsideCave) {
@@ -1722,13 +1741,13 @@
         }
         const dx = camPos.x - vx, dz = camPos.z - vz;
         const distSq = dx * dx + dz * dz;
-        // Ash smoke column visible up to 740m across the island; rim steam within 180m; cinders within 115m
-        const showAsh = distSq < 547600.0;
+        // Ash smoke column visible up to 880m across the archipelago
+        const showAsh = distSq < 774400.0;
         plumeGroup.visible = showAsh;
         if (showAsh) {
-          const farFactor = distSq > 67600.0 ? 0.50 : 1.0; // beyond 260m use half sprites
-          const activeAsh = Math.max(8, Math.round(ashCount * partScale * farFactor));
-          const wDrift = windMult * 18.0;
+          const farFactor = distSq > 102400.0 ? 0.75 : 1.0; // keep 75% of smoke sprites active even at long range
+          const activeAsh = Math.max(24, Math.round(ashCount * partScale * farFactor));
+          const wDrift = windMult * 19.0;
           for (let i = 0; i < ashPuffs.length; i++) {
             const p = ashPuffs[i];
             if (i >= activeAsh) {
@@ -1738,21 +1757,35 @@
             p.sprite.visible = true;
             p.phase = (p.phase + dt * p.speed) % 1.0;
             const t = p.phase;
-            const riseY = t * 112.0;
-            const spread = 6.5 + Math.pow(t, 1.15) * 18.0;
-            const px = Math.cos(p.angle + t * 2.6 + timeSec * 0.18) * spread * p.radialJitter + t * wDrift;
-            const pz = Math.sin(p.angle + t * 2.3 + timeSec * 0.15) * spread * p.radialJitter - t * wDrift * 0.32;
+            const maxRise = p.isSurfaceFume ? 44.0 : (144.0 * p.heightScale);
+            const riseY = t * maxRise;
+            const baseSpread = p.isSurfaceFume ? (7.5 + t * 18.0) : ((4.8 + Math.pow(t, 1.12) * 22.0) * p.spreadScale);
+            const px = p.ventOx + Math.cos(p.angle + t * 2.4 + timeSec * 0.20) * baseSpread * p.radialJitter + Math.pow(t, 1.15) * wDrift;
+            const pz = p.ventOz + Math.sin(p.angle + t * 2.1 + timeSec * 0.17) * baseSpread * p.radialJitter - Math.pow(t, 1.15) * wDrift * 0.34;
             p.sprite.position.set(px, riseY, pz);
-            const sz = 7.8 + Math.pow(t, 0.85) * 24.0;
+            const sz = p.isSurfaceFume
+              ? (11.5 + Math.pow(t, 0.75) * 19.0)
+              : (9.2 + Math.pow(t, 0.85) * 28.0);
             p.sprite.scale.set(sz, sz * 0.88, 1.0);
             p.mat.rotation = p.rotOff + t * p.rotSpeed * 4.5;
-            if (t < 0.22) {
-              p.mat.color.lerpColors(_colThroat, _colAsh, t / 0.22);
+
+            // Layered dark soot, charcoal, slate gray, and billowing ash-gray smoke hues
+            const baseCol = p.shadeTier === 0 ? _colSootBlack
+                          : p.shadeTier === 1 ? _colDarkCharcoal
+                          : p.shadeTier === 2 ? _colSlateGray
+                          : _colAshGray;
+            const topCol  = p.shadeTier === 0 ? _colDarkCharcoal
+                          : p.shadeTier === 1 ? _colSlateGray
+                          : p.shadeTier === 2 ? _colAshGray
+                          : _colSilverSmoke;
+            if (t < 0.14) {
+              p.mat.color.lerpColors(_colThroat, baseCol, t / 0.14);
             } else {
-              p.mat.color.lerpColors(_colAsh, _colHigh, Math.min(1.0, (t - 0.22) / 0.65));
+              p.mat.color.lerpColors(baseCol, topCol, Math.min(1.0, (t - 0.14) / 0.72));
             }
-            const env = Math.sin(Math.pow(t, 0.62) * Math.PI);
-            p.mat.opacity = env * (0.55 - t * 0.18);
+            const env = Math.sin(Math.pow(t, 0.58) * Math.PI);
+            const peakAlpha = p.isSurfaceFume ? 0.68 : (p.shadeTier <= 1 ? 0.64 : 0.56);
+            p.mat.opacity = env * (peakAlpha - t * 0.18);
           }
 
           let burst = 0.0;
@@ -1801,10 +1834,10 @@
           }
         }
 
-        const showSteam = distSq < 32400.0; // within 180m
+        const showSteam = distSq < 62500.0; // within 250m
         steamGroup.visible = showSteam;
         if (showSteam) {
-          const activeSteam = Math.max(6, Math.round(steamPuffs.length * partScale));
+          const activeSteam = Math.max(8, Math.round(steamPuffs.length * partScale));
           for (let s = 0; s < steamPuffs.length; s++) {
             const st = steamPuffs[s];
             if (s >= activeSteam) {
@@ -1814,14 +1847,14 @@
             st.sprite.visible = true;
             st.phase = (st.phase + dt * st.speed) % 1.0;
             const t = st.phase;
-            const sy = st.by + t * 12.5;
-            const sx = st.bx + Math.cos(st.ang) * (t * 2.8) + t * windMult * 2.4;
-            const sz = st.bz + Math.sin(st.ang) * (t * 2.8) - t * windMult * 0.8;
+            const sy = st.by + t * 18.5;
+            const sx = st.bx + Math.cos(st.ang) * (t * 3.4) + t * windMult * 3.2;
+            const sz = st.bz + Math.sin(st.ang) * (t * 3.4) - t * windMult * 1.1;
             st.sprite.position.set(sx, sy, sz);
-            const sc = 1.8 + Math.pow(t, 0.8) * 4.6;
+            const sc = 2.4 + Math.pow(t, 0.8) * 6.2;
             st.sprite.scale.set(sc, sc * 0.88, 1.0);
             st.mat.rotation = st.ang + t * 2.2;
-            st.mat.opacity = Math.sin(t * Math.PI) * 0.34;
+            st.mat.opacity = Math.sin(t * Math.PI) * 0.42;
           }
         }
       };
@@ -1831,8 +1864,8 @@
     const obsProxyGeo = new THREE.CylinderGeometry(0.75, 0.75, 1.85, 8);
     obsProxyGeo.translate(0, 0.85, 0);
     const obsidianCoords = [
-      // East skirt, crest, and north overlook of the relocated Mount Caldera (-302, 64)
-      [-229, 75], [-225, 111], [-269, 121], [-301, 110], [-324, 97], [-378, 95], [-393, 35], [-324, -5],
+      // East basal skirt & lava-tube portal apron of Mount Caldera (kept off the steep upper cone walls)
+      [-204, 62], [-209, 78], [-218, 92], [-226, 42], [-242, 142], [-276, 158],
       // Cinder Cone Islet (NE Volcanic Arc)
       [530, -412], [548, -426], [522, -432],
       // Magma Trench Bastion (NE Raft Stronghold at 844, -791)
@@ -5301,7 +5334,173 @@
 
     const fishHitProxyGeo = new THREE.SphereGeometry(0.45, 8, 6);
 
-    sharedFishAssets = { iridescentFishMat, rayedFinMat, fishBodyGeo, fishHitProxyGeo };
+    // 4. Procedural 512x512 Fish Anatomy Albedo Texture (Countershaded Metallic Scales, Lateral Stripe, Gill Arch, Eye & Fin Rays)
+    const faCanvas = document.createElement('canvas');
+    faCanvas.width = 512; faCanvas.height = 512;
+    const faCtx = faCanvas.getContext('2d');
+    const bodyGrad = faCtx.createLinearGradient(0, 0, 512, 0);
+    bodyGrad.addColorStop(0.0, '#1e4d6b');
+    bodyGrad.addColorStop(0.26, '#3a88a8');
+    bodyGrad.addColorStop(0.32, '#ffd54f');
+    bodyGrad.addColorStop(0.48, '#b2ebf2');
+    bodyGrad.addColorStop(0.54, '#ffd54f');
+    bodyGrad.addColorStop(0.74, '#3a88a8');
+    bodyGrad.addColorStop(1.0, '#1e4d6b');
+    faCtx.fillStyle = bodyGrad;
+    faCtx.fillRect(0, 0, 512, 512);
+
+    // Vertical tropical reef bars & shimmering scale diamond lattice
+    faCtx.fillStyle = 'rgba(18, 42, 64, 0.24)';
+    for (let b = 80; b < 420; b += 48) {
+      faCtx.fillRect(0, b, 512, 16);
+    }
+    faCtx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+    faCtx.lineWidth = 1.4;
+    for (let r = 0; r < 24; r++) {
+      for (let c = 0; c < 24; c++) {
+        const sx = (c + (r % 2) * 0.5) * 22;
+        const sy = r * 22;
+        faCtx.beginPath();
+        faCtx.arc(sx, sy, 10, 0, Math.PI);
+        faCtx.stroke();
+      }
+    }
+    // Gill operculum crescent & bilateral eyes near head (v ~ 0.14)
+    [128, 384].forEach(ex => {
+      faCtx.strokeStyle = 'rgba(15, 35, 50, 0.65)';
+      faCtx.lineWidth = 4.0;
+      faCtx.beginPath();
+      faCtx.arc(ex, 92, 26, 0.2, Math.PI - 0.2);
+      faCtx.stroke();
+
+      faCtx.fillStyle = '#ffb300';
+      faCtx.beginPath();
+      faCtx.arc(ex, 64, 15, 0, Math.PI * 2);
+      faCtx.fill();
+      faCtx.fillStyle = '#0d1117';
+      faCtx.beginPath();
+      faCtx.arc(ex, 62, 8.5, 0, Math.PI * 2);
+      faCtx.fill();
+      faCtx.fillStyle = '#ffffff';
+      faCtx.beginPath();
+      faCtx.arc(ex - 3, 59, 3.0, 0, Math.PI * 2);
+      faCtx.fill();
+    });
+    const fishAnatomyTex = new THREE.CanvasTexture(faCanvas);
+    fishAnatomyTex.wrapS = fishAnatomyTex.wrapT = THREE.RepeatWrapping;
+
+    // 5. Welded Multi-Part 3D Schooling Fish Geometry (Fusiform Body + Spiny Dorsal + Forked Lunate Caudal Tail + Pectoral & Anal Fins + 3D Eyes)
+    function createCompleteSchoolFishGeometry(lenScale = 1.0, heightScale = 1.0, widthScale = 1.0) {
+      const pos = [];
+      const uvs = [];
+      const idx = [];
+      let vOff = 0;
+
+      function appendMeshPart(partGeo, ox, oy, oz, rx, ry, rz, sx, sy, sz, uvScale = 1.0) {
+        const g = partGeo.clone();
+        const m4 = new THREE.Matrix4();
+        const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz));
+        m4.compose(new THREE.Vector3(ox, oy, oz), q, new THREE.Vector3(sx, sy, sz));
+        g.applyMatrix4(m4);
+        const pAttr = g.attributes.position;
+        const uAttr = g.attributes.uv;
+        for (let i = 0; i < pAttr.count; i++) {
+          pos.push(pAttr.getX(i) * widthScale, pAttr.getY(i) * heightScale, pAttr.getZ(i) * lenScale);
+          if (uAttr) {
+            uvs.push(uAttr.getX(i) * uvScale, uAttr.getY(i) * uvScale);
+          } else {
+            uvs.push(0.5, 0.5);
+          }
+        }
+        if (g.index) {
+          const iArr = g.index.array;
+          for (let i = 0; i < iArr.length; i++) idx.push(vOff + iArr[i]);
+        } else {
+          for (let i = 0; i < pAttr.count; i++) idx.push(vOff + i);
+        }
+        vOff += pAttr.count;
+        g.dispose();
+      }
+
+      // A. 18-Station x 12-Segment Hydrodynamic Fusiform Body (+0.34 nose to -0.38 tail peduncle)
+      const bSteps = 18, bSegs = 12;
+      for (let i = 0; i <= bSteps; i++) {
+        const v = i / bSteps;
+        const z = (0.34 - v * 0.72) * lenScale;
+        const prof = Math.sin(Math.pow(v, 0.68) * Math.PI);
+        const rx = (0.105 * prof + (v > 0.82 ? 0.016 : 0.0)) * widthScale;
+        const ry = (0.195 * prof + (v > 0.82 ? 0.022 : 0.0)) * heightScale;
+        for (let j = 0; j <= bSegs; j++) {
+          const u = j / bSegs;
+          const ang = u * Math.PI * 2.0;
+          pos.push(Math.sin(ang) * rx, Math.cos(ang) * ry, z);
+          uvs.push(u, v);
+        }
+      }
+      const bStride = bSegs + 1;
+      for (let i = 0; i < bSteps; i++) {
+        for (let j = 0; j < bSegs; j++) {
+          const a = i * bStride + j, b = a + 1, c = (i + 1) * bStride + j, d = c + 1;
+          idx.push(a, b, c, b, d, c);
+        }
+      }
+      vOff = (bSteps + 1) * (bSegs + 1);
+
+      const finCone = new THREE.ConeGeometry(0.08, 0.28, 4);
+      const eyeSphere = new THREE.SphereGeometry(0.026, 6, 6);
+
+      // B. Swept Dorsal Fin
+      appendMeshPart(finCone, 0, 0.19, -0.04, -0.62, 0, 0, 0.20, 1.0, 1.35, 0.5);
+      // C. Ventral Anal Fin
+      appendMeshPart(finCone, 0, -0.15, -0.14, -Math.PI + 0.58, 0, 0, 0.18, 0.75, 1.05, 0.5);
+      // D. Forked Lunate Caudal Tail Fin (Upper + Lower Swept Lobes)
+      appendMeshPart(finCone, 0, 0.10, -0.46, -Math.PI / 2 + 0.48, 0, 0, 0.18, 1.05, 1.15, 0.5);
+      appendMeshPart(finCone, 0, -0.10, -0.46, -Math.PI / 2 - 0.48, 0, 0, 0.18, 1.05, 1.15, 0.5);
+      // E. Paired Swept Pectoral Fins
+      appendMeshPart(finCone, -0.095, -0.03, 0.08, -0.35, 0, 1.15, 0.16, 0.72, 0.95, 0.5);
+      appendMeshPart(finCone,  0.095, -0.03, 0.08, -0.35, 0, -1.15, 0.16, 0.72, 0.95, 0.5);
+      // F. Bilateral 3D Eyes
+      appendMeshPart(eyeSphere, -0.072, 0.035, 0.21, 0, 0, 0, 0.85, 1.0, 1.1, 0.2);
+      appendMeshPart(eyeSphere,  0.072, 0.035, 0.21, 0, 0, 0, 0.85, 1.0, 1.1, 0.2);
+
+      finCone.dispose();
+      eyeSphere.dispose();
+
+      const outGeo = new THREE.BufferGeometry();
+      outGeo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      outGeo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+      outGeo.setIndex(idx);
+      outGeo.computeVertexNormals();
+      return outGeo;
+    }
+
+    function injectSchoolFishSwimShader(mat, freq = 12.5, amp = 0.055) {
+      mat.onBeforeCompile = function (shader) {
+        shader.uniforms.uFurTime = wolfShaderUniforms.uFurTime;
+        shader.vertexShader = `uniform float uFurTime;\n` + shader.vertexShader.replace(
+          '#include <begin_vertex>',
+          `#include <begin_vertex>
+          float instPhase = 0.0;
+          #ifdef USE_INSTANCING
+            instPhase = instanceMatrix[3][0] * 0.7 + instanceMatrix[3][2] * 0.9;
+          #endif
+          float tailFactor = clamp((0.26 - position.z) / 0.72, 0.0, 1.25);
+          transformed.x += sin(uFurTime * ${freq.toFixed(1)} - position.z * 8.5 + instPhase) * ${amp.toFixed(4)} * tailFactor * tailFactor;
+          `
+        );
+      };
+    }
+
+    sharedFishAssets = {
+      iridescentFishMat,
+      rayedFinMat,
+      fishBodyGeo,
+      fishHitProxyGeo,
+      scaleNormTex,
+      fishAnatomyTex,
+      createCompleteSchoolFishGeometry,
+      injectSchoolFishSwimShader
+    };
     return sharedFishAssets;
   }
 
@@ -5681,15 +5880,37 @@
   const snapperAgents = [];
 
   function buildInstancedUnderwaterSchoolsAndRays() {
-    // 1. Anchovy & Sardine Baitballs (360 streamlined silver fish across 18 inter-island channels, reefs & kelp forests)
-    const anchGeo = new THREE.ConeGeometry(0.055, 0.34, 6);
-    anchGeo.rotateX(Math.PI / 2);
-    anchGeo.scale(0.55, 1.0, 1.0);
+    if (!sharedFishAssets) buildSharedFishAssets();
+
+    // Ensure every underwater school, reef snapper, and stingray is placed in true deep water (never on islands or in the sky!)
+    function resolveDeepWaterPoint(cx, cz, minBedY = -2.8) {
+      let h = getTerrainHeight(cx, cz);
+      if (h <= minBedY) return { x: cx, z: cz, bedY: h };
+      for (let rad = 12; rad <= 140; rad += 12) {
+        for (let a = 0; a < 16; a++) {
+          const ang = (a * Math.PI * 2) / 16;
+          const tx = cx + Math.cos(ang) * rad;
+          const tz = cz + Math.sin(ang) * rad;
+          const th = getTerrainHeight(tx, tz);
+          if (th <= minBedY) {
+            return { x: tx, z: tz, bedY: th };
+          }
+        }
+      }
+      return { x: -18, z: -48, bedY: getTerrainHeight(-18, -48) };
+    }
+
+    // 1. Anchovy & Sardine Baitballs (360 multi-finned silver fish with scales, eyes & undulating forked tails)
+    const anchGeo = sharedFishAssets.createCompleteSchoolFishGeometry(0.62, 0.52, 0.48);
     const anchMat = new THREE.MeshStandardMaterial({
-      color: 0xcfe8f7,
-      roughness: 0.14,
-      metalness: 0.88
+      color: 0xd8f0ff,
+      map: sharedFishAssets.fishAnatomyTex,
+      normalMap: sharedFishAssets.scaleNormTex,
+      normalScale: new THREE.Vector2(0.75, 0.75),
+      roughness: 0.16,
+      metalness: 0.78
     });
+    sharedFishAssets.injectSchoolFishSwimShader(anchMat, 14.5, 0.048);
     const anchCount = 360;
     const anchInst = new THREE.InstancedMesh(anchGeo, anchMat, anchCount);
     anchInst.frustumCulled = false;
@@ -5698,7 +5919,7 @@
 
     const baitCenters = [
       { x: -16,  z: -32,  y: -1.8 },
-      { x: -328, z: 222,  y: -1.4 },
+      { x: -328, z: 222,  y: -1.6 },
       { x: 452,  z: 266,  y: -2.8 },
       { x: -58,  z: -112, y: -3.2 },
       // Inter-Island Channels & Submarine Reef Drop-Offs
@@ -5706,7 +5927,7 @@
       { x: 75,   z: -165, y: -6.2 },
       { x: -165, z: -135, y: -4.8 },
       { x: 185,  z: -155, y: -5.8 },
-      { x: -302, z: 224,  y: -1.5 },
+      { x: -302, z: 224,  y: -1.6 },
       { x: -245, z: 195,  y: -4.5 },
       { x: 265,  z: 185,  y: -6.5 },
       { x: 355,  z: 245,  y: -7.8 },
@@ -5716,19 +5937,26 @@
       { x: 375,  z: 35,   y: -7.6 },
       { x: -145, z: 295,  y: -6.8 },
       { x: 145,  z: 315,  y: -7.2 }
-    ];
+    ].map(c => {
+      const pt = resolveDeepWaterPoint(c.x, c.z, -2.6);
+      return { x: pt.x, z: pt.z, y: c.y, bedY: pt.bedY };
+    });
+
     const anchBoids = [];
     for (let i = 0; i < anchCount; i++) {
       const c = baitCenters[i % baitCenters.length];
       const ang = (i * 0.72) % (Math.PI * 2);
       const r = 1.4 + (i % 8) * 0.55;
-      const floorY = getTerrainHeight(c.x, c.z);
-      const safeY = Math.max(floorY + 1.2, c.y);
+      const bx = c.x + Math.cos(ang) * r;
+      const bz = c.z + Math.sin(ang) * r;
+      const floorY = getTerrainHeight(bx, bz);
+      // Strictly clamp underwater (<= -0.95m) so no fish ever spawns in the air
+      const safeY = Math.min(-0.95, Math.max(floorY + 0.85, c.y));
       anchBoids.push({
         cx: c.x, cz: c.z, baseY: safeY,
-        x: c.x + Math.cos(ang) * r,
-        y: safeY + ((i % 5) - 2) * 0.28,
-        z: c.z + Math.sin(ang) * r,
+        x: bx,
+        y: Math.min(-0.85, safeY + ((i % 5) - 2) * 0.22),
+        z: bz,
         vx: -Math.sin(ang) * 2.2,
         vy: 0,
         vz: Math.cos(ang) * 2.2,
@@ -5737,14 +5965,17 @@
     }
     fishBoidGroups.push({ mesh: anchInst, boids: anchBoids, speed: 2.5, radius: 6.5, scatterScale: 1.8 });
 
-    // 2. Reef Damselfish, Chromis & Butterflyfish (300 vivid coral-garden schooling fish across 16 inter-island coral/kelp beds)
-    const damselGeo = new THREE.SphereGeometry(0.105, 8, 6);
-    damselGeo.scale(0.45, 0.94, 1.38);
+    // 2. Reef Damselfish, Chromis & Butterflyfish (300 detailed multi-fin coral-reef fish with scales, eyes & undulating tails)
+    const damselGeo = sharedFishAssets.createCompleteSchoolFishGeometry(0.68, 0.88, 0.56);
     const damselMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
-      roughness: 0.22,
-      metalness: 0.42
+      map: sharedFishAssets.fishAnatomyTex,
+      normalMap: sharedFishAssets.scaleNormTex,
+      normalScale: new THREE.Vector2(0.85, 0.85),
+      roughness: 0.20,
+      metalness: 0.48
     });
+    sharedFishAssets.injectSchoolFishSwimShader(damselMat, 13.0, 0.052);
     const damselCount = 300;
     const damselInst = new THREE.InstancedMesh(damselGeo, damselMat, damselCount);
     damselInst.frustumCulled = false;
@@ -5758,14 +5989,14 @@
       new THREE.Color(0x4b7bc9)  // Cobalt Reef Tang
     ];
     const coralCenters = [
-      { x: -24,  z: -46,  y: -1.5 },
-      { x: -348, z: 234,  y: -1.3 },
+      { x: -24,  z: -46,  y: -1.6 },
+      { x: -348, z: 234,  y: -1.6 },
       { x: 468,  z: 274,  y: -2.6 },
       { x: -115, z: -168, y: -3.8 },
       { x: 112,  z: -178, y: -4.2 },
       { x: -195, z: -112, y: -3.6 },
       { x: 215,  z: -124, y: -4.1 },
-      { x: -312, z: 216,  y: -1.4 },
+      { x: -312, z: 216,  y: -1.6 },
       { x: -268, z: 242,  y: -2.8 },
       { x: 312,  z: 228,  y: -5.2 },
       { x: 398,  z: 282,  y: -4.6 },
@@ -5774,19 +6005,25 @@
       { x: -415, z: 125,  y: -5.5 },
       { x: -75,  z: 275,  y: -4.8 },
       { x: 95,   z: 285,  y: -5.0 }
-    ];
+    ].map(c => {
+      const pt = resolveDeepWaterPoint(c.x, c.z, -2.5);
+      return { x: pt.x, z: pt.z, y: c.y, bedY: pt.bedY };
+    });
+
     const damselBoids = [];
     for (let i = 0; i < damselCount; i++) {
       const c = coralCenters[i % coralCenters.length];
       const ang = (i * 0.91) % (Math.PI * 2);
       const r = 1.8 + (i % 7) * 0.72;
-      const floorY = getTerrainHeight(c.x, c.z);
-      const safeY = Math.max(floorY + 1.0, c.y);
+      const bx = c.x + Math.cos(ang) * r;
+      const bz = c.z + Math.sin(ang) * r;
+      const floorY = getTerrainHeight(bx, bz);
+      const safeY = Math.min(-0.95, Math.max(floorY + 0.85, c.y));
       damselBoids.push({
         cx: c.x, cz: c.z, baseY: safeY,
-        x: c.x + Math.cos(ang) * r,
-        y: safeY + ((i % 4) - 1.5) * 0.28,
-        z: c.z + Math.sin(ang) * r,
+        x: bx,
+        y: Math.min(-0.85, safeY + ((i % 4) - 1.5) * 0.22),
+        z: bz,
         vx: -Math.sin(ang) * 1.5,
         vy: 0,
         vz: Math.cos(ang) * 1.5,
@@ -5798,15 +6035,17 @@
     scene.add(damselInst);
     fishBoidGroups.push({ mesh: damselInst, boids: damselBoids, speed: 1.7, radius: 7.5, scatterScale: 1.45 });
 
-    // 2B. Deep-Channel Pelagic Trevally & Tuna Cruisers (140 larger silver-cobalt fish patrolling deep inter-island channels!)
-    const pelGeo = new THREE.ConeGeometry(0.11, 0.64, 7);
-    pelGeo.rotateX(Math.PI / 2);
-    pelGeo.scale(0.52, 1.05, 1.0);
+    // 2B. Deep-Channel Pelagic Trevally & Tuna Cruisers (140 sculpted multi-fin silver-cobalt gamefish patrolling deep channels)
+    const pelGeo = sharedFishAssets.createCompleteSchoolFishGeometry(1.18, 0.95, 0.86);
     const pelMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
-      roughness: 0.18,
-      metalness: 0.78
+      map: sharedFishAssets.fishAnatomyTex,
+      normalMap: sharedFishAssets.scaleNormTex,
+      normalScale: new THREE.Vector2(0.90, 0.90),
+      roughness: 0.16,
+      metalness: 0.76
     });
+    sharedFishAssets.injectSchoolFishSwimShader(pelMat, 11.5, 0.065);
     const pelagicCount = 140;
     const pelInst = new THREE.InstancedMesh(pelGeo, pelMat, pelagicCount);
     pelInst.frustumCulled = false;
@@ -5831,19 +6070,25 @@
       { x: 485,  z: -285, y: -12.0 },
       { x: 0,    z: -165, y: -7.8 },
       { x: 415,  z: 295,  y: -4.2 }
-    ];
+    ].map(c => {
+      const pt = resolveDeepWaterPoint(c.x, c.z, -3.8);
+      return { x: pt.x, z: pt.z, y: c.y, bedY: pt.bedY };
+    });
+
     const pelBoids = [];
     for (let i = 0; i < pelagicCount; i++) {
       const c = pelagicCenters[i % pelagicCenters.length];
       const ang = (i * 0.64) % (Math.PI * 2);
       const r = 3.2 + (i % 6) * 1.35;
-      const floorY = getTerrainHeight(c.x, c.z);
-      const safeY = Math.max(floorY + 1.8, c.y);
+      const bx = c.x + Math.cos(ang) * r;
+      const bz = c.z + Math.sin(ang) * r;
+      const floorY = getTerrainHeight(bx, bz);
+      const safeY = Math.min(-1.25, Math.max(floorY + 1.1, c.y));
       pelBoids.push({
         cx: c.x, cz: c.z, baseY: safeY,
-        x: c.x + Math.cos(ang) * r,
-        y: safeY + ((i % 5) - 2) * 0.55,
-        z: c.z + Math.sin(ang) * r,
+        x: bx,
+        y: Math.min(-1.05, safeY + ((i % 5) - 2) * 0.38),
+        z: bz,
         vx: -Math.sin(ang) * 3.1,
         vy: 0,
         vz: Math.cos(ang) * 3.1,
@@ -5856,56 +6101,96 @@
     fishBoidGroups.push({ mesh: pelInst, boids: pelBoids, speed: 3.1, radius: 11.5, scatterScale: 1.65 });
     window.fishSchools = fishBoidGroups;
 
-    // 3. Striped Reef Snappers (36 medium solitary coral reef hunters across coasts & inter-island channels — spearable!)
+    // 3. Striped Reef Snappers (36 articulated multi-fin coral reef hunters with eyes, dorsal/pectoral/anal fins & forked tail — spearable!)
     const snapperMat = new THREE.MeshStandardMaterial({
-      color: 0xc26e4e,
-      roughness: 0.24,
+      color: 0xe58a68,
+      map: sharedFishAssets.fishAnatomyTex,
+      normalMap: sharedFishAssets.scaleNormTex,
+      normalScale: new THREE.Vector2(0.85, 0.85),
+      roughness: 0.22,
       metalness: 0.46
     });
     const snapperLocations = [
       [-18, -36], [-34, -52], [28, -42], [-334, 212], [-346, 238], [456, 258], [472, 280], [-56, -108],
-      [6, 18], [104, -6], [-18, 194], [110, 232], [-448, 386], [575, 420], [-288, 224], [-42, -96],
+      [6, 18], [-42, -96], [-448, 386], [575, 420], [-288, 224],
       // Inter-Island Reef & Channel Snappers
       [-92, -148], [88, -158], [-172, -124], [192, -138], [-312, 228], [-254, 206], [284, 196], [368, 252],
       [-310, -242], [305, -228], [-392, 62], [384, 48], [-152, 282], [156, 298], [-224, -186], [234, -192],
       [-368, 178], [422, 288], [-128, -212], [134, -218]
     ];
-    snapperLocations.forEach(([sx, sz], idx) => {
-      const w = getWaterInfo(sx, sz, 0);
-      const sy = Math.min((w.isWater ? w.surfaceY : 0.05) - 0.85, Math.max(getTerrainHeight(sx, sz) + 0.65, (w.isWater ? w.surfaceY : 0.05) - 2.4));
+    snapperLocations.forEach(([rawX, rawZ], idx) => {
+      const pt = resolveDeepWaterPoint(rawX, rawZ, -2.2);
+      const sx = pt.x, sz = pt.z;
+      const sy = Math.min(-0.95, Math.max(pt.bedY + 0.75, -2.4));
       const sg = new THREE.Group();
       sg.position.set(sx, sy, sz);
       const sBody = new THREE.Mesh(sharedFishAssets.fishBodyGeo, snapperMat);
       sBody.scale.set(1.25, 1.35, 1.35);
       sg.add(sBody);
-      const sTail = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.26, 4), sharedFishAssets.rayedFinMat);
-      sTail.scale.set(0.24, 1.0, 1.1);
-      sTail.rotation.x = -Math.PI / 2;
-      sTail.position.z = -0.52;
+
+      [-0.09, 0.09].forEach(ex => {
+        const eyeRing = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 8), matEyeAmber);
+        eyeRing.position.set(ex, 0.045, 0.28);
+        const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.018, 8, 8), matEyeDark);
+        pupil.position.set(ex * 1.12, 0.045, 0.29);
+        sg.add(eyeRing, pupil);
+      });
+
+      const dorsal = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.38, 5), sharedFishAssets.rayedFinMat);
+      dorsal.scale.set(0.22, 1.0, 1.45);
+      dorsal.position.set(0, 0.28, -0.05);
+      dorsal.rotation.x = -0.58;
+      sg.add(dorsal);
+
+      const analFin = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.24, 4), sharedFishAssets.rayedFinMat);
+      analFin.scale.set(0.22, 1.0, 1.2);
+      analFin.position.set(0, -0.22, -0.18);
+      analFin.rotation.x = -Math.PI + 0.55;
+      sg.add(analFin);
+
+      [-0.13, 0.13].forEach(px => {
+        const pec = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.22, 4), sharedFishAssets.rayedFinMat);
+        pec.scale.set(0.2, 1.0, 1.1);
+        pec.position.set(px, -0.04, 0.10);
+        pec.rotation.set(-0.35, 0, px > 0 ? -1.15 : 1.15);
+        sg.add(pec);
+      });
+
+      const sTail = new THREE.Group();
+      sTail.position.z = -0.48;
+      [1, -1].forEach(lobe => {
+        const lobeMesh = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.32, 4), sharedFishAssets.rayedFinMat);
+        lobeMesh.scale.set(0.22, 1.0, 1.2);
+        lobeMesh.position.set(0, lobe * 0.11, -0.12);
+        lobeMesh.rotation.x = -Math.PI / 2 + lobe * 0.48;
+        sTail.add(lobeMesh);
+      });
       sg.add(sTail);
+
       sg.traverse(ch => { if (ch.isMesh) ch.raycast = () => {}; });
       sg.add(new THREE.Mesh(sharedFishAssets.fishHitProxyGeo, _wildlifeHitProxyMat));
       sg.userData = { type: 'fish', health: 1, promptLabel: 'Spear Striped Reef Snapper (+1 Raw Fish) [Tap Strike]', tail: sTail };
       wildlifeGroup.add(sg);
       registerInteractiveTarget(sg);
-      snapperAgents.push({ mesh: sg, cx: sx, cz: sz, baseY: sy, ang: idx * 0.8, rad: 3.8 + (idx % 4) * 1.4 });
+      snapperAgents.push({ mesh: sg, cx: sx, cz: sz, baseY: sy, ang: idx * 0.8, rad: 3.4 + (idx % 4) * 1.1 });
     });
 
-    // 4. Bottom Stingrays (20 articulated benthic rays gliding smoothly across sandy flats & inter-island seabed channels)
+    // 4. Bottom Stingrays (20 articulated spotted benthic rays gliding strictly across deep sandy seabed channels)
     const rayGeo = new THREE.SphereGeometry(0.65, 16, 10);
     const rPos = rayGeo.attributes.position;
     for (let i = 0; i < rPos.count; i++) {
       const vx = rPos.getX(i), vy = rPos.getY(i), vz = rPos.getZ(i);
-      // Flatten into diamond-winged ray disc with undulating wing-tip thickness
       const wingSpan = 1.55 - Math.abs(vz) * 0.65;
       const flat = (vy > 0 ? 0.14 : 0.05) * (1.0 - Math.min(0.85, Math.abs(vx) * 1.15));
       rPos.setXYZ(i, vx * wingSpan, vy * flat, vz * 1.15);
     }
     rayGeo.computeVertexNormals();
     const rayMat = new THREE.MeshStandardMaterial({
-      color: 0x585f66,
-      roughness: 0.42,
-      metalness: 0.12
+      color: 0x5c6873,
+      normalMap: sharedFishAssets.scaleNormTex,
+      normalScale: new THREE.Vector2(0.45, 0.45),
+      roughness: 0.40,
+      metalness: 0.14
     });
     rayMat.onBeforeCompile = function (shader) {
       shader.uniforms.uFurTime = wolfShaderUniforms.uFurTime;
@@ -5926,19 +6211,26 @@
       [-262, 198], [295, 212], [382, 268], [-325, -235],
       [318, -218], [-395, 85], [-138, 292], [148, 305]
     ];
-    raySpots.forEach(([rx, rz], idx) => {
+    raySpots.forEach(([rawX, rawZ], idx) => {
+      const pt = resolveDeepWaterPoint(rawX, rawZ, -3.0);
+      const rx = pt.x, rz = pt.z;
       const rGroup = new THREE.Group();
-      const bedY = getTerrainHeight(rx, rz);
+      const bedY = Math.min(-1.5, pt.bedY);
       rGroup.position.set(rx, bedY + 0.42, rz);
       const disc = new THREE.Mesh(rayGeo, rayMat);
       rGroup.add(disc);
+      [-0.12, 0.12].forEach(ex => {
+        const rEye = new THREE.Mesh(new THREE.SphereGeometry(0.032, 6, 6), matEyeDark);
+        rEye.position.set(ex, 0.09, 0.24);
+        rGroup.add(rEye);
+      });
       const whipTail = new THREE.Mesh(new THREE.ConeGeometry(0.028, 1.05, 6), rayMat);
       whipTail.rotation.x = -Math.PI / 2;
       whipTail.position.set(0, 0.01, -1.02);
       rGroup.add(whipTail);
       rGroup.layers.set(1);
       wildlifeGroup.add(rGroup);
-      stingrayAgents.push({ mesh: rGroup, cx: rx, cz: rz, ang: idx * 1.1, rad: 7.5 + (idx % 3) * 2.8, speed: 0.24 });
+      stingrayAgents.push({ mesh: rGroup, cx: rx, cz: rz, ang: idx * 1.1, rad: 6.5 + (idx % 3) * 2.2, speed: 0.24 });
     });
     window.stingrayAgents = stingrayAgents;
   }
@@ -6474,76 +6766,246 @@
     });
     wolfPBRAssets.injectWolfAnisotropicSSSMaterial(eagleBodyMat, false);
 
-    sharedEagleAssets = { featherGeo, eaglePlumeMat, eagleBodyMat };
+    // Procedural 512x512 Avian Feather Plumage Texture (overlapping contour coverts, rachis shafts & barbules)
+    const pCanvas = document.createElement('canvas');
+    pCanvas.width = 512; pCanvas.height = 512;
+    const pCtx = pCanvas.getContext('2d');
+    pCtx.fillStyle = '#d8dce0';
+    pCtx.fillRect(0, 0, 512, 512);
+    for (let row = 0; row < 20; row++) {
+      for (let col = 0; col < 16; col++) {
+        const fx = (col + (row % 2) * 0.5) * 32;
+        const fy = row * 26;
+        const fg = pCtx.createRadialGradient(fx, fy, 2, fx, fy + 10, 20);
+        fg.addColorStop(0.0, '#ffffff');
+        fg.addColorStop(0.7, '#cfd5dc');
+        fg.addColorStop(1.0, '#7a828c');
+        pCtx.fillStyle = fg;
+        pCtx.beginPath();
+        pCtx.ellipse(fx, fy, 15, 20, 0, 0, Math.PI * 2);
+        pCtx.fill();
+        pCtx.strokeStyle = 'rgba(60, 68, 78, 0.35)';
+        pCtx.lineWidth = 1.2;
+        pCtx.beginPath();
+        pCtx.moveTo(fx, fy - 14);
+        pCtx.lineTo(fx, fy + 16);
+        pCtx.stroke();
+      }
+    }
+    const birdPlumageTex = new THREE.CanvasTexture(pCanvas);
+    birdPlumageTex.wrapS = birdPlumageTex.wrapT = THREE.RepeatWrapping;
+
+    eaglePlumeMat.map = birdPlumageTex;
+    eagleBodyMat.map = birdPlumageTex;
+
+    const seabirdBodyMat = new THREE.MeshStandardMaterial({
+      color: 0xf7f9fc,
+      map: birdPlumageTex,
+      normalMap: wolfPBRAssets.normTex,
+      normalScale: new THREE.Vector2(0.85, 0.85),
+      roughness: 0.44,
+      metalness: 0.05
+    });
+    const seabirdWingMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      map: birdPlumageTex,
+      normalMap: wolfPBRAssets.normTex,
+      normalScale: new THREE.Vector2(0.85, 0.85),
+      roughness: 0.42,
+      metalness: 0.06,
+      side: THREE.DoubleSide
+    });
+    const coralBeakMat = new THREE.MeshStandardMaterial({
+      color: 0xff6e40,
+      roughness: 0.35,
+      metalness: 0.10
+    });
+
+    const tanagerBodyMat = new THREE.MeshStandardMaterial({
+      color: 0xd92626,
+      map: birdPlumageTex,
+      normalMap: wolfPBRAssets.normTex,
+      normalScale: new THREE.Vector2(0.95, 0.95),
+      roughness: 0.44,
+      metalness: 0.05
+    });
+    const tanagerWingMat = new THREE.MeshStandardMaterial({
+      color: 0x1e2229,
+      map: birdPlumageTex,
+      normalMap: wolfPBRAssets.normTex,
+      normalScale: new THREE.Vector2(0.95, 0.95),
+      roughness: 0.42,
+      metalness: 0.08,
+      side: THREE.DoubleSide
+    });
+    wolfPBRAssets.injectWolfAnisotropicSSSMaterial(tanagerWingMat, true);
+    const tanagerBellyMat = new THREE.MeshStandardMaterial({
+      color: 0xef4b3a,
+      map: birdPlumageTex,
+      roughness: 0.48,
+      metalness: 0.04
+    });
+
+    const kingfisherBodyMat = new THREE.MeshStandardMaterial({
+      color: 0x1d78d8,
+      map: birdPlumageTex,
+      normalMap: wolfPBRAssets.normTex,
+      normalScale: new THREE.Vector2(0.95, 0.95),
+      roughness: 0.38,
+      metalness: 0.12
+    });
+    const kingfisherWingMat = new THREE.MeshStandardMaterial({
+      color: 0x1456a0,
+      map: birdPlumageTex,
+      normalMap: wolfPBRAssets.normTex,
+      normalScale: new THREE.Vector2(0.95, 0.95),
+      roughness: 0.38,
+      metalness: 0.12,
+      side: THREE.DoubleSide
+    });
+    wolfPBRAssets.injectWolfAnisotropicSSSMaterial(kingfisherWingMat, true);
+    const kingfisherBreastMat = new THREE.MeshStandardMaterial({
+      color: 0xd96b27,
+      map: birdPlumageTex,
+      roughness: 0.46,
+      metalness: 0.05
+    });
+
+    const doveBodyMat = new THREE.MeshStandardMaterial({
+      color: 0x8c766a,
+      map: birdPlumageTex,
+      normalMap: wolfPBRAssets.normTex,
+      normalScale: new THREE.Vector2(0.90, 0.90),
+      roughness: 0.48,
+      metalness: 0.05
+    });
+    const doveWingMat = new THREE.MeshStandardMaterial({
+      color: 0x2b7d5c,
+      map: birdPlumageTex,
+      normalMap: wolfPBRAssets.normTex,
+      normalScale: new THREE.Vector2(0.95, 0.95),
+      roughness: 0.36,
+      metalness: 0.16,
+      side: THREE.DoubleSide
+    });
+    wolfPBRAssets.injectWolfAnisotropicSSSMaterial(doveWingMat, true);
+    const doveBreastMat = new THREE.MeshStandardMaterial({
+      color: 0xe2d8d0,
+      map: birdPlumageTex,
+      roughness: 0.50,
+      metalness: 0.04
+    });
+
+    const songbirdLegMat = new THREE.MeshStandardMaterial({
+      color: 0x4a3b34,
+      roughness: 0.55,
+      metalness: 0.08
+    });
+    const songbirdBeakDarkMat = new THREE.MeshStandardMaterial({
+      color: 0x22252a,
+      roughness: 0.30,
+      metalness: 0.15
+    });
+
+    sharedEagleAssets = {
+      featherGeo, eaglePlumeMat, eagleBodyMat, seabirdBodyMat, seabirdWingMat, coralBeakMat, birdPlumageTex,
+      tanagerBodyMat, tanagerWingMat, tanagerBellyMat,
+      kingfisherBodyMat, kingfisherWingMat, kingfisherBreastMat,
+      doveBodyMat, doveWingMat, doveBreastMat,
+      songbirdLegMat, songbirdBeakDarkMat
+    };
     return sharedEagleAssets;
   }
 
   const eagleAgents = [];
-  function spawnEagles() {
-    for (let e = 0; e < 4; e++) {
-    const eagle = new THREE.Group();
+  const forestBirdAgents = [];
+  const perchNodes = [];
 
-    // 1. Sculpted Aerodynamic Raptor Torso & Pectoral Keel
-    const torsoGeo = new THREE.SphereGeometry(0.24, 16, 14);
-    torsoGeo.scale(0.88, 0.82, 2.15);
-    torsoGeo.setAttribute('aSssWeight', new THREE.Float32BufferAttribute(new Float32Array(torsoGeo.attributes.position.count).fill(0.05), 1));
-    const torso = new THREE.Mesh(torsoGeo, sharedEagleAssets.eagleBodyMat);
-    eagle.add(torso);
+  function triggerBirdFlightToNewPerch(fb, avoidX = null, avoidZ = null, isStartled = false) {
+    if (!fb || !perchNodes.length) return;
+    const pos = fb.mesh.position;
+    let bestPerch = null;
+    let bestScore = -Infinity;
+    const preferElevated = isStartled || (fb.currentPerch && fb.currentPerch.type === 'ground') || Math.random() < 0.72;
 
-    // 2. Snow-White Feathered Hood, Supraorbital Brow Ridge, Fierce Amber Eyes & Hooked Golden Raptor Beak
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.155, 14, 12), matIvory);
-    head.scale.set(0.92, 0.95, 1.22);
-    head.position.set(0, 0.06, 0.50);
-    eagle.add(head);
+    const stride = Math.max(1, Math.floor(perchNodes.length / 90));
+    const offset = Math.floor(Math.random() * stride);
+    for (let idx = offset; idx < perchNodes.length; idx += stride) {
+      const cand = perchNodes[idx];
+      if (!cand || cand === fb.currentPerch) continue;
+      if (cand.hostObj && !cand.hostObj.parent) continue;
+      const dx = cand.x - pos.x;
+      const dz = cand.z - pos.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist < 5.0 || dist > 38.0) continue;
 
-    const upperBeak = new THREE.Mesh(new THREE.ConeGeometry(0.052, 0.19, 10), matBrass);
-    upperBeak.rotation.x = Math.PI / 2 + 0.25;
-    upperBeak.position.set(0, 0.04, 0.66);
-    const beakHook = new THREE.Mesh(new THREE.ConeGeometry(0.024, 0.075, 8), matBrass);
-    beakHook.rotation.x = Math.PI - 0.25;
-    beakHook.position.set(0, 0.00, 0.73);
-    eagle.add(upperBeak, beakHook);
+      let score = -Math.abs(dist - (isStartled ? 15.5 : 13.5)) * 0.45 + (Math.random() * 4.5);
+      if (preferElevated && (cand.type === 'branch' || cand.type === 'rock')) score += 6.5;
+      if (!preferElevated && cand.type === 'ground') score += 6.0;
 
-    [-0.085, 0.085].forEach(ex => {
-      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 8), matEyeAmber);
-      eye.position.set(ex, 0.075, 0.56);
-      eagle.add(eye);
-    });
+      // Keep mildly near home region so birds remain well-distributed across biomes
+      const dHome = Math.hypot(cand.x - fb.homeX, cand.z - fb.homeZ);
+      if (dHome > 54.0) score -= (dHome - 54.0) * 0.35;
 
-    // Tucked Golden Talons Beneath Belly
-    [-0.08, 0.08].forEach(tx => {
-      const talon = new THREE.Mesh(new THREE.SphereGeometry(0.038, 8, 8), matBrass);
-      talon.scale.set(0.8, 0.8, 1.4);
-      talon.position.set(tx, -0.18, -0.15);
-      eagle.add(talon);
-    });
+      if (avoidX !== null && avoidZ !== null) {
+        const dPlayer = Math.hypot(cand.x - avoidX, cand.z - avoidZ);
+        if (dPlayer < 10.5) {
+          score -= (10.5 - dPlayer) * 4.0;
+        } else {
+          // Prefer flying away from the player's approach vector
+          const awayX = pos.x - avoidX, awayZ = pos.z - avoidZ;
+          const awayLen = Math.max(0.01, Math.hypot(awayX, awayZ));
+          const dotAway = ((dx / dist) * (awayX / awayLen)) + ((dz / dist) * (awayZ / awayLen));
+          score += dotAway * 5.0;
+        }
+      }
 
-    // 3. Fanned 9-Feather Snow-White Rectrices Tail
-    const tailFan = new THREE.Group();
-    tailFan.position.set(0, 0.0, -0.46);
-    for (let t = -4; t <= 4; t++) {
-      const rectrix = new THREE.Mesh(sharedEagleAssets.featherGeo, matIvory);
-      rectrix.rotation.x = -Math.PI / 2;
-      rectrix.rotation.z = t * 0.11;
-      rectrix.scale.set(1.15, 1.05 - Math.abs(t) * 0.04, 1.0);
-      tailFan.add(rectrix);
+      if (score > bestScore) {
+        bestScore = score;
+        bestPerch = cand;
+      }
     }
-    eagle.add(tailFan);
 
-    // 4. Two-Stage Articulated Cambered Wings Populated with GPU-Instanced Layered Flight Feathers (Remiges & Coverts)
+    if (!bestPerch) {
+      // Fallback: synthetic branch/ground perch 14m away from avoid point
+      const awayYaw = (avoidX !== null && avoidZ !== null)
+        ? Math.atan2(pos.x - avoidX, pos.z - avoidZ) + (Math.random() - 0.5) * 0.9
+        : Math.random() * Math.PI * 2;
+      const tx = pos.x + Math.sin(awayYaw) * 14.5;
+      const tz = pos.z + Math.cos(awayYaw) * 14.5;
+      const ty = Math.max(1.2, getTerrainHeight(tx, tz));
+      bestPerch = { type: 'ground', x: tx, y: ty, z: tz, hostObj: null };
+    }
+
+    fb.startPos.copy(pos);
+    fb.targetPerch = bestPerch;
+    fb.currentPerch = null;
+    fb.flightDist = Math.max(1.0, Math.hypot(bestPerch.x - pos.x, bestPerch.z - pos.z));
+    fb.flightProgress = 0.0;
+    fb.flightSpeed = (isStartled ? 7.6 : 6.2) + Math.random() * 1.1;
+    fb.arcHeight = Math.min(4.2, Math.max(1.35, fb.flightDist * 0.16));
+    fb.yaw = Math.atan2(bestPerch.x - pos.x, bestPerch.z - pos.z);
+    fb.state = 'flying';
+    fb.isAlert = false;
+    fb.stateTimer = 0;
+  }
+  function spawnEagles() {
+    if (!sharedEagleAssets) buildSharedEagleAssets();
     const dummy = new THREE.Object3D();
     const fCol = new THREE.Color();
 
-    function buildArticulatedFeatheredWing(side) {
+    // Helper: Build 2-stage articulated cambered wing with 54 GPU-instanced layered flight feathers (remiges & coverts)
+    function buildArticulatedFeatheredWing(side, isSeabird = false) {
       const innerGroup = new THREE.Group();
-      const innerSpar = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.038, 0.96, 8), sharedEagleAssets.eagleBodyMat);
+      const sparMat = isSeabird ? sharedEagleAssets.seabirdBodyMat : sharedEagleAssets.eagleBodyMat;
+      const plumeMat = isSeabird ? sharedEagleAssets.seabirdWingMat : sharedEagleAssets.eaglePlumeMat;
+      const innerSpar = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.036, 0.96, 8), sparMat);
       innerSpar.rotation.z = side * Math.PI / 2;
       innerSpar.position.set(side * 0.48, 0.02, 0.12);
       innerGroup.add(innerSpar);
 
-      // 32 GPU-Instanced Secondary Flight Feathers & Layered Dorsal Coverts on Inner Wing
       const innerFeatherCount = 32;
-      const innerInst = new THREE.InstancedMesh(sharedEagleAssets.featherGeo, sharedEagleAssets.eaglePlumeMat, innerFeatherCount);
+      const innerInst = new THREE.InstancedMesh(sharedEagleAssets.featherGeo, plumeMat, innerFeatherCount);
       for (let i = 0; i < innerFeatherCount; i++) {
         const isCovert = (i >= 16);
         const u = (i % 16) / 15;
@@ -6553,7 +7015,11 @@
         dummy.scale.set(isCovert ? 1.15 : 1.05, isCovert ? 0.62 : (1.12 - u * 0.12), 1.0);
         dummy.updateMatrix();
         innerInst.setMatrixAt(i, dummy.matrix);
-        fCol.setHex(isCovert ? 0x3b261a : 0x22150e);
+        if (isSeabird) {
+          fCol.setHex(isCovert ? 0xf5f7fa : 0xd0d8e2);
+        } else {
+          fCol.setHex(isCovert ? 0x3b261a : 0x22150e);
+        }
         innerInst.setColorAt(i, fCol);
       }
       innerInst.instanceMatrix.needsUpdate = true;
@@ -6567,19 +7033,23 @@
       const outerGroup = new THREE.Group();
       outerGroup.position.set(side * 0.94, 0.01, 0.10);
       const outerFeatherCount = 22;
-      const outerInst = new THREE.InstancedMesh(sharedEagleAssets.featherGeo, sharedEagleAssets.eaglePlumeMat, outerFeatherCount);
+      const outerInst = new THREE.InstancedMesh(sharedEagleAssets.featherGeo, plumeMat, outerFeatherCount);
       for (let i = 0; i < outerFeatherCount; i++) {
         const isCovert = (i >= 12);
         const u = isCovert ? ((i - 12) / 9) : (i / 11);
         dummy.position.set(side * (u * 0.72), isCovert ? 0.02 : 0.0, -u * 0.06);
-        // Slotted primary wingtip feathers fan outward and curve slightly upward at tips
         const fanZ = side * (0.18 + u * 0.82);
         const tipUp = (!isCovert && u > 0.6) ? (u - 0.6) * 0.35 : 0.0;
         dummy.rotation.set(-Math.PI / 2 + tipUp, 0, fanZ);
         dummy.scale.set(0.95, isCovert ? 0.52 : (1.28 - u * 0.22), 1.0);
         dummy.updateMatrix();
         outerInst.setMatrixAt(i, dummy.matrix);
-        fCol.setHex(u > 0.65 ? 0x140c08 : 0x2c1c12);
+        if (isSeabird) {
+          // Crisp black-tipped primary flight feathers & snow-white coverts like real Tropicbirds & Sea Gulls
+          fCol.setHex(u > 0.52 ? 0x1c222b : 0xeef2f7);
+        } else {
+          fCol.setHex(u > 0.65 ? 0x140c08 : 0x2c1c12);
+        }
         outerInst.setColorAt(i, fCol);
       }
       outerInst.instanceMatrix.needsUpdate = true;
@@ -6593,24 +7063,557 @@
       return { innerGroup, outerGroup };
     }
 
-    const leftW = buildArticulatedFeatheredWing(-1);
-    const rightW = buildArticulatedFeatheredWing(1);
-    eagle.add(leftW.innerGroup, rightW.innerGroup);
-    eagle.traverse(ch => { if (ch.isMesh || ch.isInstancedMesh) ch.raycast = () => {}; });
-    wildlifeGroup.add(eagle);
+    function createArticulatedBirdMesh(isSeabird = false) {
+      const bird = new THREE.Group();
+      const bodyMat = isSeabird ? sharedEagleAssets.seabirdBodyMat : sharedEagleAssets.eagleBodyMat;
+      const beakMat = isSeabird ? sharedEagleAssets.coralBeakMat : matBrass;
 
-      eagleAgents.push({
-        mesh: eagle,
+      // 1. Sculpted Aerodynamic Avian Torso & Pectoral Keel
+      const torsoGeo = new THREE.SphereGeometry(0.24, 16, 14);
+      torsoGeo.scale(isSeabird ? 0.80 : 0.88, isSeabird ? 0.76 : 0.82, isSeabird ? 2.25 : 2.15);
+      torsoGeo.setAttribute('aSssWeight', new THREE.Float32BufferAttribute(new Float32Array(torsoGeo.attributes.position.count).fill(0.05), 1));
+      const torso = new THREE.Mesh(torsoGeo, bodyMat);
+      bird.add(torso);
+
+      // 2. Sculpted Head, Supraorbital Brow, Eyes & Beak
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.155, 14, 12), isSeabird ? sharedEagleAssets.seabirdBodyMat : matIvory);
+      head.scale.set(0.92, 0.95, 1.24);
+      head.position.set(0, 0.06, 0.50);
+      bird.add(head);
+
+      const upperBeak = new THREE.Mesh(new THREE.ConeGeometry(isSeabird ? 0.044 : 0.052, isSeabird ? 0.24 : 0.19, 10), beakMat);
+      upperBeak.rotation.x = Math.PI / 2 + (isSeabird ? 0.10 : 0.25);
+      upperBeak.position.set(0, 0.04, 0.67);
+      bird.add(upperBeak);
+      if (!isSeabird) {
+        const beakHook = new THREE.Mesh(new THREE.ConeGeometry(0.024, 0.075, 8), beakMat);
+        beakHook.rotation.x = Math.PI - 0.25;
+        beakHook.position.set(0, 0.00, 0.73);
+        bird.add(beakHook);
+      }
+
+      [-0.085, 0.085].forEach(ex => {
+        const eye = new THREE.Mesh(new THREE.SphereGeometry(0.024, 8, 8), isSeabird ? matEyeDark : matEyeAmber);
+        eye.position.set(ex, 0.075, 0.56);
+        bird.add(eye);
+      });
+
+      // 3. Tucked Talons / Webbed Feet Beneath Belly
+      [-0.08, 0.08].forEach(tx => {
+        const talon = new THREE.Mesh(new THREE.SphereGeometry(0.038, 8, 8), beakMat);
+        talon.scale.set(0.8, 0.8, 1.4);
+        talon.position.set(tx, -0.17, -0.15);
+        bird.add(talon);
+      });
+
+      // 4. Articulated Fanned 9-Feather Rectrices Tail (+ Twin Long White Tail Streamers for Coastal Tropicbirds)
+      const tailFan = new THREE.Group();
+      tailFan.position.set(0, 0.0, -0.46);
+      for (let t = -4; t <= 4; t++) {
+        const rectrix = new THREE.Mesh(sharedEagleAssets.featherGeo, isSeabird ? sharedEagleAssets.seabirdWingMat : matIvory);
+        rectrix.rotation.x = -Math.PI / 2;
+        rectrix.rotation.z = t * 0.11;
+        rectrix.scale.set(1.15, 1.05 - Math.abs(t) * 0.04, 1.0);
+        tailFan.add(rectrix);
+      }
+      if (isSeabird) {
+        [-0.025, 0.025].forEach(sx => {
+          const streamer = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.012, 0.78, 6), sharedEagleAssets.seabirdBodyMat);
+          streamer.rotation.x = Math.PI / 2 - 0.08;
+          streamer.position.set(sx, -0.01, -0.58);
+          tailFan.add(streamer);
+        });
+      }
+      bird.add(tailFan);
+
+      const leftW = buildArticulatedFeatheredWing(-1, isSeabird);
+      const rightW = buildArticulatedFeatheredWing(1, isSeabird);
+      bird.add(leftW.innerGroup, rightW.innerGroup);
+      if (!isSeabird) {
+        bird.scale.setScalar(1.18);
+      } else {
+        bird.scale.setScalar(0.92);
+      }
+      bird.traverse(ch => { if (ch.isMesh || ch.isInstancedMesh) ch.raycast = () => {}; });
+      wildlifeGroup.add(bird);
+
+      return {
+        mesh: bird,
         leftWing: leftW.innerGroup,
         rightWing: rightW.innerGroup,
         leftOuter: leftW.outerGroup,
         rightOuter: rightW.outerGroup,
-        cx: (e % 2 === 0) ? 45 : -25,
-        cz: (e < 2) ? 65 : -95,
-        alt: 46 + e * 8,
-        ang: e * 1.57,
-        rad: 36 + e * 9
+        tailFan
+      };
+    }
+
+    // 4 High-Altitude Caldera Sea Eagles + 8 Coastal White-Tailed Tropicbirds / Seabirds over Emerald Bamboo Wetlands, Coral Cove & Channels
+    const birdSpecs = [
+      { isSeabird: false, cx:  45,  cz:  65,  alt: 46, rad: 38, speed: 0.28, flapFreq: 4.8 },
+      { isSeabird: false, cx: -25,  cz:  65,  alt: 54, rad: 45, speed: 0.26, flapFreq: 4.6 },
+      { isSeabird: false, cx:  45,  cz: -95,  alt: 58, rad: 52, speed: 0.25, flapFreq: 4.5 },
+      { isSeabird: false, cx: -185, cz:  72,  alt: 62, rad: 48, speed: 0.27, flapFreq: 4.7 },
+      // 8 Coastal White-Tailed Tropicbirds & Seabirds soaring over Emerald Bamboo Wetlands, Coral Cove & Lagoons
+      { isSeabird: true,  cx: -88,  cz: -128, alt: 22, rad: 28, speed: 0.42, flapFreq: 6.4 },
+      { isSeabird: true,  cx: -112, cz: -148, alt: 26, rad: 34, speed: 0.38, flapFreq: 6.1 },
+      { isSeabird: true,  cx: -68,  cz: -28,  alt: 20, rad: 26, speed: 0.44, flapFreq: 6.6 },
+      { isSeabird: true,  cx: -18,  cz: -32,  alt: 19, rad: 30, speed: 0.40, flapFreq: 6.2 },
+      { isSeabird: true,  cx:  55,  cz: -45,  alt: 24, rad: 32, speed: 0.39, flapFreq: 6.0 },
+      { isSeabird: true,  cx: -328, cz:  222, alt: 23, rad: 30, speed: 0.41, flapFreq: 6.3 },
+      { isSeabird: true,  cx: -145, cz: -85,  alt: 28, rad: 36, speed: 0.37, flapFreq: 5.9 },
+      { isSeabird: true,  cx:  125, cz: -110, alt: 25, rad: 34, speed: 0.40, flapFreq: 6.2 }
+    ];
+
+    birdSpecs.forEach((sp, e) => {
+      const bObj = createArticulatedBirdMesh(sp.isSeabird);
+      eagleAgents.push({
+        mesh: bObj.mesh,
+        leftWing: bObj.leftWing,
+        rightWing: bObj.rightWing,
+        leftOuter: bObj.leftOuter,
+        rightOuter: bObj.rightOuter,
+        tailFan: bObj.tailFan,
+        isSeabird: sp.isSeabird,
+        cx: sp.cx,
+        cz: sp.cz,
+        alt: sp.alt,
+        ang: e * 1.15,
+        rad: sp.rad,
+        speed: sp.speed,
+        flapFreq: sp.flapFreq
       });
+    });
+
+    // ==========================================================================
+    // 9E. LOW-FLYING PERCHING, WALKING & FORAGING ISLAND BIRDS
+    //     (Scarlet Tanagers, Azure Kingfishers & Emerald Ground Doves that land
+    //      on real 3D tree branches, boulders/rocks, and forest clearings)
+    // ==========================================================================
+    function buildPerchCatalog() {
+      perchNodes.length = 0;
+      const trees = window.activeEZTrees || [];
+      // 1. Sample real 3D lateral tree branch geometry vertices across island trees
+      for (let t = 0; t < trees.length; t++) {
+        const tr = trees[t];
+        if (!tr || !tr.parent || !tr.userData || tr.userData.type !== 'tree') continue;
+        const tx = tr.position.x, ty = tr.position.y, tz = tr.position.z;
+        if (ty < 0.8 || ty > 62.0) continue;
+        const s = (tr.scale && tr.scale.x) ? tr.scale.x : 1.0;
+        const ry = tr.rotation ? tr.rotation.y : 0.0;
+        const cosR = Math.cos(ry), sinR = Math.sin(ry);
+        let foundBranchOnTree = false;
+
+        if (tr.branchesMesh && tr.branchesMesh.geometry && tr.branchesMesh.geometry.attributes.position) {
+          const bPos = tr.branchesMesh.geometry.attributes.position;
+          const step = Math.max(1, Math.floor(bPos.count / 45));
+          for (let v = 0; v < bPos.count; v += step) {
+            const vx = bPos.getX(v) * s;
+            const vy = bPos.getY(v) * s;
+            const vz = bPos.getZ(v) * s;
+            const rad = Math.hypot(vx, vz);
+            // Select genuine outward lateral limbs between 1.8m and 5.2m above ground
+            if (vy >= 1.85 && vy <= 5.2 && rad >= 0.82 && rad <= 2.45) {
+              const wx = tx + vx * cosR + vz * sinR;
+              const wy = ty + vy + 0.015;
+              const wz = tz - vx * sinR + vz * cosR;
+              perchNodes.push({
+                type: 'branch',
+                x: wx,
+                y: wy,
+                z: wz,
+                hostObj: tr,
+                perchYaw: Math.atan2(vx * cosR + vz * sinR, -vx * sinR + vz * cosR) + Math.PI * 0.5
+              });
+              foundBranchOnTree = true;
+              break;
+            }
+          }
+        }
+        if (!foundBranchOnTree) {
+          const bAng = (t * 2.39996) % (Math.PI * 2);
+          const bRad = 1.15 * s;
+          perchNodes.push({
+            type: 'branch',
+            x: tx + Math.cos(bAng) * bRad,
+            y: ty + 2.65 * s,
+            z: tz + Math.sin(bAng) * bRad,
+            hostObj: tr,
+            perchYaw: bAng + Math.PI * 0.5
+          });
+        }
+      }
+
+      // 2. Sample rock & boulder crests from masterInteractiveTargets
+      for (let i = 0; i < masterInteractiveTargets.length; i++) {
+        const obj = masterInteractiveTargets[i];
+        if (!obj || !obj.parent || !obj.userData || obj.userData.type !== 'rock') continue;
+        const rx = obj.position.x, rz = obj.position.z;
+        const gY = getTerrainHeight(rx, rz);
+        if (gY < 0.85 || gY > 55.0) continue;
+        const sc = obj.scale ? obj.scale.x : 1.2;
+        if (sc < 0.55) continue;
+        perchNodes.push({
+          type: 'rock',
+          x: rx,
+          y: obj.position.y + sc * 0.72,
+          z: rz,
+          hostObj: obj,
+          perchYaw: (i * 1.7) % (Math.PI * 2)
+        });
+      }
+
+      // 3. Curated ground foraging spots (glades, trail edges, streambanks, starting beach edge)
+      const groundSpots = [
+        [-12, 18], [-24, 28], [-38, 36], [-52, 46], [-68, 54], [-84, 44],
+        [-102, 58], [-122, 68], [-142, 74], [-44, 14], [-28, 8], [14, 24],
+        [32, 38], [58, 52], [82, 64], [18, 142], [44, 168], [76, 192],
+        [-72, -96], [-88, -118], [-104, -132], [28, -24], [64, -38], [-162, 62]
+      ];
+      for (let g = 0; g < groundSpots.length; g++) {
+        const [gx, gz] = groundSpots[g];
+        const gy = getTerrainHeight(gx, gz);
+        if (gy > 1.1 && gy < 45.0) {
+          perchNodes.push({
+            type: 'ground',
+            x: gx,
+            y: gy,
+            z: gz,
+            hostObj: null,
+            perchYaw: Math.random() * Math.PI * 2
+          });
+        }
+      }
+    }
+
+    function buildSongbirdFeatheredWing(side, species) {
+      const innerGroup = new THREE.Group();
+      const bodyMat = species === 'tanager'
+        ? sharedEagleAssets.tanagerWingMat
+        : (species === 'kingfisher' ? sharedEagleAssets.kingfisherBodyMat : sharedEagleAssets.doveBodyMat);
+      const wingMat = species === 'tanager'
+        ? sharedEagleAssets.tanagerWingMat
+        : (species === 'kingfisher' ? sharedEagleAssets.kingfisherWingMat : sharedEagleAssets.doveWingMat);
+
+      const innerSpar = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.024, 0.65, 6), bodyMat);
+      innerSpar.rotation.z = side * Math.PI / 2;
+      innerSpar.position.set(side * 0.32, 0.01, 0.06);
+      innerGroup.add(innerSpar);
+
+      const innerCount = 20;
+      const innerInst = new THREE.InstancedMesh(sharedEagleAssets.featherGeo, wingMat, innerCount);
+      for (let i = 0; i < innerCount; i++) {
+        const isCovert = (i >= 10);
+        const u = (i % 10) / 9;
+        dummy.position.set(side * (0.08 + u * 0.56), isCovert ? 0.018 : 0.005, isCovert ? 0.05 : 0.01);
+        dummy.rotation.set(-Math.PI / 2 + (isCovert ? 0.07 : 0.02), 0, side * (0.06 + u * 0.14));
+        dummy.scale.set(0.88, isCovert ? 0.46 : (0.82 - u * 0.10), 1.0);
+        dummy.updateMatrix();
+        innerInst.setMatrixAt(i, dummy.matrix);
+        if (species === 'tanager') {
+          fCol.setHex(isCovert ? 0x262b34 : 0x15181e);
+        } else if (species === 'kingfisher') {
+          fCol.setHex(isCovert ? 0x2986e8 : 0x1558a6);
+        } else {
+          fCol.setHex(isCovert ? 0x328f6a : 0x6e5c52);
+        }
+        innerInst.setColorAt(i, fCol);
+      }
+      innerInst.instanceMatrix.needsUpdate = true;
+      if (innerInst.instanceColor) innerInst.instanceColor.needsUpdate = true;
+      innerInst.castShadow = false;
+      innerInst.layers.set(1);
+      innerInst.computeBoundingSphere();
+      innerGroup.add(innerInst);
+
+      const outerGroup = new THREE.Group();
+      outerGroup.position.set(side * 0.64, 0.008, 0.05);
+      const outerCount = 16;
+      const outerInst = new THREE.InstancedMesh(sharedEagleAssets.featherGeo, wingMat, outerCount);
+      for (let i = 0; i < outerCount; i++) {
+        const isCovert = (i >= 9);
+        const u = isCovert ? ((i - 9) / 6) : (i / 8);
+        dummy.position.set(side * (u * 0.48), isCovert ? 0.014 : 0.0, -u * 0.04);
+        const fanZ = side * (0.16 + u * 0.76);
+        dummy.rotation.set(-Math.PI / 2 + ((!isCovert && u > 0.55) ? (u - 0.55) * 0.25 : 0.0), 0, fanZ);
+        dummy.scale.set(0.80, isCovert ? 0.42 : (0.94 - u * 0.18), 1.0);
+        dummy.updateMatrix();
+        outerInst.setMatrixAt(i, dummy.matrix);
+        if (species === 'tanager') {
+          fCol.setHex(0x14171c);
+        } else if (species === 'kingfisher') {
+          fCol.setHex(u > 0.55 ? 0x0e3b75 : 0x2474cc);
+        } else {
+          fCol.setHex(u > 0.60 ? 0x4a3e38 : 0x267555);
+        }
+        outerInst.setColorAt(i, fCol);
+      }
+      outerInst.instanceMatrix.needsUpdate = true;
+      if (outerInst.instanceColor) outerInst.instanceColor.needsUpdate = true;
+      outerInst.castShadow = false;
+      outerInst.layers.set(1);
+      outerInst.computeBoundingSphere();
+      outerGroup.add(outerInst);
+
+      innerGroup.add(outerGroup);
+      return { innerGroup, outerGroup };
+    }
+
+    function buildArticulatedSongbirdLeg(side, legMat) {
+      const legPivot = new THREE.Group();
+      legPivot.position.set(side * 0.044, 0.145, -0.01);
+
+      // Feathered Tibiotarsus Thigh
+      const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.008, 0.072, 6), legMat);
+      thigh.position.set(0, -0.034, 0.008);
+      thigh.rotation.x = 0.22;
+      legPivot.add(thigh);
+
+      // Tarsometatarsus Shin Pivot (Ankle/Knee Joint)
+      const shinPivot = new THREE.Group();
+      shinPivot.position.set(0, -0.068, 0.016);
+      const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.0055, 0.082, 6), legMat);
+      shin.position.set(0, -0.038, -0.01);
+      shin.rotation.x = -0.24;
+      shinPivot.add(shin);
+
+      // 4-Toed Perching Foot (3 Anterior Digital Toes + 1 Posterior Hallux Claw)
+      const footGroup = new THREE.Group();
+      footGroup.position.set(0, -0.076, -0.018);
+      [-0.28, 0.0, 0.28].forEach(tAng => {
+        const toe = new THREE.Mesh(new THREE.ConeGeometry(0.0045, 0.042, 5), legMat);
+        toe.rotation.x = Math.PI / 2 + 0.12;
+        toe.rotation.z = tAng;
+        toe.position.set(Math.sin(tAng) * 0.012, 0.003, 0.018);
+        footGroup.add(toe);
+      });
+      const hallux = new THREE.Mesh(new THREE.ConeGeometry(0.0045, 0.032, 5), legMat);
+      hallux.rotation.x = -Math.PI / 2 - 0.15;
+      hallux.position.set(0, 0.003, -0.014);
+      footGroup.add(hallux);
+
+      shinPivot.add(footGroup);
+      legPivot.add(shinPivot);
+      return { legPivot, shinPivot, footGroup };
+    }
+
+    function createPerchingForestBirdMesh(species = 'tanager') {
+      const root = new THREE.Group();
+      const bodyMat = species === 'tanager'
+        ? sharedEagleAssets.tanagerBodyMat
+        : (species === 'kingfisher' ? sharedEagleAssets.kingfisherBodyMat : sharedEagleAssets.doveBodyMat);
+      const breastMat = species === 'tanager'
+        ? sharedEagleAssets.tanagerBellyMat
+        : (species === 'kingfisher' ? sharedEagleAssets.kingfisherBreastMat : sharedEagleAssets.doveBreastMat);
+      const wingMat = species === 'tanager'
+        ? sharedEagleAssets.tanagerWingMat
+        : (species === 'kingfisher' ? sharedEagleAssets.kingfisherWingMat : sharedEagleAssets.doveWingMat);
+      const beakMat = species === 'tanager'
+        ? sharedEagleAssets.coralBeakMat
+        : (species === 'kingfisher' ? sharedEagleAssets.songbirdBeakDarkMat : sharedEagleAssets.coralBeakMat);
+
+      const bodyPivot = new THREE.Group();
+      bodyPivot.position.set(0, 0.145, 0);
+
+      // 1. Sculpted Songbird Torso & Rounded Pectoral Breast
+      const torsoGeo = new THREE.SphereGeometry(0.105, 14, 12);
+      torsoGeo.scale(0.84, 0.86, 1.62);
+      torsoGeo.setAttribute('aSssWeight', new THREE.Float32BufferAttribute(new Float32Array(torsoGeo.attributes.position.count).fill(0.06), 1));
+      const torso = new THREE.Mesh(torsoGeo, bodyMat);
+      bodyPivot.add(torso);
+
+      const breast = new THREE.Mesh(new THREE.SphereGeometry(0.092, 12, 10), breastMat);
+      breast.scale.set(0.78, 0.74, 1.38);
+      breast.position.set(0, -0.024, 0.036);
+      bodyPivot.add(breast);
+
+      if (species === 'dove') {
+        // Emerald-iridescent neck collar badge
+        const collar = new THREE.Mesh(new THREE.SphereGeometry(0.078, 10, 8), wingMat);
+        collar.scale.set(0.92, 0.65, 0.88);
+        collar.position.set(0, 0.038, 0.085);
+        bodyPivot.add(collar);
+      }
+
+      // 2. Articulated Neck & Head Pivot with Crown Crest, Glossy Eyes & Opening Beak
+      const headPivot = new THREE.Group();
+      headPivot.position.set(0, 0.068, 0.138);
+
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.074, 12, 10), bodyMat);
+      head.scale.set(0.90, 0.94, 1.16);
+      headPivot.add(head);
+
+      if (species === 'kingfisher') {
+        const throat = new THREE.Mesh(new THREE.SphereGeometry(0.048, 8, 8), sharedEagleAssets.seabirdBodyMat);
+        throat.scale.set(0.85, 0.65, 0.95);
+        throat.position.set(0, -0.026, 0.042);
+        headPivot.add(throat);
+      }
+
+      // Sculpted Swept Crown Crest Feathers (for Scarlet Tanager/Cardinal & Azure Kingfisher)
+      const crestGroup = new THREE.Group();
+      crestGroup.position.set(0, 0.056, -0.01);
+      if (species === 'tanager' || species === 'kingfisher') {
+        for (let c = -1; c <= 1; c++) {
+          const plume = new THREE.Mesh(new THREE.ConeGeometry(0.018, 0.078, 6), bodyMat);
+          plume.rotation.x = -Math.PI * 0.36 + Math.abs(c) * 0.08;
+          plume.rotation.z = c * 0.18;
+          plume.position.set(c * 0.014, 0.016, -0.022);
+          crestGroup.add(plume);
+        }
+      }
+      headPivot.add(crestGroup);
+
+      // Glossy Eyes + Orbital Ring
+      [-0.048, 0.048].forEach(ex => {
+        const eyeRing = new THREE.Mesh(new THREE.SphereGeometry(0.016, 8, 6), sharedEagleAssets.seabirdBodyMat);
+        eyeRing.scale.set(0.65, 1.0, 1.0);
+        eyeRing.position.set(ex, 0.016, 0.036);
+        headPivot.add(eyeRing);
+        const eye = new THREE.Mesh(new THREE.SphereGeometry(0.0135, 8, 8), matEyeDark);
+        eye.position.set(ex * 1.06, 0.016, 0.038);
+        headPivot.add(eye);
+      });
+
+      // Upper & Articulated Lower Beak (Mandible opens when chirping or pecking seeds)
+      const beakLen = species === 'kingfisher' ? 0.118 : (species === 'tanager' ? 0.068 : 0.064);
+      const beakRad = species === 'tanager' ? 0.026 : (species === 'kingfisher' ? 0.021 : 0.016);
+      const upperBeak = new THREE.Mesh(new THREE.ConeGeometry(beakRad, beakLen, 8), beakMat);
+      upperBeak.rotation.x = Math.PI / 2 + 0.06;
+      upperBeak.position.set(0, 0.006, 0.072 + beakLen * 0.42);
+      headPivot.add(upperBeak);
+
+      const lowerBeak = new THREE.Mesh(new THREE.ConeGeometry(beakRad * 0.82, beakLen * 0.88, 8), beakMat);
+      lowerBeak.rotation.x = Math.PI / 2 - 0.04;
+      lowerBeak.position.set(0, -0.008, 0.068 + beakLen * 0.38);
+      headPivot.add(lowerBeak);
+
+      bodyPivot.add(headPivot);
+
+      // 3. Articulated 7-Feather Tail Fan (Spreads during landing flare, flicks when perched/walking)
+      const tailFan = new THREE.Group();
+      tailFan.position.set(0, 0.008, -0.155);
+      for (let t = -3; t <= 3; t++) {
+        const rectrix = new THREE.Mesh(sharedEagleAssets.featherGeo, wingMat);
+        rectrix.rotation.x = -Math.PI / 2;
+        rectrix.rotation.z = t * 0.12;
+        rectrix.scale.set(0.68, 0.62 - Math.abs(t) * 0.03, 1.0);
+        tailFan.add(rectrix);
+      }
+      bodyPivot.add(tailFan);
+
+      // 4. Two-Stage Articulated Wings (Spread in flight, fold neatly along flanks when perched/walking)
+      const leftW = buildSongbirdFeatheredWing(-1, species);
+      const rightW = buildSongbirdFeatheredWing(1, species);
+      leftW.innerGroup.position.set(-0.055, 0.025, 0.03);
+      rightW.innerGroup.position.set(0.055, 0.025, 0.03);
+      bodyPivot.add(leftW.innerGroup, rightW.innerGroup);
+
+      root.add(bodyPivot);
+
+      // 5. Two-Segment Articulated Bipedal Legs & Perching Talons
+      const leftLeg = buildArticulatedSongbirdLeg(-1, sharedEagleAssets.songbirdLegMat);
+      const rightLeg = buildArticulatedSongbirdLeg(1, sharedEagleAssets.songbirdLegMat);
+      root.add(leftLeg.legPivot, rightLeg.legPivot);
+
+      const speciesScale = species === 'dove' ? 1.18 : (species === 'kingfisher' ? 1.08 : 1.02);
+      root.scale.setScalar(speciesScale);
+      root.traverse(ch => { if (ch.isMesh || ch.isInstancedMesh) ch.raycast = () => {}; });
+      wildlifeGroup.add(root);
+
+      return {
+        mesh: root,
+        bodyPivot,
+        headPivot,
+        crestGroup,
+        lowerBeak,
+        tailFan,
+        leftWing: leftW.innerGroup,
+        rightWing: rightW.innerGroup,
+        leftOuter: leftW.outerGroup,
+        rightOuter: rightW.outerGroup,
+        leftLeg: leftLeg.legPivot,
+        rightLeg: rightLeg.legPivot,
+        leftShin: leftLeg.shinPivot,
+        rightShin: rightLeg.shinPivot,
+        leftFoot: leftLeg.footGroup,
+        rightFoot: rightLeg.footGroup
+      };
+    }
+
+    buildPerchCatalog();
+    const branchPerches = perchNodes.filter(p => p.type === 'branch' && Math.hypot(p.x, p.z - 25) < 220);
+    const rockPerches = perchNodes.filter(p => p.type === 'rock' && Math.hypot(p.x, p.z - 25) < 220);
+    const groundPerches = perchNodes.filter(p => p.type === 'ground');
+    const speciesRotation = ['tanager', 'kingfisher', 'dove'];
+    const totalLowBirds = 32;
+    for (let b = 0; b < totalLowBirds; b++) {
+      const spName = speciesRotation[b % speciesRotation.length];
+      const bObj = createPerchingForestBirdMesh(spName);
+      let initialPerch = null;
+      if (b % 3 === 0 && branchPerches.length > 0) {
+        initialPerch = branchPerches[(b * 5 + 1) % branchPerches.length];
+      } else if (b % 3 === 1 && rockPerches.length > 0) {
+        initialPerch = rockPerches[(b * 3 + 2) % rockPerches.length];
+      } else if (groundPerches.length > 0) {
+        initialPerch = groundPerches[b % groundPerches.length];
+      } else if (perchNodes.length > 0) {
+        initialPerch = perchNodes[(b * 7 + 3) % perchNodes.length];
+      } else {
+        initialPerch = { type: 'ground', x: -24 + b * 2, y: getTerrainHeight(-24 + b * 2, 24), z: 24, hostObj: null, perchYaw: 0 };
+      }
+
+      bObj.mesh.position.set(initialPerch.x, initialPerch.y, initialPerch.z);
+      const initYaw = initialPerch.perchYaw || (b * 1.3);
+      bObj.mesh.rotation.y = initYaw;
+
+      const startInFlight = (b % 5 === 4);
+      const startState = startInFlight
+        ? 'perched'
+        : (initialPerch.type === 'ground' ? (b % 2 === 0 ? 'ground_walk' : 'ground_idle') : 'perched');
+
+      const fbAgent = {
+        species: spName,
+        mesh: bObj.mesh,
+        bodyPivot: bObj.bodyPivot,
+        headPivot: bObj.headPivot,
+        crestGroup: bObj.crestGroup,
+        lowerBeak: bObj.lowerBeak,
+        tailFan: bObj.tailFan,
+        leftWing: bObj.leftWing,
+        rightWing: bObj.rightWing,
+        leftOuter: bObj.leftOuter,
+        rightOuter: bObj.rightOuter,
+        leftLeg: bObj.leftLeg,
+        rightLeg: bObj.rightLeg,
+        leftShin: bObj.leftShin,
+        rightShin: bObj.rightShin,
+        leftFoot: bObj.leftFoot,
+        rightFoot: bObj.rightFoot,
+        homeX: initialPerch.x,
+        homeZ: initialPerch.z,
+        currentPerch: initialPerch,
+        targetPerch: null,
+        startPos: new THREE.Vector3(initialPerch.x, initialPerch.y, initialPerch.z),
+        flightDist: 10.0,
+        flightProgress: 0.0,
+        flightSpeed: 6.5,
+        arcHeight: 2.2,
+        yaw: initYaw,
+        prevYaw: initYaw,
+        state: startState, // 'perched' | 'ground_idle' | 'ground_walk' | 'flying' | 'landing'
+        stateTimer: 3.5 + (b % 7) * 1.4,
+        groundResidencyTimer: 10.0 + (b % 5) * 2.2,
+        wingFold: startInFlight ? 0.0 : 1.0,
+        walkPhase: b * 0.9,
+        peckPhase: b * 1.3,
+        isAlert: false
+      };
+
+      if (startInFlight) {
+        triggerBirdFlightToNewPerch(fbAgent, null, null, false);
+        fbAgent.flightProgress = (b % 5) * 0.16;
+      }
+      forestBirdAgents.push(fbAgent);
     }
   }
 
@@ -6687,11 +7690,297 @@
   const zeroMatrix = new THREE.Matrix4().makeScale(0, 0, 0);
   const activeProjectiles = [];
   const activeExplosives = [];
+  const activeImpactEffects = [];
   const harvestableCarcasses = [];
   const lodgedAmmoItems = [];
   const bloodSpecks = [];
   window.harvestableCarcasses = harvestableCarcasses;
   window.activeProjectiles = activeProjectiles;
+  window.lodgedAmmoItems = lodgedAmmoItems;
+
+  // Build high-visibility 3D Hunting Arrow / Crossbow Bolt with broadhead, 3-vane feather fletching & aerodynamic flight trail
+  function createFlightArrowMesh(weaponType) {
+    const isBolt = (weaponType === 'crossbow');
+    const grp = new THREE.Group();
+    const shaftLen = isBolt ? 0.64 : 0.90;
+    const shaftRad = isBolt ? 0.016 : 0.014;
+
+    // 1. Seasoned Hickory / Reinforced Ash Shaft oriented along local +Z (matches Object3D.lookAt)
+    const shaftGeo = new THREE.CylinderGeometry(shaftRad, shaftRad * 0.92, shaftLen, 8);
+    shaftGeo.rotateX(Math.PI / 2);
+    const shaftMat = isBolt
+      ? new THREE.MeshStandardMaterial({ color: 0x8d6e63, roughness: 0.55, metalness: 0.25 })
+      : new THREE.MeshStandardMaterial({ color: 0xd7b377, roughness: 0.65 });
+    const shaft = new THREE.Mesh(shaftGeo, shaftMat);
+    grp.add(shaft);
+
+    // 2. Glinting 4-Blade Steel / Obsidian Broadhead Tip at front (+Z)
+    const tipLen = isBolt ? 0.12 : 0.11;
+    const tipGeo = new THREE.ConeGeometry(0.032, tipLen, 6);
+    tipGeo.rotateX(Math.PI / 2);
+    const tipMat = new THREE.MeshStandardMaterial({
+      color: isBolt ? 0xcfd8dc : 0x37474f,
+      metalness: 0.78,
+      roughness: 0.22,
+      emissive: isBolt ? 0x102027 : 0x1a1a1a,
+      emissiveIntensity: 0.35
+    });
+    const tip = new THREE.Mesh(tipGeo, tipMat);
+    tip.position.z = shaftLen * 0.5 + tipLen * 0.42;
+    grp.add(tip);
+
+    // Broadhead cross-barbs
+    const barbGeo = new THREE.BoxGeometry(0.068, 0.006, 0.075);
+    const barb1 = new THREE.Mesh(barbGeo, tipMat);
+    barb1.position.z = shaftLen * 0.5 + 0.015;
+    const barb2 = barb1.clone();
+    barb2.rotation.z = Math.PI / 2;
+    grp.add(barb1, barb2);
+
+    // 3. High-Visibility 3-Vane Feather Fletching & Nock Cap at tail (-Z)
+    const vaneColorPrimary = isBolt ? 0x26e6c6 : 0xff5252;
+    const vaneColorSecondary = isBolt ? 0xffd54f : 0xfff8e1;
+    const vaneMat1 = new THREE.MeshBasicMaterial({ color: vaneColorPrimary, side: THREE.DoubleSide });
+    const vaneMat2 = new THREE.MeshBasicMaterial({ color: vaneColorSecondary, side: THREE.DoubleSide });
+    const vaneGeo = new THREE.BoxGeometry(0.005, 0.048, 0.16);
+    const tailZ = -shaftLen * 0.5 + 0.09;
+    for (let v = 0; v < 3; v++) {
+      const ang = (v * Math.PI * 2) / 3;
+      const vane = new THREE.Mesh(vaneGeo, v === 0 ? vaneMat2 : vaneMat1);
+      vane.position.set(Math.cos(ang) * 0.022, Math.sin(ang) * 0.022, tailZ);
+      vane.rotation.z = ang - Math.PI / 2;
+      grp.add(vane);
+    }
+
+    const nockMat = new THREE.MeshBasicMaterial({ color: vaneColorSecondary });
+    const nock = new THREE.Mesh(new THREE.SphereGeometry(0.020, 8, 8), nockMat);
+    nock.position.z = -shaftLen * 0.5 - 0.01;
+    grp.add(nock);
+
+    // 4. Glowing Aerodynamic Flight Slipstream Ribbon (visible while airborne, hidden once lodged)
+    const trailLen = isBolt ? 2.10 : 1.75;
+    const trailGeo = new THREE.CylinderGeometry(0.004, 0.044, trailLen, 8, 1, true);
+    trailGeo.rotateX(Math.PI / 2);
+    const trailMat = new THREE.MeshBasicMaterial({
+      color: isBolt ? 0x80deea : 0xffe082,
+      transparent: true,
+      opacity: 0.52,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    const flightTrail = new THREE.Mesh(trailGeo, trailMat);
+    flightTrail.position.z = -shaftLen * 0.5 - trailLen * 0.5;
+    grp.add(flightTrail);
+
+    grp.userData.flightTrail = flightTrail;
+    grp.userData.shaftLen = shaftLen;
+    return grp;
+  }
+
+  // Spawn multi-layered 3D impact burst (shockwave ring, core flash, rising dust puff & 14 surface-matched debris/spark particles)
+  function spawnProjectileImpactEffect(hitPos, hitDir, surfaceType = 'ground', weaponType = 'bow') {
+    const grp = new THREE.Group();
+    grp.position.copy(hitPos);
+    scene.add(grp);
+
+    const isRock = (surfaceType === 'rock');
+    const isWood = (surfaceType === 'wood');
+    const isFlesh = (surfaceType === 'flesh');
+    const isWater = (surfaceType === 'water');
+
+    if (isRock && AudioEngine.playRockHit) AudioEngine.playRockHit();
+    else if (isWater && AudioEngine.playSplash) AudioEngine.playSplash();
+    else if (AudioEngine.playChop) AudioEngine.playChop();
+
+    const ringColor = isRock ? 0xffca28 : (isFlesh ? 0xff5252 : (isWater ? 0x80deea : (isWood ? 0xffe082 : 0xd7ccc8)));
+    const flashColor = isRock ? 0xffab00 : (isFlesh ? 0xd32f2f : (isWater ? 0xe0f7fa : 0xfff59d));
+
+    // 1. Expanding 3D Impact Shockwave Ring
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: ringColor,
+      transparent: true,
+      opacity: 0.92,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    const ringMesh = new THREE.Mesh(new THREE.RingGeometry(0.06, 0.17, 20), ringMat);
+    const lookTarget = hitPos.clone().add(hitDir ? hitDir.clone().negate() : new THREE.Vector3(0, 1, 0));
+    ringMesh.lookAt(lookTarget);
+    grp.add(ringMesh);
+
+    // 2. Core Point Impact Flash Sphere
+    const flashMat = new THREE.MeshBasicMaterial({
+      color: flashColor,
+      transparent: true,
+      opacity: 0.95,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    const flashMesh = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 10), flashMat);
+    grp.add(flashMesh);
+
+    // 3. Expanding Dust / Smoke Puff Cloud
+    const puffMat = new THREE.MeshBasicMaterial({
+      color: isRock ? 0x90a4ae : (isFlesh ? 0xb71c1c : (isWater ? 0xb2ebf2 : (isWood ? 0xa1887f : 0x8d6e63))),
+      transparent: true,
+      opacity: 0.48,
+      depthWrite: false
+    });
+    const puffMesh = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 8), puffMat);
+    grp.add(puffMesh);
+
+    // 4. 14 Ballistic 3D Sparks, Wood Splinters, Stone Chips or Earth Clods
+    const particles = [];
+    const palette = isRock
+      ? [0xffab00, 0xffe082, 0x78909c, 0xff6d00]
+      : isWood
+      ? [0xd7ccc8, 0x8d6e63, 0x66bb6a, 0xffcc80]
+      : isFlesh
+      ? [0xd32f2f, 0xff5252, 0x880e4f]
+      : isWater
+      ? [0xe0f7fa, 0x4dd0e1, 0xffffff]
+      : [0x8d6e63, 0xa1887f, 0x9ccc65, 0xd7ccc8];
+
+    const partGeo = isWood
+      ? new THREE.BoxGeometry(0.032, 0.022, 0.11)
+      : (THREE.DodecahedronGeometry ? new THREE.DodecahedronGeometry(0.042, 0) : new THREE.BoxGeometry(0.055, 0.055, 0.055));
+
+    const backDir = hitDir ? hitDir.clone().negate() : new THREE.Vector3(0, 1, 0);
+    for (let i = 0; i < 14; i++) {
+      const pCol = palette[i % palette.length];
+      const pMat = new THREE.MeshBasicMaterial({ color: pCol, transparent: true, opacity: 1.0 });
+      const pm = new THREE.Mesh(partGeo, pMat);
+      const spreadX = (Math.random() - 0.5) * 2.2;
+      const spreadY = Math.random() * 1.6 + 0.4;
+      const spreadZ = (Math.random() - 0.5) * 2.2;
+      const spd = (weaponType === 'crossbow' ? 4.2 : 3.4) + Math.random() * 3.8;
+      const vel = new THREE.Vector3(
+        backDir.x * 1.4 + spreadX,
+        Math.max(0.6, backDir.y * 1.2 + spreadY),
+        backDir.z * 1.4 + spreadZ
+      ).normalize().multiplyScalar(spd);
+      pm.rotation.set(Math.random() * 3, Math.random() * 3, Math.random() * 3);
+      grp.add(pm);
+      particles.push({
+        mesh: pm,
+        mat: pMat,
+        vel,
+        rotVel: new THREE.Vector3((Math.random() - 0.5) * 14, (Math.random() - 0.5) * 14, (Math.random() - 0.5) * 14)
+      });
+    }
+
+    // Brief crosshair hit-confirmation pulse
+    const bowArcEl = document.getElementById('cc-bow-arc');
+    if (bowArcEl && (campaign.activeTool === 'bow' || campaign.activeTool === 'crossbow')) {
+      bowArcEl.style.borderColor = isFlesh ? '#ff5252' : '#ffd54f';
+      bowArcEl.style.transform = 'translate(-50%, -50%) scale(1.28)';
+      setTimeout(() => {
+        if (bowArcEl) bowArcEl.style.transform = 'translate(-50%, -50%) scale(1.0)';
+      }, 180);
+    }
+
+    activeImpactEffects.push({
+      group: grp,
+      ringMesh,
+      ringMat,
+      flashMesh,
+      flashMat,
+      puffMesh,
+      puffMat,
+      particles,
+      age: 0,
+      maxLife: 0.68
+    });
+  }
+
+  // Lodge a retrievable arrow or crossbow bolt at the impact point with a pulsing finder ring & generous pickup proxy
+  function lodgeRetrievableProjectile(pr, hitPos, segDir, surfaceType = 'ground') {
+    const mesh = pr.mesh;
+    if (!mesh) return;
+    if (mesh.userData && mesh.userData.flightTrail) {
+      mesh.userData.flightTrail.visible = false;
+    }
+
+    // Back the arrow out slightly along its flight vector so the shaft and bright fletching stick clearly out of the surface
+    const dir = (segDir && segDir.lengthSq() > 0.0001) ? segDir.clone().normalize() : new THREE.Vector3(0, -1, 0);
+    const lodgePos = hitPos.clone().addScaledVector(dir, -0.24);
+    const minGroundY = getTerrainHeight(lodgePos.x, lodgePos.z) + 0.14;
+    if (surfaceType === 'ground' && lodgePos.y < minGroundY) {
+      lodgePos.y = minGroundY;
+    }
+    mesh.position.copy(lodgePos);
+    mesh.lookAt(lodgePos.clone().add(dir));
+
+    const isBolt = (pr.weaponType === 'crossbow');
+    // Subtle glowing finder halo ring around the lodged arrow's fletching so the player can spot it in grass or forest shade
+    const beaconGeo = new THREE.RingGeometry(0.16, 0.26, 18);
+    const beaconMat = new THREE.MeshBasicMaterial({
+      color: isBolt ? 0x26e6c6 : 0xffd54f,
+      transparent: true,
+      opacity: 0.82,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    const beaconRing = new THREE.Mesh(beaconGeo, beaconMat);
+    beaconRing.position.z = -0.22;
+    mesh.add(beaconRing);
+
+    // Generous invisible raycast hit-sphere (radius 0.88m) so looking anywhere near the arrow highlights & picks it up
+    const hitProxy = new THREE.Mesh(
+      new THREE.SphereGeometry(0.88, 8, 8),
+      new THREE.MeshBasicMaterial({ visible: false })
+    );
+    hitProxy.layers.enable(1);
+    hitProxy.layers.enable(2);
+    mesh.add(hitProxy);
+
+    const ammoLabel = isBolt ? 'Crossbow Bolt' : 'Hunting Arrow';
+    mesh.userData = Object.assign(mesh.userData || {}, {
+      type: 'lodged_ammo',
+      ammoType: isBolt ? 'bolt' : 'arrow',
+      lodgedAge: 0,
+      beaconRing,
+      beaconMat,
+      promptLabel: `${isBolt ? '🎯' : '🏹'} Pick Up ${ammoLabel} (+1 to Inventory) [Tap Strike]`
+    });
+
+    registerInteractiveTarget(mesh);
+    lodgedAmmoItems.push(mesh);
+    if (lodgedAmmoItems.length > 30) {
+      const oldA = lodgedAmmoItems.shift();
+      if (oldA && oldA.parent) oldA.parent.remove(oldA);
+      removeInteractiveTarget(oldA);
+    }
+  }
+
+  // Pick up a lodged arrow or crossbow bolt and add it to the player's inventory
+  function pickupLodgedAmmo(ammoMesh) {
+    if (!ammoMesh || !ammoMesh.userData || ammoMesh.userData.pickedUp) return false;
+    ammoMesh.userData.pickedUp = true;
+    const isBolt = (ammoMesh.userData.ammoType === 'bolt');
+    if (isBolt) {
+      player.inventory.bolts = (player.inventory.bolts || 0) + 1;
+    } else {
+      player.inventory.arrows = (player.inventory.arrows || 0) + 1;
+    }
+    if (ammoMesh.parent) ammoMesh.parent.remove(ammoMesh);
+    removeInteractiveTarget(ammoMesh);
+    const idx = lodgedAmmoItems.indexOf(ammoMesh);
+    if (idx !== -1) lodgedAmmoItems.splice(idx, 1);
+
+    if (AudioEngine.playChop) AudioEngine.playChop();
+    updateCastawayHUD();
+    if (isBolt) {
+      showToast(`🎯 Picked up Crossbow Bolt! (+1 Bolt — ${player.inventory.bolts} in Inventory)`);
+    } else {
+      showToast(`🏹 Picked up Hunting Arrow! (+1 Arrow — ${player.inventory.arrows} in Inventory)`);
+    }
+    return true;
+  }
+  window.pickupLodgedAmmo = pickupLodgedAmmo;
 
   function spawnBloodSpeck(x, y, z) {
     const m = new THREE.Mesh(
@@ -6719,6 +8008,17 @@
         ag.state = 'flee';
         ag.fleeTimer = 7.5;
         ag.yaw = Math.atan2(dx, dz);
+      }
+    }
+    // Startle nearby perched or ground-foraging songbirds within 28m of loud impacts/shots
+    const birdR2 = Math.min(28.0, radius) * Math.min(28.0, radius);
+    for (let b = 0; b < forestBirdAgents.length; b++) {
+      const fb = forestBirdAgents[b];
+      if (!fb || fb.state === 'flying' || fb.state === 'landing') continue;
+      const bdx = fb.mesh.position.x - origin.x;
+      const bdz = fb.mesh.position.z - origin.z;
+      if (bdx * bdx + bdz * bdz <= birdR2) {
+        triggerBirdFlightToNewPerch(fb, origin.x, origin.z, true);
       }
     }
   }
@@ -6976,13 +8276,13 @@
       const dx = obj.position.x - pos.x;
       const dz = obj.position.z - pos.z;
       if (dx * dx + dz * dz <= radius * radius) {
-        if (u.type === 'rock' || u.type === 'obsidian') {
+        if (u.type === 'rock' || u.type === 'boulder' || u.type === 'obsidian') {
           if (obj.parent) obj.parent.remove(obj);
           removeInteractiveTarget(obj);
           if (u.type === 'obsidian') {
             player.inventory.obsidian += 3;
           }
-          player.inventory.stone += 3;
+          player.inventory.stone += 4;
           if (window.spawnWoodchipBurst) window.spawnWoodchipBurst(obj.position.x, obj.position.y, obj.position.z, 0x6a7178, 12);
           shatteredRocks++;
         }
@@ -7036,24 +8336,31 @@
   window.detonateDynamiteBlast = detonateDynamiteBlast;
 
   function fireRangedProjectile(weaponType, drawPow = 1.0) {
+    let firedAmmoType = 'arrow';
     if (weaponType === 'bow') {
       if ((player.inventory.arrows || 0) <= 0) {
-        showToast('🏹 Out of Arrows! Craft more in [+Craft/Eat] (1 Timber + 1 Flint + 1 Feather).');
+        showToast('🏹 Out of Arrows! Find your shot arrows or craft more in [+Craft/Eat] (1 Timber + 1 Flint + 1 Feather).');
         return;
       }
       player.inventory.arrows--;
+      firedAmmoType = 'arrow';
       AudioEngine.playBowTwang();
     } else if (weaponType === 'crossbow') {
       if (campaign.crossbowCooldown > 0) {
         showToast(`🎯 Reloading Crossbow (${campaign.crossbowCooldown.toFixed(1)}s)...`);
         return;
       }
-      if ((player.inventory.bolts || 0) <= 0) {
-        showToast('🎯 Out of Bolts! Craft more in [+Craft/Eat] (1 Timber + 1 Obsidian + 1 Feather).');
+      if ((player.inventory.bolts || 0) > 0) {
+        player.inventory.bolts--;
+        firedAmmoType = 'bolt';
+      } else if ((player.inventory.arrows || 0) > 0) {
+        player.inventory.arrows--;
+        firedAmmoType = 'arrow';
+      } else {
+        showToast('🎯 Out of Bolts & Arrows! Pick up fired bolts/arrows or craft more in [+Craft/Eat].');
         return;
       }
-      player.inventory.bolts--;
-      campaign.crossbowCooldown = 2.4;
+      campaign.crossbowCooldown = 1.8;
       AudioEngine.playBowTwang();
     } else if (weaponType === 'pistol') {
       if ((player.inventory.pistolAmmo || 0) <= 0) {
@@ -7074,38 +8381,49 @@
     }
     updateCastawayHUD();
 
-    const fwd = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(player.pitch, player.yaw, 0, 'YXZ')).normalize();
-    const startPos = camera.position.clone().addScaledVector(fwd, 0.75);
-    const speed = weaponType === 'bow' ? (24.0 + 26.0 * drawPow)
-      : weaponType === 'crossbow' ? 68.0
+    const euler = new THREE.Euler(player.pitch, player.yaw, 0, 'YXZ');
+    const fwd = new THREE.Vector3(0, 0, -1).applyEuler(euler).normalize();
+    const right = new THREE.Vector3(1, 0, 0).applyEuler(euler).normalize();
+    const up = new THREE.Vector3(0, 1, 0).applyEuler(euler).normalize();
+
+    // Launch from the held bow/crossbow position in the player's right hand and converge on the crosshair target point
+    const isArrowOrBolt = (weaponType === 'bow' || weaponType === 'crossbow');
+    const startPos = isArrowOrBolt
+      ? camera.position.clone().addScaledVector(right, 0.14).addScaledVector(up, -0.09).addScaledVector(fwd, 0.56)
+      : camera.position.clone().addScaledVector(fwd, 0.75);
+    const aimPoint = camera.position.clone().addScaledVector(fwd, 42.0);
+    const launchDir = isArrowOrBolt ? aimPoint.sub(startPos).normalize() : fwd.clone();
+
+    const speed = weaponType === 'bow' ? (26.0 + 22.0 * drawPow)
+      : weaponType === 'crossbow' ? 58.0
       : weaponType === 'pistol' ? 165.0
       : 280.0;
-    const gravity = (weaponType === 'bow' || weaponType === 'crossbow') ? 9.8 : 2.2;
+    const gravity = weaponType === 'bow' ? 9.2 : (weaponType === 'crossbow' ? 6.8 : 2.2);
     const dmg = weaponType === 'bow' ? Math.max(1, Math.round(1 + drawPow * 1.5))
       : weaponType === 'crossbow' ? 3
       : weaponType === 'pistol' ? 3
       : 5;
 
-    const projMesh = (weaponType === 'bow' || weaponType === 'crossbow')
-      ? new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.65, 6), matHickory)
+    // Briefly hide the nocked arrow / loaded bolt on the held weapon mesh right after firing so you see it leave the bow/crossbow
+    campaign.arrowReloadVisualTimer = weaponType === 'crossbow' ? 1.6 : 0.42;
+
+    const projMesh = isArrowOrBolt
+      ? createFlightArrowMesh(weaponType)
       : new THREE.Mesh(new THREE.SphereGeometry(0.032, 6, 6), new THREE.MeshBasicMaterial({ color: 0xffd54f }));
-    if (weaponType === 'bow' || weaponType === 'crossbow') {
-      projMesh.geometry.rotateX(Math.PI / 2);
-    }
     projMesh.position.copy(startPos);
-    projMesh.lookAt(startPos.clone().add(fwd));
+    projMesh.lookAt(startPos.clone().add(launchDir));
     scene.add(projMesh);
 
     activeProjectiles.push({
       mesh: projMesh,
       pos: startPos.clone(),
-      vel: fwd.clone().multiplyScalar(speed),
+      vel: launchDir.clone().multiplyScalar(speed),
       gravity,
       dmg,
-      weaponType,
-      retrievable: (weaponType === 'bow' || weaponType === 'crossbow'),
+      weaponType: firedAmmoType === 'bolt' ? 'crossbow' : (isArrowOrBolt ? 'bow' : weaponType),
+      retrievable: isArrowOrBolt,
       age: 0,
-      maxLife: (weaponType === 'pistol' || weaponType === 'rifle') ? 0.9 : 5.0
+      maxLife: (weaponType === 'pistol' || weaponType === 'rifle') ? 0.9 : 6.5
     });
   }
   window.fireRangedProjectile = fireRangedProjectile;
@@ -7140,6 +8458,26 @@
   function handleCastawayPrimaryAction(bowReleasePow = null) {
     const tool = campaign.activeTool;
     campaign.toolSwing = 1.0;
+
+    // First check if the player is looking at or standing beside a lodged arrow/bolt or weapon cache (works even while holding Bow/Crossbow!)
+    if (lodgedAmmoItems.length > 0) {
+      const lookRay = new THREE.Raycaster();
+      lookRay.layers.enable(1);
+      lookRay.layers.enable(2);
+      lookRay.far = 6.2;
+      lookRay.setFromCamera(new THREE.Vector2(0, 0), camera);
+      const ammoHits = lookRay.intersectObjects(lodgedAmmoItems, true);
+      if (ammoHits.length > 0 && ammoHits[0].distance <= 6.2) {
+        let aRoot = ammoHits[0].object;
+        while (aRoot.parent && aRoot.parent !== scene && (!aRoot.userData || aRoot.userData.type !== 'lodged_ammo')) {
+          aRoot = aRoot.parent;
+        }
+        if (aRoot && aRoot.userData && aRoot.userData.type === 'lodged_ammo' && (aRoot.userData.lodgedAge || 0) > 0.15) {
+          pickupLodgedAmmo(aRoot);
+          return;
+        }
+      }
+    }
 
     if (tool === 'bow') {
       fireRangedProjectile('bow', bowReleasePow !== null ? bowReleasePow : 0.72);
@@ -7194,13 +8532,7 @@
       }
 
       if (u.type === 'lodged_ammo') {
-        if (u.ammoType === 'bolt') player.inventory.bolts++;
-        else player.inventory.arrows++;
-        if (root.parent) root.parent.remove(root);
-        removeInteractiveTarget(root);
-        AudioEngine.playChop();
-        showToast(`🏹 Retrieved intact ${u.ammoType === 'bolt' ? 'Crossbow Bolt' : 'Hunting Arrow'}!`);
-        updateCastawayHUD();
+        pickupLodgedAmmo(root);
         return;
       }
 
@@ -7298,12 +8630,12 @@
           if (root.parent) root.parent.remove(root);
           removeInteractiveTarget(root);
           player.inventory.obsidian += 2;
-          player.inventory.stone += 1;
+          player.inventory.stone += 2;
           if (u.isLavaTubeVein) {
             player.inventory.flint = (player.inventory.flint || 0) + 1;
-            showToast('🌋 Mined Magma-Veined Obsidian! +2 Obsidian, +1 Flint & +1 Stone!');
+            showToast('🌋 Mined Magma-Veined Obsidian! +2 Obsidian, +1 Flint & +2 Stone!');
           } else {
-            showToast('🖤 Mined +2 Volcanic Obsidian & +1 Stone!');
+            showToast('🖤 Mined +2 Volcanic Obsidian & +2 Stone!');
           }
           updateCastawayHUD();
         } else {
@@ -7950,6 +9282,7 @@
           <span>🐟 Raw: <b id="cc-cnt-fish">0</b></span>
           <span>🍖 Rations: <b id="cc-cnt-food">2</b></span>
           <span>🏹 Arrows: <b id="cc-cnt-arrows">6</b></span>
+          <span>🎯 Bolts: <b id="cc-cnt-bolts">6</b></span>
           <span>🧨 Blast: <b id="cc-cnt-dyn">0</b></span>
           <span>🎇 Flares: <b id="cc-cnt-flares">2</b></span>
         </div>
@@ -8634,6 +9967,7 @@
     setTxt('cc-cnt-fish', (player.inventory.rawFish || 0) + (player.inventory.rawMeat || 0));
     setTxt('cc-cnt-food', player.inventory.cookedFood || 0);
     setTxt('cc-cnt-arrows', player.inventory.arrows || 0);
+    setTxt('cc-cnt-bolts', player.inventory.bolts || 0);
     setTxt('cc-cnt-dyn', player.inventory.dynamite || 0);
     setTxt('cc-cnt-flares', player.inventory.flares || 0);
     setTxt('timber-count', player.inventory.timber || 0);
@@ -9093,6 +10427,16 @@
     if (campaign.crossbowCooldown > 0) {
       campaign.crossbowCooldown = Math.max(0, campaign.crossbowCooldown - dt);
     }
+    if (campaign.arrowReloadVisualTimer && campaign.arrowReloadVisualTimer > 0) {
+      campaign.arrowReloadVisualTimer = Math.max(0, campaign.arrowReloadVisualTimer - dt);
+    }
+    if (activeMesh) {
+      if (campaign.activeTool === 'bow' && activeMesh.userData.nockedArrow) {
+        activeMesh.userData.nockedArrow.visible = (player.inventory.arrows || 0) > 0 && !(campaign.arrowReloadVisualTimer > 0);
+      } else if (campaign.activeTool === 'crossbow' && activeMesh.userData.loadedBolt) {
+        activeMesh.userData.loadedBolt.visible = ((player.inventory.bolts || 0) + (player.inventory.arrows || 0)) > 0 && !(campaign.arrowReloadVisualTimer > 0);
+      }
+    }
     const bowArcEl = document.getElementById('cc-bow-arc');
     if (campaign.bowDraw.holding && campaign.activeTool === 'bow') {
       campaign.bowDraw.holdTime += dt;
@@ -9125,7 +10469,10 @@
       }
     }
 
-    // Stepped ballistic projectiles (swept prevPos -> nextPos against wildlife, trees & terrain)
+    // Stepped ballistic projectiles (swept prevPos -> nextPos against wildlife, trees, rocks, water & terrain)
+    const projRay = updateCalderaCastaway._projRay || (updateCalderaCastaway._projRay = new THREE.Raycaster());
+    projRay.layers.enable(1);
+    projRay.layers.enable(2);
     for (let p = activeProjectiles.length - 1; p >= 0; p--) {
       const pr = activeProjectiles[p];
       pr.age += dt;
@@ -9139,30 +10486,33 @@
       pr.pos.addScaledVector(pr.vel, dt);
       pr.mesh.position.copy(pr.pos);
       pr.mesh.lookAt(pr.pos.clone().add(pr.vel));
+      // Spin arrow/bolt slightly along its flight axis for realistic rifled fletching stability
+      if (pr.retrievable) {
+        pr.mesh.rotateZ(pr.age * 16.0);
+      }
 
       let hitHandled = false;
       const segVec = pr.pos.clone().sub(prev);
       const segLen = segVec.length();
       if (segLen > 0.001) {
         const segDir = segVec.clone().divideScalar(segLen);
-        const midPt = prev.clone().addScaledVector(segVec, 0.5);
-        // Check against all live wildlife & sharks (closest point to segment)
+
+        // 1. Check against all live wildlife & sharks (closest point to segment)
         const targets = wildlifeAgents.concat(sharkAgents);
         for (let k = 0; k < targets.length; k++) {
           const ag = targets[k];
           if (!ag || !ag.mesh || !ag.mesh.parent || ag.isDead || ag.state === 'dying') continue;
           const ctr = ag.mesh.position.clone();
           ctr.y += (ag.species === 'deer' ? 0.95 : (ag.species === 'rabbit' || ag.species === 'squirrel' ? 0.22 : 0.55));
-          const hitRad = ag.isShark ? 1.55 : (ag.species === 'deer' ? 0.95 : (ag.species === 'boar' || ag.species === 'wolf' ? 0.72 : 0.36));
+          const hitRad = ag.isShark ? 1.55 : (ag.species === 'deer' ? 0.95 : (ag.species === 'boar' || ag.species === 'wolf' ? 0.72 : 0.38));
           const toC = ctr.clone().sub(prev);
           const projT = Math.max(0, Math.min(segLen, toC.dot(segDir)));
           const closestPt = prev.clone().addScaledVector(segDir, projT);
           if (closestPt.distanceToSquared(ctr) <= hitRad * hitRad) {
             applyWildlifeDamage(ag, pr.dmg, closestPt, prev, segDir);
+            spawnProjectileImpactEffect(closestPt, segDir, 'flesh', pr.weaponType);
             if (pr.retrievable) {
-              pr.mesh.userData = { type: 'lodged_ammo', ammoType: pr.weaponType === 'crossbow' ? 'bolt' : 'arrow', promptLabel: 'Retrieve Ammo [Tap Strike]' };
-              registerInteractiveTarget(pr.mesh);
-              lodgedAmmoItems.push(pr.mesh);
+              lodgeRetrievableProjectile(pr, closestPt, segDir, 'flesh');
             } else {
               scene.remove(pr.mesh);
             }
@@ -9173,23 +10523,128 @@
         }
         if (hitHandled) continue;
 
-        // Ground collision -> lodge retrievable arrow/bolt in turf
-        const gY = getTerrainHeight(pr.pos.x, pr.pos.z);
-        if (pr.pos.y <= gY + 0.05) {
-          if (pr.retrievable) {
-            pr.mesh.position.set(pr.pos.x, gY + 0.08, pr.pos.z);
-            pr.mesh.userData = { type: 'lodged_ammo', ammoType: pr.weaponType === 'crossbow' ? 'bolt' : 'arrow', promptLabel: 'Retrieve Arrow/Bolt [Tap Strike]' };
-            registerInteractiveTarget(pr.mesh);
-            lodgedAmmoItems.push(pr.mesh);
-            if (lodgedAmmoItems.length > 24) {
-              const oldA = lodgedAmmoItems.shift();
-              scene.remove(oldA);
-              removeInteractiveTarget(oldA);
+        // 2. Check against nearby trees, boulders/rocks, and bamboo along flight segment
+        if (pr.age > 0.03) {
+          const nearObstacles = [];
+          for (let t = 0; t < interactiveTargets.length; t++) {
+            const obj = interactiveTargets[t];
+            if (!obj || !obj.visible || obj === pr.mesh || (obj.userData && obj.userData.type === 'lodged_ammo')) continue;
+            const dx = obj.position.x - pr.pos.x;
+            const dz = obj.position.z - pr.pos.z;
+            if (dx * dx + dz * dz <= 36.0) nearObstacles.push(obj);
+          }
+          if (nearObstacles.length > 0) {
+            projRay.set(prev, segDir);
+            projRay.far = segLen + 0.35;
+            const obsHits = projRay.intersectObjects(nearObstacles, true);
+            if (obsHits.length > 0 && obsHits[0].distance <= segLen + 0.35) {
+              let oRoot = obsHits[0].object;
+              while (oRoot.parent && oRoot.parent !== scene && oRoot.parent !== worldLandmarksGroup && (!oRoot.userData || !oRoot.userData.type)) {
+                oRoot = oRoot.parent;
+              }
+              const oType = (oRoot && oRoot.userData && oRoot.userData.type) ? oRoot.userData.type : '';
+              const surfType = (oType === 'boulder' || oType === 'obsidian') ? 'rock' : 'wood';
+              const impactPt = obsHits[0].point.clone();
+              spawnProjectileImpactEffect(impactPt, segDir, surfType, pr.weaponType);
+              if (pr.retrievable) {
+                lodgeRetrievableProjectile(pr, impactPt, segDir, surfType);
+              } else {
+                scene.remove(pr.mesh);
+              }
+              activeProjectiles.splice(p, 1);
+              continue;
             }
+          }
+        }
+
+        // 3. Check water surface splash when entering water
+        if (!pr.enteredWater) {
+          const wInfo = getWaterInfo(pr.pos.x, pr.pos.z, timeSec);
+          if (wInfo.isWater && prev.y > wInfo.surfaceY && pr.pos.y <= wInfo.surfaceY) {
+            pr.enteredWater = true;
+            const waterHitPt = new THREE.Vector3(pr.pos.x, wInfo.surfaceY + 0.04, pr.pos.z);
+            addWaterRipple(pr.pos.x, pr.pos.z, 1.5);
+            spawnProjectileImpactEffect(waterHitPt, segDir, 'water', pr.weaponType);
+            pr.vel.multiplyScalar(0.42);
+          }
+        }
+
+        // 4. Ground / cliff collision -> spawn impact effect & lodge retrievable arrow/bolt
+        const gY = getTerrainHeight(pr.pos.x, pr.pos.z);
+        if (pr.pos.y <= gY + 0.08) {
+          const gSlope = Math.hypot(
+            getTerrainHeight(pr.pos.x + 1.0, pr.pos.z) - gY,
+            getTerrainHeight(pr.pos.x, pr.pos.z + 1.0) - gY
+          );
+          const groundSurf = (gSlope > 0.65 || gY > 45.0) ? 'rock' : 'ground';
+          const hitPt = new THREE.Vector3(pr.pos.x, gY + 0.06, pr.pos.z);
+          spawnProjectileImpactEffect(hitPt, segDir, groundSurf, pr.weaponType);
+          if (pr.retrievable) {
+            lodgeRetrievableProjectile(pr, hitPt, segDir, groundSurf);
           } else {
             scene.remove(pr.mesh);
           }
           activeProjectiles.splice(p, 1);
+        }
+      }
+    }
+
+    // Animate 3D projectile impact effects (shockwave ring, flash, dust puff & ballistic sparks/splinters)
+    for (let ie = activeImpactEffects.length - 1; ie >= 0; ie--) {
+      const eff = activeImpactEffects[ie];
+      eff.age += dt;
+      if (eff.age >= eff.maxLife) {
+        if (eff.group.parent) eff.group.parent.remove(eff.group);
+        activeImpactEffects.splice(ie, 1);
+        continue;
+      }
+      const t = eff.age / eff.maxLife;
+      const ringScale = 1.0 + Math.pow(t, 0.55) * 6.2;
+      eff.ringMesh.scale.set(ringScale, ringScale, 1.0);
+      eff.ringMat.opacity = Math.max(0, (1.0 - t) * 0.92);
+
+      const flashScale = Math.max(0.01, 1.0 - t * 3.2);
+      eff.flashMesh.scale.setScalar(flashScale);
+      eff.flashMat.opacity = Math.max(0, 1.0 - t * 3.5);
+
+      const puffScale = 1.0 + t * 3.8;
+      eff.puffMesh.scale.setScalar(puffScale);
+      eff.puffMesh.position.y = t * 0.55;
+      eff.puffMat.opacity = Math.max(0, (1.0 - t) * 0.45);
+
+      for (let i = 0; i < eff.particles.length; i++) {
+        const pt = eff.particles[i];
+        pt.vel.y -= 14.0 * dt;
+        pt.mesh.position.addScaledVector(pt.vel, dt);
+        pt.mesh.rotation.x += pt.rotVel.x * dt;
+        pt.mesh.rotation.y += pt.rotVel.y * dt;
+        pt.mesh.rotation.z += pt.rotVel.z * dt;
+        pt.mat.opacity = Math.max(0, 1.0 - Math.pow(t, 1.4));
+      }
+    }
+
+    // Pulse lodged arrow/bolt finder beacon rings & auto-pickup when the player walks over them (<= 2.25m)
+    for (let la = lodgedAmmoItems.length - 1; la >= 0; la--) {
+      const aMesh = lodgedAmmoItems[la];
+      if (!aMesh || !aMesh.parent) {
+        lodgedAmmoItems.splice(la, 1);
+        continue;
+      }
+      const u = aMesh.userData || {};
+      u.lodgedAge = (u.lodgedAge || 0) + dt;
+      if (u.beaconRing && u.beaconMat) {
+        u.beaconRing.rotation.z = timeSec * 2.2;
+        const pulse = 0.85 + 0.32 * Math.sin(timeSec * 4.5 + la);
+        u.beaconRing.scale.setScalar(pulse);
+        u.beaconMat.opacity = 0.48 + 0.36 * Math.sin(timeSec * 4.5 + la);
+      }
+      // Walk-over proximity pickup after 0.48s so the player can simply walk up to any found arrow/bolt to collect it
+      if (u.lodgedAge > 0.48) {
+        const dx = aMesh.position.x - px;
+        const dy = aMesh.position.y - (py + 0.9);
+        const dz = aMesh.position.z - pz;
+        if (dx * dx + dz * dz <= 2.25 * 2.25 && Math.abs(dy) <= 2.6) {
+          pickupLodgedAmmo(aMesh);
         }
       }
     }
@@ -9734,7 +11189,16 @@
 
         bo.x += bo.vx * stepDt;
         bo.z += bo.vz * stepDt;
-        bo.y = bo.baseY + Math.sin(timeSec * 1.9 + bo.phase) * 0.24;
+        const bedNow = getTerrainHeight(bo.x, bo.z);
+        if (bedNow > -1.35) {
+          // Steer schooling fish firmly back toward their deep-water channel center if approaching an island bank
+          bo.vx = (bo.cx - bo.x) * 0.85;
+          bo.vz = (bo.cz - bo.z) * 0.85;
+          bo.x += bo.vx * stepDt;
+          bo.z += bo.vz * stepDt;
+        }
+        // Strictly clamp every schooling fish underwater (<= -0.75m) so no fish can ever float into the sky
+        bo.y = Math.min(-0.75, Math.max(bedNow + 0.55, bo.baseY + Math.sin(timeSec * 1.9 + bo.phase) * 0.22));
 
         bDummy.position.set(bo.x, bo.y, bo.z);
         bDummy.rotation.set(0, Math.atan2(bo.vx, bo.vz) + Math.sin(timeSec * 12.0 + bo.phase) * 0.08, 0);
@@ -9752,7 +11216,11 @@
       if (!sn.mesh.parent) continue;
       sn.ang += dt * 0.65;
       if (Math.hypot(sn.cx - px, sn.cz - pz) > 85.0 && ((frameCounter + r) & 3) !== 0) continue;
-      sn.mesh.position.set(sn.cx + Math.cos(sn.ang) * sn.rad, sn.baseY + Math.sin(timeSec * 1.7 + r) * 0.14, sn.cz + Math.sin(sn.ang) * sn.rad);
+      const sx = sn.cx + Math.cos(sn.ang) * sn.rad;
+      const sz = sn.cz + Math.sin(sn.ang) * sn.rad;
+      const sBed = getTerrainHeight(sx, sz);
+      const sy = Math.min(-0.80, Math.max(sBed + 0.55, sn.baseY + Math.sin(timeSec * 1.7 + r) * 0.14));
+      sn.mesh.position.set(sx, sy, sz);
       sn.mesh.rotation.y = -sn.ang;
       if (sn.mesh.userData.tail) sn.mesh.userData.tail.rotation.y = Math.sin(timeSec * 13.0 + r) * 0.36;
     }
@@ -9763,7 +11231,7 @@
       ray.ang += dt * ray.speed;
       const rx = ray.cx + Math.cos(ray.ang) * ray.rad;
       const rz = ray.cz + Math.sin(ray.ang) * ray.rad;
-      const bedY = getTerrainHeight(rx, rz);
+      const bedY = Math.min(-1.25, getTerrainHeight(rx, rz));
       ray.mesh.position.set(rx, bedY + 0.36 + Math.sin(timeSec * 1.5 + st) * 0.05, rz);
       ray.mesh.rotation.y = -ray.ang;
     }
@@ -9785,23 +11253,286 @@
       }
     }
 
-    // Animate Two-Stage Articulated Sea Eagle Wings
+    // Animate Two-Stage Articulated Sea Eagles & Coastal Tropicbirds / Seabirds (Flapping + Thermal Soaring Glide)
     for (let e = 0; e < eagleAgents.length; e++) {
       const ea = eagleAgents[e];
-      ea.ang += dt * 0.28;
+      const spd = ea.speed || 0.28;
+      ea.ang += dt * spd;
+      const flapFreq = ea.flapFreq || 5.2;
+      // Alternate naturally between active flapping wingbeats and smooth cambered thermal glides
+      const glideMod = 0.55 + 0.45 * Math.sin(timeSec * 0.9 + e * 1.7);
+      const phase = timeSec * flapFreq + e * 1.3;
+      const flap = Math.sin(phase) * (ea.isSeabird ? 0.34 : 0.26) * glideMod;
+      const outerFlex = Math.cos(phase - 0.35) * (ea.isSeabird ? 0.28 : 0.22) * glideMod;
+
       ea.mesh.position.set(
         ea.cx + Math.cos(ea.ang) * ea.rad,
-        ea.alt + Math.sin(timeSec * 0.8 + e) * 1.8,
+        ea.alt + Math.sin(timeSec * 0.85 + e) * 1.8 - Math.cos(phase) * 0.08 * glideMod,
         ea.cz + Math.sin(ea.ang) * ea.rad
       );
       ea.mesh.rotation.y = -ea.ang;
-      ea.mesh.rotation.z = 0.18;
-      const flap = Math.sin(timeSec * 5.2 + e * 1.3) * 0.26;
-      const outerFlex = Math.cos(timeSec * 5.2 + e * 1.3) * 0.22;
+      ea.mesh.rotation.z = 0.18 + Math.sin(timeSec * 0.7 + e) * 0.06;
       ea.leftWing.rotation.z = flap;
       ea.rightWing.rotation.z = -flap;
       if (ea.leftOuter) ea.leftOuter.rotation.z = outerFlex;
       if (ea.rightOuter) ea.rightOuter.rotation.z = -outerFlex;
+      if (ea.tailFan) {
+        ea.tailFan.rotation.x = Math.sin(phase) * 0.09 * glideMod;
+      }
+    }
+
+    // 6D. Animate Low-Flying Perching, Walking & Foraging Island Birds (Flying, Landing Flare, Sitting on Branches/Rocks, Ground Walking/Pecking & Mild Fear)
+    const playerHorizSpeed = Math.hypot(player.vel.x, player.vel.z);
+    const playerDisturbScale = player.isCrouching ? 0.65 : (playerHorizSpeed > 5.2 ? 1.32 : 1.0);
+    for (let b = 0; b < forestBirdAgents.length; b++) {
+      const fb = forestBirdAgents[b];
+      const pos = fb.mesh.position;
+      const dxP = px - pos.x;
+      const dzP = pz - pos.z;
+      const distP = Math.hypot(dxP, dzP);
+      if (distP > 115.0 && ((frameCounter + b) & 3) !== 0) continue;
+      const stepDt = (distP > 115.0) ? dt * 4.0 : dt;
+      const dyP = Math.abs((py + 1.4) - pos.y);
+
+      // Check if host tree or boulder was felled/mined while perched
+      if (fb.currentPerch && fb.currentPerch.hostObj && !fb.currentPerch.hostObj.parent && fb.state !== 'flying') {
+        triggerBirdFlightToNewPerch(fb, px, pz, true);
+      }
+
+      // Mild Fear of the Character:
+      // - Within ~5.2m (or ~6.8m if player sprints), the bird gently takes off to a nearby branch or boulder.
+      // - Between 5.2m and 9.0m, the bird becomes cautiously alert (watches player with head-tilts, or hops/walks away on the ground).
+      const flushRadius = ((fb.state === 'ground_idle' || fb.state === 'ground_walk') ? 5.6 : 4.6) * playerDisturbScale;
+      const watchRadius = ((fb.state === 'ground_idle' || fb.state === 'ground_walk') ? 9.2 : 7.8) * playerDisturbScale;
+
+      if (fb.state !== 'flying' && fb.state !== 'landing') {
+        if (distP < flushRadius && dyP < 3.8) {
+          triggerBirdFlightToNewPerch(fb, px, pz, true);
+        } else if (distP < watchRadius && dyP < 4.8) {
+          fb.isAlert = true;
+          if (fb.state === 'ground_idle' && distP < watchRadius * 0.85) {
+            fb.state = 'ground_walk';
+            fb.stateTimer = 1.8 + Math.random() * 1.2;
+            fb.yaw = Math.atan2(-dxP, -dzP) + (Math.random() - 0.5) * 0.45;
+          }
+        } else {
+          fb.isAlert = false;
+        }
+      }
+
+      if (fb.state === 'flying' || fb.state === 'landing') {
+        const tgt = fb.targetPerch;
+        if (!tgt || (tgt.hostObj && !tgt.hostObj.parent)) {
+          triggerBirdFlightToNewPerch(fb, px, pz, false);
+          continue;
+        }
+        fb.flightProgress += (fb.flightSpeed * stepDt) / Math.max(1.0, fb.flightDist);
+        const u = Math.min(1.0, fb.flightProgress);
+        if (u >= 0.76 && fb.state === 'flying') {
+          fb.state = 'landing';
+        }
+
+        const curX = fb.startPos.x + (tgt.x - fb.startPos.x) * u;
+        const curZ = fb.startPos.z + (tgt.z - fb.startPos.z) * u;
+        const linearY = fb.startPos.y + (tgt.y - fb.startPos.y) * u;
+        const arcBoost = Math.sin(u * Math.PI) * fb.arcHeight;
+        const groundFloor = getTerrainHeight(curX, curZ);
+        const minClearance = (u < 0.85) ? (groundFloor + 1.45 * Math.sin(u * Math.PI)) : tgt.y;
+        pos.set(curX, Math.max(minClearance, linearY + arcBoost), curZ);
+
+        fb.prevYaw = fb.yaw;
+        const desiredYaw = Math.atan2(tgt.x - fb.startPos.x, tgt.z - fb.startPos.z);
+        fb.yaw += Math.sin(desiredYaw - fb.yaw) * Math.min(1.0, stepDt * 8.0);
+        fb.mesh.rotation.y = fb.yaw;
+
+        const isLandingFlare = (fb.state === 'landing');
+        // Unfold wings smoothly in flight; during final landing flare, flutter rapidly and prepare to fold
+        const targetFold = isLandingFlare ? Math.max(0.0, (u - 0.82) * 3.5) : 0.0;
+        fb.wingFold += (targetFold - fb.wingFold) * Math.min(1.0, stepDt * 14.0);
+
+        const flapHz = isLandingFlare ? 16.5 : 12.2;
+        const phase = timeSec * flapHz + b * 1.7;
+        // Songbird bounding flight modulation (brief glide every few beats during cruise)
+        const boundGlide = isLandingFlare ? 1.0 : (0.68 + 0.32 * Math.sin(timeSec * 3.2 + b));
+        const flapAmp = (isLandingFlare ? 0.62 : 0.48) * boundGlide * (1.0 - fb.wingFold * 0.75);
+        const flapAngle = Math.sin(phase) * flapAmp;
+        const outerAngle = Math.cos(phase - 0.35) * flapAmp * 0.82;
+
+        // Body pitch: streamlined forward in cruise (+0.12), pitched up into aerodynamic braking flare (-0.54) on landing
+        const targetPitch = isLandingFlare ? -0.54 : 0.12;
+        fb.bodyPivot.rotation.x += (targetPitch - fb.bodyPivot.rotation.x) * Math.min(1.0, stepDt * 9.0);
+        fb.bodyPivot.position.y = 0.145;
+        fb.mesh.rotation.z = Math.sin(timeSec * 2.5 + b) * 0.08 * (1.0 - fb.wingFold);
+
+        // Apply 2-stage wing articulation blended with wing-fold pose
+        const foldT = fb.wingFold;
+        fb.leftWing.rotation.set(-0.18 * foldT + (isLandingFlare ? 0.28 * (1 - foldT) : 0), 1.26 * foldT, flapAngle * (1 - foldT) - 0.46 * foldT);
+        fb.rightWing.rotation.set(-0.18 * foldT + (isLandingFlare ? 0.28 * (1 - foldT) : 0), -1.26 * foldT, -flapAngle * (1 - foldT) + 0.46 * foldT);
+        fb.leftOuter.rotation.z = outerAngle * (1 - foldT) - 0.82 * foldT;
+        fb.rightOuter.rotation.z = -outerAngle * (1 - foldT) + 0.82 * foldT;
+
+        // Tail fan spreads wide during landing braking flare
+        const tailSpread = isLandingFlare ? 1.42 : 1.05;
+        fb.tailFan.scale.x += (tailSpread - fb.tailFan.scale.x) * Math.min(1.0, stepDt * 10.0);
+        fb.tailFan.rotation.x = isLandingFlare ? 0.42 : (Math.sin(phase) * 0.08);
+
+        // Legs: tucked back beneath belly during cruise (-1.05), extended forward (+0.32) to grasp branch/ground during landing flare
+        const targetLegX = isLandingFlare ? 0.32 : -1.05;
+        fb.leftLeg.rotation.x += (targetLegX - fb.leftLeg.rotation.x) * Math.min(1.0, stepDt * 10.0);
+        fb.rightLeg.rotation.x += (targetLegX - fb.rightLeg.rotation.x) * Math.min(1.0, stepDt * 10.0);
+        fb.leftShin.rotation.x = isLandingFlare ? -0.15 : 0.45;
+        fb.rightShin.rotation.x = isLandingFlare ? -0.15 : 0.45;
+
+        fb.headPivot.rotation.set(isLandingFlare ? 0.32 : -0.08, 0, 0);
+        fb.lowerBeak.rotation.x = Math.PI / 2 - 0.04;
+
+        if (u >= 1.0) {
+          pos.set(tgt.x, tgt.y, tgt.z);
+          fb.currentPerch = tgt;
+          fb.targetPerch = null;
+          fb.mesh.rotation.z = 0;
+          if (tgt.type === 'ground') {
+            fb.state = Math.random() < 0.55 ? 'ground_walk' : 'ground_idle';
+            fb.stateTimer = 2.4 + Math.random() * 2.8;
+            fb.groundResidencyTimer = 11.0 + Math.random() * 7.0;
+          } else {
+            fb.state = 'perched';
+            fb.stateTimer = 6.5 + Math.random() * 8.5;
+            if (tgt.perchYaw !== undefined) fb.yaw = tgt.perchYaw;
+          }
+        }
+      } else if (fb.state === 'perched') {
+        fb.stateTimer -= stepDt;
+        fb.wingFold += (1.0 - fb.wingFold) * Math.min(1.0, stepDt * 10.0);
+        const foldT = fb.wingFold;
+
+        // Neat folded wing posture along the flanks
+        fb.leftWing.rotation.set(-0.18 * foldT, 1.26 * foldT, -0.46 * foldT);
+        fb.rightWing.rotation.set(-0.18 * foldT, -1.26 * foldT, 0.46 * foldT);
+        fb.leftOuter.rotation.z = -0.82 * foldT;
+        fb.rightOuter.rotation.z = 0.82 * foldT;
+
+        // Upright perched/sitting posture with flexed knees & gentle respiratory bob
+        const sitSquat = 0.126 + Math.sin(timeSec * 2.8 + b) * 0.004;
+        fb.bodyPivot.position.y += (sitSquat - fb.bodyPivot.position.y) * Math.min(1.0, stepDt * 8.0);
+        fb.bodyPivot.rotation.x += (-0.34 - fb.bodyPivot.rotation.x) * Math.min(1.0, stepDt * 8.0);
+
+        fb.leftLeg.rotation.x += (-0.22 - fb.leftLeg.rotation.x) * Math.min(1.0, stepDt * 8.0);
+        fb.rightLeg.rotation.x += (-0.22 - fb.rightLeg.rotation.x) * Math.min(1.0, stepDt * 8.0);
+        fb.leftShin.rotation.x = 0.28;
+        fb.rightShin.rotation.x = 0.28;
+
+        // Tail balance bob & occasional tail flick
+        fb.tailFan.scale.x += (0.88 - fb.tailFan.scale.x) * Math.min(1.0, stepDt * 8.0);
+        const tailFlick = Math.pow(Math.max(0, Math.sin(timeSec * 1.9 + b * 2.3)), 8.0) * 0.24;
+        fb.tailFan.rotation.x = 0.22 + Math.sin(timeSec * 2.4 + b) * 0.05 + tailFlick;
+
+        // Head vigilance: watches player if mildly alert, otherwise scans branches & tilts curiously
+        if (fb.isAlert) {
+          const toPYaw = Math.atan2(dxP, dzP);
+          const relYaw = Math.atan2(Math.sin(toPYaw - fb.yaw), Math.cos(toPYaw - fb.yaw));
+          fb.headPivot.rotation.y += (Math.max(-0.95, Math.min(0.95, relYaw)) - fb.headPivot.rotation.y) * Math.min(1.0, stepDt * 9.0);
+          fb.headPivot.rotation.z = Math.sin(timeSec * 4.5 + b) * 0.18;
+          fb.headPivot.rotation.x = 0.18;
+          if (fb.crestGroup) fb.crestGroup.scale.y = 1.25;
+        } else {
+          const scanYaw = Math.sin(timeSec * 1.35 + b * 2.1) * 0.48 + Math.sin(timeSec * 3.1 + b) * 0.15;
+          fb.headPivot.rotation.y += (scanYaw - fb.headPivot.rotation.y) * Math.min(1.0, stepDt * 6.0);
+          fb.headPivot.rotation.z = Math.sin(timeSec * 2.0 + b * 1.7) * 0.14;
+          fb.headPivot.rotation.x = 0.16 + Math.sin(timeSec * 1.6 + b) * 0.06;
+          if (fb.crestGroup) fb.crestGroup.scale.y = 1.0;
+        }
+
+        // Periodic songbird chirp beak movement
+        const chirpOpen = Math.pow(Math.max(0, Math.sin(timeSec * 3.6 + b * 1.9)), 6.0) * 0.24;
+        fb.lowerBeak.rotation.x = (Math.PI / 2 - 0.04) - chirpOpen;
+
+        if (fb.stateTimer <= 0) {
+          triggerBirdFlightToNewPerch(fb, fb.isAlert ? px : null, fb.isAlert ? pz : null, false);
+        }
+      } else {
+        // GROUND FORAGING STATES: 'ground_idle' (pecking & looking around) and 'ground_walk' (walking/hopping across terrain)
+        fb.stateTimer -= stepDt;
+        fb.groundResidencyTimer -= stepDt;
+        fb.wingFold += (1.0 - fb.wingFold) * Math.min(1.0, stepDt * 10.0);
+        const foldT = fb.wingFold;
+        fb.leftWing.rotation.set(-0.18 * foldT, 1.26 * foldT, -0.46 * foldT);
+        fb.rightWing.rotation.set(-0.18 * foldT, -1.26 * foldT, 0.46 * foldT);
+        fb.leftOuter.rotation.z = -0.82 * foldT;
+        fb.rightOuter.rotation.z = 0.82 * foldT;
+        fb.tailFan.scale.x += (0.92 - fb.tailFan.scale.x) * Math.min(1.0, stepDt * 8.0);
+
+        if (fb.state === 'ground_walk') {
+          const walkSpd = fb.isAlert ? 1.55 : 0.98;
+          if (fb.isAlert) {
+            const awayYaw = Math.atan2(-dxP, -dzP);
+            fb.yaw += Math.sin(awayYaw - fb.yaw) * Math.min(1.0, stepDt * 5.0);
+          }
+          const nx = pos.x + Math.sin(fb.yaw) * walkSpd * stepDt;
+          const nz = pos.z + Math.cos(fb.yaw) * walkSpd * stepDt;
+          const ny = getTerrainHeight(nx, nz);
+          if (ny > 1.05 && ny < 48.0) {
+            fb.walkPhase += stepDt * walkSpd * 13.5;
+            const hopArc = Math.abs(Math.sin(fb.walkPhase * 0.5)) * 0.032;
+            pos.set(nx, ny + hopArc, nz);
+          } else {
+            fb.yaw += Math.PI * 0.75;
+          }
+          fb.mesh.rotation.y = fb.yaw;
+
+          // Alternating bipedal leg stride + knee flexion
+          const strideL = Math.sin(fb.walkPhase) * 0.68;
+          const strideR = -Math.sin(fb.walkPhase) * 0.68;
+          fb.leftLeg.rotation.x = strideL;
+          fb.rightLeg.rotation.x = strideR;
+          fb.leftShin.rotation.x = Math.max(0, -Math.cos(fb.walkPhase) * 0.45);
+          fb.rightShin.rotation.x = Math.max(0, Math.cos(fb.walkPhase) * 0.45);
+
+          // Walking posture & rhythmic avian head-bob
+          fb.bodyPivot.position.y = 0.145;
+          fb.bodyPivot.rotation.x = 0.06 + Math.sin(fb.walkPhase * 2.0) * 0.05;
+          fb.headPivot.rotation.set(Math.sin(fb.walkPhase * 2.0) * 0.14, fb.isAlert ? Math.sin(timeSec * 5.0 + b) * 0.25 : 0, 0);
+          fb.tailFan.rotation.x = 0.12 - Math.sin(fb.walkPhase * 2.0) * 0.08;
+          fb.lowerBeak.rotation.x = Math.PI / 2 - 0.04;
+
+          if (fb.stateTimer <= 0) {
+            fb.state = 'ground_idle';
+            fb.stateTimer = 2.0 + Math.random() * 2.6;
+          }
+        } else {
+          // 'ground_idle': standing on ground, alternating between seed/insect pecking and alert head scans
+          pos.y = getTerrainHeight(pos.x, pos.z);
+          fb.leftLeg.rotation.x += (0.0 - fb.leftLeg.rotation.x) * Math.min(1.0, stepDt * 10.0);
+          fb.rightLeg.rotation.x += (0.0 - fb.rightLeg.rotation.x) * Math.min(1.0, stepDt * 10.0);
+          fb.leftShin.rotation.x = 0.08;
+          fb.rightShin.rotation.x = 0.08;
+          fb.bodyPivot.position.y = 0.142;
+
+          fb.peckPhase += stepDt * 8.5;
+          const isPeckingWindow = !fb.isAlert && (Math.sin(timeSec * 1.4 + b * 1.7) > -0.15);
+          const peckPulse = isPeckingWindow ? Math.pow(Math.max(0, Math.sin(fb.peckPhase)), 3.0) : 0.0;
+
+          fb.bodyPivot.rotation.x = 0.04 + peckPulse * 0.56;
+          fb.headPivot.rotation.x = peckPulse * 0.52;
+          fb.headPivot.rotation.y = fb.isAlert
+            ? Math.max(-0.9, Math.min(0.9, Math.atan2(Math.sin(Math.atan2(dxP, dzP) - fb.yaw), Math.cos(Math.atan2(dxP, dzP) - fb.yaw))))
+            : Math.sin(timeSec * 1.8 + b) * 0.36 * (1.0 - peckPulse);
+          fb.headPivot.rotation.z = (1.0 - peckPulse) * Math.sin(timeSec * 2.5 + b) * 0.12;
+          fb.tailFan.rotation.x = 0.14 + peckPulse * 0.38;
+          fb.lowerBeak.rotation.x = (Math.PI / 2 - 0.04) - peckPulse * 0.22;
+
+          if (fb.stateTimer <= 0) {
+            fb.state = 'ground_walk';
+            fb.stateTimer = 2.2 + Math.random() * 2.8;
+            fb.yaw += (Math.random() - 0.5) * 2.2;
+          }
+        }
+
+        // After foraging on the ground for 11-18s, fly back up to a nearby tree branch or rock perch!
+        if (fb.groundResidencyTimer <= 0) {
+          triggerBirdFlightToNewPerch(fb, fb.isAlert ? px : null, fb.isAlert ? pz : null, false);
+        }
+      }
     }
 
     // 7. Update Parabolic Sky Flares & Subterranean Floor Flares
