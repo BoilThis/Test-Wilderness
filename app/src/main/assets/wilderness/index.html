@@ -1562,7 +1562,7 @@
         wade: ['wade-1', 'wade-2', 'wade-3'],
         splash: ['splash-1', 'splash-2'],
         scoop: ['scoop'],
-        chop: ['chop-1', 'chop-2'],
+        chop: ['chop-1', 'chop-2', 'chop-3'],
         creak: ['creak'],
         thud: ['thud'],
         rock: ['rock-1', 'rock-2'],
@@ -1574,8 +1574,12 @@
         pistol: ['shot-pistol'],
         rifle: ['shot-rifle'],
         boom: ['boom'],
-        step: ['step-1', 'step-2', 'step-3'],
-        ocean: ['ocean']
+        'step-grass': ['step-grass-1', 'step-grass-2'],
+        'step-sand': ['step-sand-1', 'step-sand-2', 'step-sand-3', 'step-sand-4'],
+        'step-rock': ['step-rock-1', 'step-rock-2', 'step-rock-3', 'step-rock-4'],
+        'step-wood': ['step-wood-1', 'step-wood-2', 'step-wood-3'],
+        gull: ['gull-1', 'gull-2', 'gull-3'],
+        insect: ['insect-1', 'insect-2', 'insect-3']
       },
       init() {
         if (!this.ctx) {
@@ -1621,9 +1625,17 @@
         if (window.AndroidBridge && AndroidBridge.playAsset) {
           const names = this._banks[bank] || [];
           if (names.length) {
-            const name = names[(Math.random() * names.length) | 0];
+            if (!this._lastTake) this._lastTake = {};
+            let idx = (Math.random() * names.length) | 0;
+            if (names.length > 1 && idx === this._lastTake[bank]) {
+              idx = (idx + 1 + ((Math.random() * (names.length - 1)) | 0)) % names.length;
+            }
+            this._lastTake[bank] = idx;
+            if (bank === 'splash' || bank === 'chop' || bank === 'boom' || bank === 'rifle' || bank === 'pistol' || bank === 'bow') {
+              this._loudAt = performance.now() / 1000;
+            }
             try {
-              AndroidBridge.playAsset(name, volume, rate || 1);
+              AndroidBridge.playAsset(names[idx], volume, rate || 1);
               return true;
             } catch (err) {}
           }
@@ -1665,11 +1677,20 @@
         if (!this._playBank('rock', 0.38, rate)) this.playChop();
         else this._haptic(28);
       },
-      playFootstep(sprinting) {
+      playFootstep(sprinting, surface) {
         try { if (!this.ctx) this.init(); } catch (err) {}
         if (!this.ctx && !(window.AndroidBridge && AndroidBridge.playAsset)) return;
-        const rate = 0.98 + Math.random() * 0.04;
-        this._playBank('step', sprinting ? 0.5 : 0.36, rate);
+        const bank = surface === 'rock' ? 'step-rock'
+          : surface === 'sand' ? 'step-sand'
+          : surface === 'wood' ? 'step-wood'
+          : 'step-grass';
+        const base = surface === 'rock' ? 0.4 : surface === 'sand' ? 0.28 : surface === 'wood' ? 0.32 : 0.34;
+        this._playBank(bank, sprinting ? base + 0.08 : base, 0.98 + Math.random() * 0.04);
+      },
+      playScatter(kind) {
+        try { if (!this.ctx) this.init(); } catch (err) {}
+        if (!this.ctx && !(window.AndroidBridge && AndroidBridge.playAsset)) return;
+        this._playBank(kind === 'gull' ? 'gull' : 'insect', kind === 'gull' ? 0.16 : 0.1, 0.98 + Math.random() * 0.04);
       },
       playSplash(kind) {
         try { if (!this.ctx || !this._splashBuffer) this.init(); } catch (err) {}
@@ -3465,6 +3486,26 @@
         mask = Math.max(mask, 1.0 - smoothstep(stInfo.halfW * 0.6, stInfo.halfW + 2.5, stInfo.dist));
       }
       return mask;
+    }
+
+    // Same bands the terrain shader paints: sand at the waterline, rock on steep or high ground, grass everywhere else.
+    function groundSurface(x, z, y) {
+      const d = 1.35;
+      const slope = Math.hypot(
+        getTerrainHeight(x + d, z) - getTerrainHeight(x - d, z),
+        getTerrainHeight(x, z + d) - getTerrainHeight(x, z - d)
+      ) / (d * 2);
+      let waterY = 0.05;
+      const upland = Math.hypot((x - 118) / 39, (z - 2) / 36);
+      const head = Math.hypot((x + 18) / 38, (z - 204) / 38);
+      const valley = Math.hypot((x - 88) / 31, (z - 214) / 27);
+      if (upland < 1.12 && y > 24) waterY = 33.6;
+      else if (head < 1.12 && y > 16) waterY = 26.6;
+      else if (valley < 1.12 && y < 12) waterY = 6.8;
+      const rel = y - waterY;
+      if (rel < 1.45 && rel > -0.15 && slope < 0.62) return 'sand';
+      if (slope > 0.78 || y > 20) return 'rock';
+      return 'grass';
     }
 
     function getTerrainHeight(x, z) {
@@ -14956,12 +14997,20 @@
         }
       }
 
-      // Shallow steps only. Swimming is one splash on the way in, then quiet.
-      if (wInfo.isWater && !isSub && wish.lengthSq() > 0.05 && (timeSec - player.lastWaterStepTime > 0.72)) {
+      // Shallow water is a bed, not a splash on every step. One sound on the way in, one on the way out.
+      const aboard = !!(window.calderaCampaign && window.calderaCampaign.onRaft);
+      const inShallow = wInfo.isWater && !isSub && !aboard;
+      if (inShallow && wish.lengthSq() > 0.05 && (timeSec - player.lastWaterStepTime > 0.72)) {
         player.lastWaterStepTime = timeSec;
         addWaterRipple(player.pos.x, player.pos.z, 0.55);
+      }
+      if (inShallow && !player.wasShallow) {
+        AudioEngine.playSplash('splash');
+        addWaterRipple(player.pos.x, player.pos.z, 1.1);
+      } else if (!inShallow && player.wasShallow) {
         AudioEngine.playSplash('wade');
       }
+      player.wasShallow = inShallow;
 
       // Sprint & Swimmer Stamina (supports both land sprint and swim-sprint burst)
       const wantsSprint = (keys['shift'] || player.touchSprintRequested) && wish.lengthSq() > 0.05;
@@ -15169,13 +15218,25 @@
 
       let oceanVol = 0;
       let windVol = 0;
+      let wadeVol = 0;
       if (!(caveNav && caveNav.isInside)) {
-        if (wInfo.isWater && wInfo.surfaceY < 1.2) oceanVol = 0.26;
-        else if (!wInfo.isWater && terrY < 2.2 && player.pos.y < 6) oceanVol = 0.2 * (1 - terrY / 2.2);
+        if (wInfo.isWater && wInfo.surfaceY < 1.2) oceanVol = 0.2;
+        else if (!wInfo.isWater && terrY < 2.2 && player.pos.y < 6) oceanVol = 0.16 * (1 - terrY / 2.2);
+        if (inShallow) oceanVol = Math.max(oceanVol, wish.lengthSq() > 0.05 ? 0.3 : 0.24);
+        if (inShallow && wish.lengthSq() > 0.05) wadeVol = 0.12;
         if (oceanVol < 0.05) windVol = 0.08 + Math.min(0.06, Math.max(0, player.pos.y - 6) * 0.003);
       }
       AudioEngine.setLoop('ocean', oceanVol);
       AudioEngine.setLoop('windbed', windVol);
+      AudioEngine.setLoop('wadebed', wadeVol);
+      if (!player._nextScatter) player._nextScatter = timeSec + 5;
+      if (timeSec >= player._nextScatter) {
+        player._nextScatter = timeSec + 8 + Math.random() * 14;
+        const indoors = caveNav && caveNav.isInside;
+        if (!indoors && (performance.now() / 1000 - (AudioEngine._loudAt || 0)) > 0.8) {
+          AudioEngine.playScatter(oceanVol > 0.05 ? 'gull' : 'insect');
+        }
+      }
 
       if (player.pos.y < effectiveGroundY) {
         player.pos.y = effectiveGroundY;
@@ -15191,12 +15252,16 @@
       let breatheY = 0;
       const horizSpeed = Math.hypot(player.vel.x, player.vel.z);
 
-      if (!player.isSwimming && player.isGrounded && !wInfo.isWater && horizSpeed > 0.4) {
+      if (!player.isSwimming && (aboard || (player.isGrounded && !wInfo.isWater)) && horizSpeed > 0.4) {
         const strideFreq = player.isSprinting ? 12.5 : 8.5;
         const prevStride = player.stride;
         player.stride += dt * strideFreq;
         if (Math.floor(player.stride / Math.PI) !== Math.floor(prevStride / Math.PI)) {
-          AudioEngine.playFootstep(player.isSprinting);
+          let surface = 'wood';
+          if (!aboard) {
+            surface = (caveNav && caveNav.isInside) ? 'rock' : groundSurface(player.pos.x, player.pos.z, terrY);
+          }
+          AudioEngine.playFootstep(player.isSprinting, surface);
         }
         if (player.headBobEnabled) {
           bobY = Math.sin(player.stride) * (player.isSprinting ? 0.045 : 0.026);

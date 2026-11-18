@@ -1,20 +1,37 @@
 All clips in this folder are CC0. No credit is required to ship them.
-They were trimmed, converted to mono, and normalized for the game.
+They were trimmed, converted, and leveled for the game.
 
-Water one-shots (wade, splash, scoop): rubberduck, OpenGameArt, "40 CC0 water / splash / slime SFX".
+Grass steps: TinyWorlds, OpenGameArt, "Different steps on wood, stone, leaves, gravel and mud".
+https://opengameart.org/content/different-steps-on-wood-stone-leaves-gravel-and-mud
+
+Sand and rock steps: Fantozzi, OpenGameArt, "Fantozzi's Footsteps (Grass/Sand & Stone)".
+https://opengameart.org/content/fantozzis-footsteps-grasssand-stone
+
+Wood steps: TinyWorlds, same pack as the grass steps.
+
+Wood hits (axe): rubberduck, OpenGameArt, "100 CC0 metal and wood SFX".
+https://opengameart.org/content/100-cc0-metal-and-wood-sfx
+
+Water one-shots and the wade bed: rubberduck, OpenGameArt, "40 CC0 water / splash / slime SFX".
 https://opengameart.org/content/40-cc0-water-splash-slime-sfx
 
-Rocky-shore waves: Freesound 451533 by kyles, CC0.
+Shore bed: Freesound 451533 by kyles, CC0.
 https://freesound.org/people/kyles/sounds/451533/
+
+Wind bed: Freesound 726319 by ZIP.Creates, CC0.
+https://freesound.org/people/ZIP.Creates/sounds/726319/
+
+Gulls: Rango Mango, OpenGameArt, "Solo Seagull Sound Effects", CC0.
+https://opengameart.org/content/solo-seagull-sound-effects
+
+Insects: fvcalderan, OpenGameArt, "Insect Sounds", CC0.
+https://opengameart.org/content/insect-sounds
 
 Cave drips: Freesound 177958 by Sclolex, CC0.
 https://freesound.org/people/Sclolex/sounds/177958/
 
 Campfire: Freesound 350757 by aerror, CC0.
 https://freesound.org/people/aerror/sounds/350757/
-
-Wind gust: Freesound 726319 by ZIP.Creates, CC0.
-https://freesound.org/people/ZIP.Creates/sounds/726319/
 
 Pistol: Freesound 163456 by LeMudCrab, CC0.
 https://freesound.org/people/LeMudCrab/sounds/163456/
@@ -25,7 +42,6 @@ https://freesound.org/people/synth2/sounds/844540/
 Explosion: Freesound 523783 by BennettFilmTeacher, CC0.
 https://freesound.org/people/BennettFilmTeacher/sounds/523783/
 
-Footsteps, chop, creak, bow, rock, thud, pebble: Kenney (kenney.nl), CC0.
-RPG Audio and Impact Sounds.
+Creak, bow, rock strike, thud, pebble: Kenney (kenney.nl), CC0.
 https://kenney.nl/assets/rpg-audio
 https://kenney.nl/assets/impact-sounds

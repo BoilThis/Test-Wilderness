@@ -8,6 +8,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.media.AudioAttributes
+import android.media.MediaPlayer
 import android.media.SoundPool
 import android.os.Handler
 import android.os.Looper
@@ -112,6 +113,9 @@ private object GameSfx {
   private val pending = HashMap<String, Pair<Float, Float>>()
   private val loopStream = HashMap<String, Int>()
   private val loopWant = HashMap<String, Float>()
+  private val beds = HashMap<String, MediaPlayer>()
+  private val bedWant = HashMap<String, Float>()
+  private val bedNames = setOf("ocean", "windbed", "wadebed")
 
   fun warm(context: Context) {
     main.post {
@@ -144,6 +148,13 @@ private object GameSfx {
 
   fun loop(context: Context, name: String, volume: Double) {
     val vol = volume.toFloat().coerceIn(0f, 1f)
+    if (bedNames.contains(name)) {
+      main.post {
+        appContext = context.applicationContext
+        applyBed(name, vol)
+      }
+      return
+    }
     main.post {
       ensurePool(context.applicationContext)
       loopWant[name] = vol
@@ -153,6 +164,50 @@ private object GameSfx {
         return@post
       }
       applyLoop(name, id, vol)
+    }
+  }
+
+  private fun applyBed(name: String, vol: Float) {
+    bedWant[name] = vol
+    val existing = beds[name]
+    if (existing == null) {
+      if (vol < 0.01f) return
+      val context = appContext ?: return
+      val created = MediaPlayer()
+      try {
+        val afd = context.assets.openFd("wilderness/audio/$name.ogg")
+        created.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+        afd.close()
+      } catch (err: Exception) {
+        Log.e(TAG, "bed $name", err)
+        created.release()
+        return
+      }
+      created.setAudioAttributes(
+        AudioAttributes.Builder()
+          .setUsage(AudioAttributes.USAGE_GAME)
+          .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+          .build()
+      )
+      created.isLooping = true
+      created.setVolume(vol, vol)
+      created.setOnPreparedListener { player ->
+        val want = bedWant[name] ?: vol
+        player.setVolume(want, want)
+        if (want >= 0.01f) player.start()
+      }
+      beds[name] = created
+      created.prepareAsync()
+      return
+    }
+    try {
+      existing.setVolume(vol, vol)
+      if (vol < 0.01f) {
+        if (existing.isPlaying) existing.pause()
+      } else if (!existing.isPlaying) {
+        existing.start()
+      }
+    } catch (_: Exception) {
     }
   }
 

@@ -16,8 +16,8 @@ android {
     applicationId = "com.aistudio.sylvan.wldns"
     minSdk = 24
     targetSdk = 36
-    versionCode = 91
-    versionName = "91.0"
+    versionCode = 92
+    versionName = "92.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -38,6 +38,10 @@ android {
       keyAlias = "androiddebugkey"
       keyPassword = "android"
     }
+  }
+
+  androidResources {
+    noCompress += listOf("ogg", "wav")
   }
 
   buildTypes {
