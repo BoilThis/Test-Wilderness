@@ -854,9 +854,9 @@
     registerInteractiveTarget(crateGroup);
   }
 
-  // --- 5C. SUBMERGED CORAL RUINS & DEEP REEF SHELF (Coral Fan Cay NW Shelf X: 404, Z: 270) ---
+  // --- 5C. RUINS ON THE LEE SHORE OF OUTER SENTINEL (-62, -268) ---
   function buildSubmergedRuins() {
-    const rx = 447.0, rz = 295.0;
+    const rx = -62.0, rz = -268.0;
     const ruinGroup = new THREE.Group();
     const stoneMat = applyAAARockShader(new THREE.MeshStandardMaterial({
       color: 0x5e7c74, roughness: 0.72, metalness: 0.14
@@ -1002,7 +1002,7 @@
       rx + 1.4, rz - 0.8,
       'submergedBattery',
       '🔋 Waterproof Isotope Battery Core',
-      'Recovered the Isotope Battery Core from the Coral Fan Cay Submerged Ruins! (2/3 Radio Modules)',
+      'Recovered the Isotope Battery Core from the ruins on Outer Sentinel! (2/3 Radio Modules)',
       centerY + 1.35
     );
   }
@@ -1038,8 +1038,7 @@
     const bambooZones = [
       { cx: -68, cz: -28, radius: 20, count: 22 },
       { cx: -102, cz: -142, radius: 26, count: 32 },
-      { cx: -455, cz: 390, radius: 28, count: 36 },
-      { cx: -330, cz: 540, radius: 26, count: 30 }
+      { cx: -455, cz: 390, radius: 28, count: 36 }
     ];
 
     const maxClumps = 120;
@@ -2607,8 +2606,10 @@
       window.archipelagoIslets.forEach(isl => {
         if (!isl.part) return;
         const relic = new THREE.Group();
-        const my = getTerrainHeight(isl.x, isl.z);
-        relic.position.set(isl.x, Math.max(my, 0.3), isl.z);
+        const px = isl.x + Math.cos(isl.partAng || 0) * (isl.partR || 0);
+        const pz = isl.z + Math.sin(isl.partAng || 0) * (isl.partR || 0);
+        const my = getTerrainHeight(px, pz);
+        relic.position.set(px, Math.max(my, 0.3), pz);
 
         // Timber salvage plinth + signal pennant mast
         const chock = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.26, 1.35), matTimberLog);
@@ -5723,12 +5724,8 @@
     const assets = buildSharedSharkAssets();
     // Patrol the trench rings around the 3 outer strongholds + outer archipelago sea channels (strictly clear of Swim-Safe Reef Cay at (-342, 224))
     const patrolAnchors = [
-      { x: -735, z: -755, rad: 62, name: 'Northwest Obsidian Trench Shark' },
-      { x:  780, z: -730, rad: 64, name: 'Magma Bastion Trench Shark' },
-      { x:  780, z:  695, rad: 62, name: 'Deep Coral Fortress Trench Shark' },
-      { x: -555, z: -485, rad: 66, name: 'Basalt Arc Channel Shark' },
-      { x:  595, z: -365, rad: 64, name: 'Volcanic Passage Reef Shark' },
-      { x: -520, z:  465, rad: 66, name: 'Abyssal Kelp Channel Shark' }
+      { x: 780, z: -730, rad: 70, name: 'Magma Bastion Trench Shark' },
+      { x: 900, z: -760, rad: 54, name: 'Magma Bastion Trench Shark' }
     ];
 
     patrolAnchors.forEach((anch, idx) => {
@@ -5920,23 +5917,14 @@
     const baitCenters = [
       { x: -16,  z: -32,  y: -1.8 },
       { x: -328, z: 222,  y: -1.6 },
-      { x: 452,  z: 266,  y: -2.8 },
-      { x: -58,  z: -112, y: -3.2 },
-      // Inter-Island Channels & Submarine Reef Drop-Offs
-      { x: -85,  z: -155, y: -5.4 },
-      { x: 75,   z: -165, y: -6.2 },
-      { x: -165, z: -135, y: -4.8 },
-      { x: 185,  z: -155, y: -5.8 },
       { x: -302, z: 224,  y: -1.6 },
       { x: -245, z: 195,  y: -4.5 },
-      { x: 265,  z: 185,  y: -6.5 },
-      { x: 355,  z: 245,  y: -7.8 },
-      { x: -295, z: -265, y: -8.5 },
-      { x: 290,  z: -245, y: -8.2 },
-      { x: -385, z: 45,   y: -7.4 },
-      { x: 375,  z: 35,   y: -7.6 },
-      { x: -145, z: 295,  y: -6.8 },
-      { x: 145,  z: 315,  y: -7.2 }
+      { x: 590,  z: 430,  y: -2.4 },
+      { x: 640,  z: 400,  y: -4.8 },
+      { x: -500, z: 340,  y: -4.2 },
+      { x: -410, z: 360,  y: -5.6 },
+      { x: -150, z: -170, y: -4.2 },
+      { x: -60,  z: -210, y: -5.0 }
     ].map(c => {
       const pt = resolveDeepWaterPoint(c.x, c.z, -2.6);
       return { x: pt.x, z: pt.z, y: c.y, bedY: pt.bedY };
@@ -6111,7 +6099,7 @@
       metalness: 0.46
     });
     const snapperLocations = [
-      [-18, -36], [-34, -52], [28, -42], [-334, 212], [-346, 238], [456, 258], [472, 280], [-56, -108],
+      [-18, -36], [-34, -52], [28, -42], [-334, 212], [-346, 238], [590, 430], [624, 408], [-448, 350],
       [6, 18], [-42, -96], [-448, 386], [575, 420], [-288, 224],
       // Inter-Island Reef & Channel Snappers
       [-92, -148], [88, -158], [-172, -124], [192, -138], [-312, 228], [-254, 206], [284, 196], [368, 252],
@@ -6204,7 +6192,7 @@
     };
 
     const raySpots = [
-      [-14, -26], [-325, 224], [-352, 218], [450, 262],
+      [-14, -26], [-325, 224], [-352, 218], [590, 418],
       [24, -36], [-62, -104], [-292, 220], [18, 22],
       // Inter-Island Channel Seabed Stingrays
       [-95, -162], [92, -172], [-182, -132], [198, -146],
@@ -8580,7 +8568,7 @@
           } else {
             showStoryDialog(
               'WEATHER OUTPOST TRANSCEIVER OFFLINE',
-              `Diagnostic: ${foundCount}/3 Avionics Modules installed. Recover the Transponder (Crash Cove), Isotope Battery (Coral Fan Cay Ruins), and Signal Amplifier (Basalt Cavern Cenote), or bring 2 Obsidian + 2 Bamboo.`
+              `Diagnostic: ${foundCount}/3 Avionics Modules installed. Recover the Transponder (Crash Cove), Isotope Battery (Outer Sentinel ruins), and Signal Amplifier (Basalt Cavern Cenote), or bring 2 Obsidian + 2 Bamboo.`
             );
           }
         } else {
@@ -9595,12 +9583,12 @@
       outpost:          { x: 46.0,   z: 88.0,   yaw: -0.45, pitch: 0.05,  dive: false, label: '📡 Teleported to Abandoned Radio Outpost & Weather Station!' },
       volcano:          { x: -250.0, z: 64.0, yaw: 1.57, pitch: -0.22, dive: false, label: '🌋 Teleported to Mount Caldera east rim. Crest is 168m at -302, 64.' },
       lavatube:         { x: -208.1, z: 68.7, yaw: 1.52, pitch: -0.04, dive: false, label: '🔥 Teleported to the lava tube mouth on the east flank!' },
-      ruins:            { x: 455.0,  z: 293.0,  yOverride: -2.6, yaw: 1.45, pitch: -0.18, dive: true, label: '🏛️ Submerged into Coral Fan Cay Ruins & Isotope Trench!' },
+      ruins:            { x: -62.0,  z: -268.0, yaw: 0.4, pitch: -0.04, dive: false, label: '🏛️ Teleported to the ruins on the lee shore of Outer Sentinel!' },
       bamboo:           { x: -64.0,  z: -24.0,  yaw: 0.65,  pitch: 0.0,   dive: false, label: '🎍 Teleported to Emerald Bamboo Jungle & Mangrove Delta!' },
       valley_pond:      { x: 88.0,   z: 168.0,  yaw: 3.14, pitch: -0.06, dive: false, label: '🌿 Teleported to the north shore of Windward Valley Lagoon (+6.8m)!' },
       canyon_gorge:     { x: 215.0,  z: 42.0,   yaw: -1.57, pitch: -0.04, dive: false, label: '🪨 Teleported to Stratified Eastern Limestone Canyon!' },
       swim_cay:         { x: -294.0, z: 224.0,  yaw: 1.57,  pitch: -0.05, dive: false, label: '🏖️ Teleported to Sheltered Reef Cove (25m Swim to Cay)!' },
-      outer_stronghold: { x: 791.0,  z: 722.0,  yaw: -0.78, pitch: -0.06, dive: false, label: '⛵ Teleported to Outer Deep Coral Stronghold (2400m Archipelago)!' }
+      outer_stronghold: { x: 790.0,  z: -740.0, yaw: -0.6, pitch: -0.08, dive: false, label: '⛵ Teleported to the Magma Trench Bastion. The raft cannot make this crossing.' }
     };
     if (WAYPOINTS) Object.assign(WAYPOINTS, NEW_WAYPOINTS);
 
@@ -9670,9 +9658,9 @@
         caveIdx: 2, caveT: 0.42, pitch: -0.04, dive: false, tool: 'torch'
       },
       {
-        title: '8/12 🏛️ Coral Fan Cay Submerged Ruins & Battery',
-        desc: 'Underwater fluted colonnade off Coral Fan Cay, 3-tier sunken altar, glowing coral & Isotope Battery.',
-        x: 455.0, z: 293.0, tx: 447.0, tz: 295.0, yOffset: 1.8, pitch: -0.16, dive: true, tool: 'spear'
+        title: '8/12 🏛️ Ruins on the Lee Shore of Outer Sentinel',
+        desc: 'The colonnade and the isotope battery now stand on the lee shore of Outer Sentinel.',
+        x: -70.0, z: -268.0, tx: -62.0, tz: -268.0, yOffset: 1.8, pitch: -0.04, dive: false, tool: 'spear'
       },
       {
         title: '9/12 🎍 EZ-Tree Bamboo Jungle & Mangroves',
@@ -10289,7 +10277,7 @@
       for (let i = 0; i < window.archipelagoIslets.length; i++) {
         const isl = window.archipelagoIslets[i];
         if (!isl.part || campaign.boatParts[isl.part]) continue;
-        if (Math.hypot(px - isl.x, pz - isl.z) < isl.r * 0.72) {
+        if (Math.hypot(px - isl.x, pz - isl.z) < (isl.form === 'ring' ? isl.r * 1.05 : isl.r * 0.72)) {
           campaign.boatParts[isl.part] = true;
           if (isl._marker) isl._marker.visible = false;
           showToast('Recovered the ' + partNames[isl.part] + ' from ' + isl.name + '.');

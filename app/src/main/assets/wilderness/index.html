@@ -2493,47 +2493,18 @@
 
     // 28 Archipelago Islands: 5 Close Starter Islets + 1 Swim-Safe Sheltered Cay + 22 Outer Exploration Islands (4 Deep-Trench Raft Strongholds)
     const archipelagoIslets = [
-      // Close Starter Ring (k = 0..4 — pre-populated at boot). Forms differ on purpose.
-      { x: -52,  z: -120, r: 36, h: 9,  form: 'crescent', axis: 2.5, name: "Sunken Ruins Atoll", arc: "inner_north" },
-      { x:  68,  z: -144, r: 13, h: 26, form: 'stack', isBasalt: true, treeCount: 4, name: "Caldera Cinder Cay", arc: "inner_north" },
-      { x: -8,   z: -268, r: 84, h: 13, form: 'shield', name: "Outer Sentinel Island", arc: "inner_north" },
-      { x: 118,  z: -98,  r: 22, h: 34, form: 'ridge', axis: 0.15, elong: 1.45, name: "Obsidian Spire Islet", arc: "inner_north" },
-      { x: -102, z: -142, r: 44, h: 7,  form: 'spit', axis: -0.7, elong: 1.9, pinch: 0.42, isBamboo: true, name: "Emerald Bamboo & Mangrove Island", arc: "inner_north" },
+      // Close ring, built with the main island. Centers are unchanged so the crossings stay the same.
+      { x: -8,   z: -268, r: 84, h: 13, form: 'shield', treeCount: 16, veg: 'mixed', name: "Outer Sentinel Island", arc: "inner_north" },
+      { x: -102, z: -142, r: 44, h: 6,  form: 'spit', axis: 0.7, elong: 1.85, pinch: 0.4, isBamboo: true, treeCount: 10, veg: 'kelp', name: "Emerald Bamboo & Mangrove Island", arc: "inner_north" },
+      { x: 118,  z: -98,  r: 22, h: 34, form: 'ridge', axis: 0.15, elong: 1.45, isBasalt: true, treeCount: 2, veg: 'none', name: "Obsidian Spire Islet", arc: "inner_north" },
+      { x: -342, z: 224,  r: 24, h: 6.2, isSwimSafe: true, sharkSafe: true, treeCount: 8, veg: 'coral', shoreMat: true, name: "Sheltered Reef Cay", arc: "swim_cay" },
 
-      // Nearby Swim-Safe Coastal Cay (k = 5 — 52m across shallow 1.2–1.7m reef shelf, zero shark threat)
-      { x: -342, z: 224,  r: 24, h: 7.2, isSwimSafe: true, sharkSafe: true, treeCount: 14, name: "Sheltered Reef Cay", arc: "swim_cay", shoreMat: true },
-
-      // NW Basalt Arc (k = 6..10)
-      { x: -380, z: -265, r: 46, h: 17, isBasalt: true, treeCount: 22, name: "Driftwood Basalt Atoll", arc: "nw_Basalt" },
-      { x: -495, z: -410, r: 52, h: 24, isBasalt: true, treeCount: 26, name: "Basalt Arch Isle", arc: "nw_Basalt", part: "keel" },
-      { x: -640, z: -235, r: 14, h: 22, form: 'stack', treeCount: 3, name: "Sea-Stack Shoal", arc: "nw_Basalt" },
-      { x: -610, z: -585, r: 56, h: 28, isBasalt: true, treeCount: 28, name: "Stormwatch Crag", arc: "nw_Basalt" },
-      { x: -797, z: -814, r: 68, h: 36, isBasalt: true, isRaftOnly: true, sharkGuarded: true, treeCount: 34, name: "Northwest Obsidian Stronghold", arc: "nw_Basalt" },
-
-      // NE Volcanic Arc (k = 11..16)
-      { x: 395,  z: -310, r: 44, h: 19, isVolcano: false, isBasalt: true, treeCount: 20, name: "Pumice Spur Cay", arc: "ne_Volcanic" },
-      { x: 540,  z: -420, r: 40, h: 38, isVolcano: true, treeCount: 16, name: "Cinder Cone Islet", arc: "ne_Volcanic", part: "brace" },
-      { x: 660,  z: -245, r: 58, h: 5, form: 'spit', axis: 0.25, elong: 2.1, pinch: 0.34, treeCount: 8, name: "Sulfur Breeze Reef", arc: "ne_Volcanic" },
-      { x: 480,  z: -620, r: 48, h: 23, isBasalt: true, treeCount: 22, name: "Tephra Ring Atoll", arc: "ne_Volcanic" },
-      { x: 695,  z: -560, r: 36, h: 32, form: 'ridge', axis: 0.55, elong: 1.7, isBasalt: true, treeCount: 14, name: "Basalt Finger Ridge", arc: "ne_Volcanic" },
-      { x: 844,  z: -791, r: 70, h: 40, isVolcano: true, isRaftOnly: true, sharkGuarded: true, treeCount: 28, name: "Magma Trench Bastion", arc: "ne_Volcanic" },
-
-      // SE Coral Arc (k = 17..22)
-      { x: 508,  z: 295,  r: 45, h: 14, isCoral: true, treeCount: 24, name: "Coral Fan Cay", arc: "se_Coral", shoreMat: true },
-      { x: 590,  z: 430,  r: 56, h: 12, form: 'crescent', axis: 2.1, isCoral: true, treeCount: 18, name: "Pearlshell Atoll", arc: "se_Coral", part: "skin" },
-      { x: 350,  z: 495,  r: 70, h: 6, form: 'spit', axis: 1.15, elong: 2.2, pinch: 0.32, isCoral: true, treeCount: 10, name: "Lagoon Spit Key", arc: "se_Coral" },
-      { x: 740,  z: 290,  r: 52, h: 21, isCoral: true, treeCount: 28, name: "Tradewind Terrace Isle", arc: "se_Coral" },
-      { x: 560,  z: 710,  r: 56, h: 24, isCoral: true, treeCount: 28, name: "Sea-Turtle Barrier", arc: "se_Coral" },
-      { x: 844,  z: 752,  r: 68, h: 32, isCoral: true, isRaftOnly: true, sharkGuarded: true, treeCount: 36, name: "Deep Coral Fortress", arc: "se_Coral" },
-
-      // SW Kelp Arc (k = 23..27)
-      { x: -455, z: 390,  r: 46, h: 16, isBamboo: true, treeCount: 26, name: "Kelp Shoal Isle", arc: "sw_Kelp", part: "sail" },
-      { x: -330, z: 540,  r: 44, h: 15, isBamboo: true, treeCount: 24, name: "Fern Hollow Cay", arc: "sw_Kelp" },
-      { x: -640, z: 355,  r: 50, h: 20, treeCount: 26, name: "Misty Barrier Island", arc: "sw_Kelp" },
-      { x: -575, z: 620,  r: 54, h: 22, isBamboo: true, treeCount: 28, name: "Sunfish Sanctuary Reef", arc: "sw_Kelp" },
-      { x: -825, z: 760,  r: 66, h: 30, isBasalt: true, isRaftOnly: true, sharkGuarded: true, treeCount: 32, name: "Abyssal Outrider Reef", arc: "sw_Kelp" },
-      { x: -608, z: -208, r: 9,  h: 16, form: 'stack', treeCount: 2, name: "Needle Stack", arc: "nw_Basalt" },
-      { x: -676, z: -262, r: 8,  h: 12, form: 'stack', treeCount: 1, name: "Outer Needle", arc: "nw_Basalt" }
+      // Far ring. Drawn when you sail close. Same centers as before.
+      { x: -495, z: -410, r: 52, h: 22, form: 'arch', axis: 0.35, isBasalt: true, treeCount: 6, veg: 'none', name: "Basalt Arch Isle", arc: "nw_Basalt", part: "keel", partAng: 1.92, partR: 24 },
+      { x: 540,  z: -420, r: 40, h: 38, isVolcano: true, treeCount: 3, veg: 'none', name: "Cinder Cone Islet", arc: "ne_Volcanic", part: "brace", partAng: 2.4, partR: 16 },
+      { x: 590,  z: 430,  r: 56, h: 9,  form: 'ring', axis: 0.4, inner: 0.46, isCoral: true, treeCount: 12, veg: 'coral', name: "Pearlshell Atoll", arc: "se_Coral", part: "skin", partAng: 2.2, partR: 36 },
+      { x: -455, z: 390,  r: 46, h: 8,  isBamboo: true, treeCount: 14, veg: 'kelp', name: "Kelp Shoal Isle", arc: "sw_Kelp", part: "sail" },
+      { x: 844,  z: -791, r: 70, h: 40, isVolcano: true, isRaftOnly: true, sharkGuarded: true, treeCount: 8, veg: 'none', name: "Magma Trench Bastion", arc: "ne_Volcanic" }
     ];
     window.archipelagoIslets = archipelagoIslets;
 
@@ -3647,15 +3618,19 @@
               islH += fbm2(x * 0.028 + k * 5.0, z * 0.028, 3) * norm * 2.65
                     + ridged2(x * 0.062 + k * 3.1, z * 0.062, 2) * norm * 1.15
                     + fbm2(x * 0.11 - k * 2.3, z * 0.11 + k * 1.9, 2) * smoothstep(0.08, 0.45, norm) * 0.48;
-              if (form === 'crescent') {
-                const lx = Math.cos(axis) * isl.r * 0.4;
-                const lz = Math.sin(axis) * isl.r * 0.4;
-                const ld = Math.hypot(dx - lx, dz - lz);
-                const lagoonR = isl.r * 0.42;
-                if (ld < lagoonR) {
-                  const lt = ld / lagoonR;
-                  islH = Math.min(islH, -1.5 + lt * lt * 3.4);
+              if (form === 'ring') {
+                const innerR = isl.r * (isl.inner || 0.46);
+                if (idist < innerR) {
+                  islH = -3.2;
+                } else if (Math.cos(ang - axis) > 0.86 && idist < isl.r * 0.9) {
+                  islH = Math.min(islH, -0.8);
                 }
+              }
+              if (form === 'arch') {
+                const ac = Math.cos(axis), as = Math.sin(axis);
+                const along = dx * ac + dz * as;
+                const across = -dx * as + dz * ac;
+                if (Math.abs(across) < isl.r * 0.16 && Math.abs(along) < isl.r * 0.62) islH = -1.8;
               }
               if (isl.isVolcano && norm > 0.70) {
                 const craterT = smoothstep(0.70, 1.0, norm);
@@ -3671,16 +3646,6 @@
               y = Math.max(y, pedY);
             }
           }
-        }
-      }
-
-      // Submerged Sunken Coral Temple Reef Shelf off Coral Fan Cay (447, 295) at ~-4.5m depth
-      if (x > 419.0 && x < 475.0 && z > 267.0 && z < 323.0) {
-        const sDist = Math.hypot(x - 447.0, z - 295.0);
-        if (sDist < 26.0) {
-          const sW = 1.0 - smoothstep(13.0, 26.0, sDist);
-          const shelfY = -4.6 + fbm2(x * 0.06, z * 0.06, 2) * 0.35;
-          y = y * (1.0 - sW) + shelfY * sW;
         }
       }
 
@@ -4200,7 +4165,7 @@
           if (!carveTri) {
             const cx = (x0 + x1 + x2) / 3.0;
             const cz = (z0 + z1 + z2) / 3.0;
-            for (let k = 5; k < archipelagoIslets.length; k++) {
+            for (let k = 4; k < archipelagoIslets.length; k++) {
               const isl = archipelagoIslets[k];
               if (Math.hypot(cx - isl.x, cz - isl.z) < isl.r * 1.48) {
                 carveTri = true;
@@ -6023,14 +5988,6 @@
             z: isl.z + Math.sin(angToPlayer) * (isl.r * 0.9)
           };
         }
-      }
-
-      // Include Submerged Sunken Coral Temple Reef Shelf (447, 295, r=38) so the Coral Fan Cay <-> Ruins channel is calm lee water
-      const reefCenterDist = Math.hypot(x - 447, z - 295);
-      const reefDist = Math.max(0, reefCenterDist - 38);
-      if (reefDist < bestLand) {
-        bestLand = reefDist;
-        shore = { x: 508, z: 295 };
       }
 
       const sampleIsStronghold = (sx, sz) => {
@@ -8633,9 +8590,9 @@
       if (yieldFn) await yieldFn();
 
       // 4. Dedicated Archipelago Islet Lush Groves, Understory Shrubs & Headland Boulders across the 5 Close Starter Islets
-      for (let idx = 0; idx < Math.min(5, archipelagoIslets.length); idx++) {
+      for (let idx = 0; idx < Math.min(4, archipelagoIslets.length); idx++) {
         const isl = archipelagoIslets[idx];
-        const count = 18 + (idx % 3) * 3;
+        const count = isl.treeCount != null ? isl.treeCount : 12;
         const islTreePts = [];
         for (let j = 0; j < count; j++) {
           const ang = (j / count) * Math.PI * 2 + treeRand() * 0.45;
@@ -8660,7 +8617,8 @@
           }
         }
         // Cluster 8 understory bushes per starter islet around tree trunks (never on open sandy beaches)
-        for (let b = 0; b < 8; b++) {
+        const bushCount = count < 6 ? 0 : 6;
+        for (let b = 0; b < bushCount; b++) {
           let bx, bz;
           if (islTreePts.length > 0) {
             const tp = islTreePts[b % islTreePts.length];
@@ -8894,12 +8852,14 @@
           return seed / 4294967296;
         }
         const specs = [];
-        const baseCount = Math.max(18, Math.round((isl.treeCount || 20) * 1.15));
+        const baseCount = isl.treeCount != null ? isl.treeCount : 18;
         for (let j = 0; j < baseCount; j++) {
           // Group island trees into natural multi-tree groves with open meadow clearings between them
           const groveAng = (Math.floor(j / 4) / Math.max(1, Math.ceil(baseCount / 4))) * Math.PI * 2 + (k * 0.7);
           const ang = groveAng + (cRand() - 0.5) * 0.48;
-          const rad = isl.r * (0.10 + Math.pow(cRand(), 0.82) * 0.68);
+          const rad = isl.form === 'ring'
+            ? isl.r * (0.55 + cRand() * 0.28)
+            : isl.r * (0.10 + Math.pow(cRand(), 0.82) * 0.68);
           const ix = isl.x + Math.cos(ang) * rad;
           const iz = isl.z + Math.sin(ang) * rad;
           const ih = getTerrainHeight(ix, iz);
@@ -9048,7 +9008,7 @@
         const dummy = new THREE.Object3D();
         const col = new THREE.Color();
 
-        for (let k = 5; k < archipelagoIslets.length; k++) {
+        for (let k = 4; k < archipelagoIslets.length; k++) {
           const isl = archipelagoIslets[k];
           const islMesh = buildIslandHullMesh(isl, k);
           hullGroup.add(islMesh);
@@ -9556,7 +9516,7 @@
       }
 
       function update(px, pz) {
-        for (let k = 5; k < archipelagoIslets.length; k++) {
+        for (let k = 4; k < archipelagoIslets.length; k++) {
           const isl = archipelagoIslets[k];
           const dist = Math.hypot(px - isl.x, pz - isl.z);
           if (dist < HYDRATE_DIST) {
@@ -9973,7 +9933,7 @@
       await tryScatterGrassZone(38000, -170, 160, -70, 150, 28000, 0.18);
       if (yieldFn) await yieldFn();
       // Zone 2: Patchy Coastal Turf on each of the 5 Close Starter Islets (k = 0..4)
-      for (let sIdx = 0; sIdx < Math.min(5, archipelagoIslets.length); sIdx++) {
+      for (let sIdx = 0; sIdx < Math.min(4, archipelagoIslets.length); sIdx++) {
         const sIsl = archipelagoIslets[sIdx];
         const targetAfter = Math.min(46000, placedGrass + 1500);
         await tryScatterGrassZone(targetAfter, sIsl.x - sIsl.r * 1.15, sIsl.x + sIsl.r * 1.15, sIsl.z - sIsl.r * 1.15, sIsl.z + sIsl.r * 1.15, 4200, 0.16);
@@ -10120,7 +10080,7 @@
       // Cohesive single-species wildflower colonies in sunlit meadows & forest edges
       await tryScatterFlowers(1100, -55, 22, -10, 62, 3200);
       await tryScatterFlowers(2300, -160, 150, -65, 140, 4800);
-      for (let sIdx = 0; sIdx < Math.min(5, archipelagoIslets.length); sIdx++) {
+      for (let sIdx = 0; sIdx < Math.min(4, archipelagoIslets.length); sIdx++) {
         const sIsl = archipelagoIslets[sIdx];
         await tryScatterFlowers(Math.min(2850, placedFlowers + 110), sIsl.x - sIsl.r, sIsl.x + sIsl.r, sIsl.z - sIsl.r, sIsl.z + sIsl.r, 900);
       }
@@ -11152,14 +11112,19 @@
         const mode = i % 5;
         if (mode === 0) {
           // Coral Fan Cay & Sheltered Reef Cay outer shelves
-          const anchor = (i % 10 === 0) ? { x: -342, z: 224 } : { x: 508, z: 295 };
+          const anchor = (i % 10 === 0) ? { x: -342, z: 224 } : { x: 590, z: 430 };
           rx = anchor.x + (geoRand() - 0.5) * 165;
           rz = anchor.z + (geoRand() - 0.5) * 165;
         } else if (mode === 1 || mode === 2) {
-          // Submarine reef slopes & inter-island channels around all 28 Archipelago Islands
           const isl = archipelagoIslets[i % archipelagoIslets.length];
+          if (isl.veg === 'none' || isl.veg === 'kelp') continue;
           const ang = geoRand() * Math.PI * 2;
-          const rad = isl.r * (0.95 + geoRand() * 1.15);
+          let rad;
+          if (isl.form === 'ring' && geoRand() < 0.65) {
+            rad = isl.r * (0.12 + geoRand() * 0.3);
+          } else {
+            rad = isl.r * (1.02 + geoRand() * 0.85);
+          }
           rx = isl.x + Math.cos(ang) * rad;
           rz = isl.z + Math.sin(ang) * rad;
         } else if (mode === 3) {
@@ -12135,6 +12100,7 @@
         } else if (zone === 3 || zone === 4) {
           // Inter-Island Submarine Corridors & Drop-Offs (between Main Island and all 28 Archipelago Islands)
           const isl = archipelagoIslets[i % archipelagoIslets.length];
+          if (zone === 3 && (isl.veg === 'none' || isl.veg === 'coral')) continue;
           if (zone === 3) {
             // Submarine reef skirt around each island
             const ang = uwRand() * Math.PI * 2;
@@ -13229,8 +13195,8 @@
       valley_pond:      { x: 88.0,   z: 168.0,  yaw: 3.14,  pitch: -0.06, dive: false, label: "🌿 Teleported to the north shore of Windward Valley Lagoon (+6.8m)!" },
       canyon_gorge:     { x: 215.0,  z: 42.0,   yaw: -1.57, pitch: -0.04, dive: false, label: "🪨 Teleported to Stratified Eastern Limestone Canyon!" },
       swim_cay:         { x: -294.0, z: 224.0,  yaw: 1.57,  pitch: -0.05, dive: false, label: "🏖️ Teleported to Sheltered Reef Cove (25m Swim to Cay)!" },
-      outer_stronghold: { x: 791.0,  z: 722.0,  yaw: -0.78, pitch: -0.06, dive: false, label: "⛵ Teleported to Outer Deep Coral Stronghold (2400m Archipelago)!" },
-      ruins:            { x: 455.0,  z: 293.0,  yOverride: -2.6, yaw: 1.45, pitch: -0.18, dive: true, label: "🏛️ Submerged into Coral Fan Cay Ruins & Isotope Trench!" },
+      outer_stronghold: { x: 790.0,  z: -740.0, yaw: -0.6,  pitch: -0.08, dive: false, label: "⛵ Teleported to the Magma Trench Bastion. The raft cannot make this crossing." },
+      ruins:            { x: -62.0,  z: -268.0, yaw: 0.4,   pitch: -0.04, dive: false, label: "🏛️ Teleported to the ruins on the lee shore of Outer Sentinel!" },
       cavern:           { x: 31.5,   z: 45.2,   yaw: -1.45, pitch: -0.02, dive: false, label: "🕳️ Teleported to Whispering Basalt Cave Entrance!" },
       cenote:           { x: 215.0,  z: 68.0,   yaw: -1.45, pitch: -0.06, dive: false, caveInterior: true, label: "💎 Teleported inside Subterranean Karst Cenote!" },
       grotto:           { x: -33.5,  z: 85.8,   yaw: 1.25,  pitch: -0.02, dive: false, label: "🌊 Teleported to Cataract Echo Grotto Entrance!" },
@@ -13282,8 +13248,8 @@
       let cachedBgImageData = null;
 
       // Map covers the central island plus the western cone (base reaches x=-414).
-      const X_MIN = -430, X_MAX = 360;
-      const Z_MIN = -280, Z_MAX = 290;
+      const X_MIN = -920, X_MAX = 980;
+      const Z_MIN = -920, Z_MAX = 880;
       function wxToPx(x, W) { return ((x - X_MIN) / (X_MAX - X_MIN)) * W; }
       function wzToPy(z, H) { return ((z - Z_MIN) / (Z_MAX - Z_MIN)) * H; }
       function pxToWx(px, W) { return X_MIN + (px / W) * (X_MAX - X_MIN); }
@@ -13300,7 +13266,16 @@
         { key: 'volcano',     x: -302, z: 64,   code: 'MT', title: 'Mt. Caldera (+168m)', color: '#ff7043' },
         { key: 'lavatube',    x: -214.1, z: 68.4, code: 'LT', title: 'Lava Tube Mouth', color: '#ff8a65' },
         { key: 'canyon_gorge',x: 215,  z: 42,   code: 'CY', title: 'Stratified Limestone Canyon', color: '#ffb74d' },
-        { key: 'crash',       x: -44,  z: -28,  code: 'AP', title: 'Crash Beach & Raft Keel', color: '#ffd54f' }
+        { key: 'crash',       x: -44,  z: -28,  code: 'AP', title: 'Crash Beach & Raft Keel', color: '#ffd54f' },
+        { key: 'sentinel',    x: -8,   z: -268, code: 'SN', title: 'Outer Sentinel', color: '#a5d6a7' },
+        { key: 'bamboo',      x: -102, z: -142, code: 'BB', title: 'Bamboo Spit', color: '#c5e1a5' },
+        { key: 'spire',       x: 118,  z: -98,  code: 'SP', title: 'Obsidian Spire', color: '#b0bec5' },
+        { key: 'swim_cay',    x: -342, z: 224,  code: 'CY', title: 'Swim Cay', color: '#ffe082' },
+        { key: 'arch',        x: -495, z: -410, code: 'BA', title: 'Basalt Arch (Keel)', color: '#90a4ae' },
+        { key: 'cone',        x: 540,  z: -420, code: 'CC', title: 'Cinder Cone (Brace)', color: '#ff8a65' },
+        { key: 'atoll',       x: 590,  z: 430,  code: 'PA', title: 'Pearlshell Atoll (Skin)', color: '#f48fb1' },
+        { key: 'kelp',        x: -455, z: 390,  code: 'KS', title: 'Kelp Shoal (Sail)', color: '#81c784' },
+        { key: 'bastion',     x: 844,  z: -791, code: 'MB', title: 'Magma Bastion', color: '#ff7043' }
       ];
 
       function buildBaseTerrainImage(W, H) {
