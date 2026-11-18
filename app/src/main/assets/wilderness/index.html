@@ -6537,7 +6537,7 @@
       const nearSpawn = (x * x + z * z) <= 1444.0; // within 38m shadow frustum at start
       branchesMesh.castShadow = !isBush && nearSpawn;
       branchesMesh.receiveShadow = !isBush;
-      leavesMesh.castShadow = !isBush && nearSpawn;
+      leavesMesh.castShadow = false;
       // Disable self-shadowing on alpha-tested leaf cards so close-up tree crowns stay bright, translucent & free of shadow-map acne
       leavesMesh.receiveShadow = false;
       branchesMesh.raycast = () => {};
@@ -6559,7 +6559,7 @@
       tree.rotation.y = hashTreeSeed(x * 1.3, z * 1.7) * Math.PI * 2;
       tree.userData = isBush
         ? { type: 'bush', id: 'bush', presetName, baseScale: s }
-        : { type: 'tree', id, presetName, health, baseScale: s };
+        : { type: 'tree', id, presetName, health, baseScale: s, leafTint: tintIdx };
 
       if (!isBush) {
         attachFastTreeRaycastProxy(tree);
@@ -6616,6 +6616,41 @@
         return batch;
       }
 
+      const nearBatches = new Map();
+
+      function makeNearMesh(geo, mat, shadow) {
+        const inst = new THREE.InstancedMesh(geo, mat, MAX_PER_PRESET);
+        inst.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        inst.castShadow = shadow;
+        inst.receiveShadow = shadow;
+        inst.frustumCulled = false;
+        inst.count = 0;
+        for (let i = 0; i < MAX_PER_PRESET; i++) inst.setMatrixAt(i, zeroMat);
+        scene.add(inst);
+        return inst;
+      }
+
+      function getOrCreateNear(presetName, proto) {
+        if (nearBatches.has(presetName)) return nearBatches.get(presetName);
+        const leaves = [0, 1, 2].map(i => {
+          const inst = makeNearMesh(proto.leafGeo, proto.leafMats[i], false);
+          inst.receiveShadow = false;
+          inst.layers.set(1);
+          return inst;
+        });
+        const batch = {
+          branchShadow: makeNearMesh(proto.branchGeo, proto.branchMat, true),
+          branchPlain: makeNearMesh(proto.branchGeo, proto.branchMat, false),
+          leaves,
+          count: 0,
+          dirty: false
+        };
+        batch.branchShadow.receiveShadow = true;
+        batch.branchPlain.receiveShadow = true;
+        nearBatches.set(presetName, batch);
+        return batch;
+      }
+
       return {
         batches,
         registerTree(tree, presetName, proto) {
@@ -6632,6 +6667,17 @@
           tree.userData.impostorSlot = slot;
           tree.userData.impostorMat = tree.matrixWorld.clone();
           tree.userData.isImpostorActive = false;
+
+          if (proto.leafGeo && proto.leafMats && proto.leafMats.length >= 3) {
+            const near = getOrCreateNear(presetName, proto);
+            const nearSlot = near.count++;
+            near.branchShadow.count = near.count;
+            near.branchPlain.count = near.count;
+            near.leaves.forEach(inst => { inst.count = near.count; });
+            tree.userData.nearBatch = near;
+            tree.userData.nearSlot = nearSlot;
+            tree.userData.nearState = 'off';
+          }
         },
         setImpostorActive(tree, active) {
           if (!tree || !tree.userData || !tree.userData.impostorBatch) return;
@@ -6644,6 +6690,38 @@
           batch.leafInst.setMatrixAt(slot, m);
           batch.branchInst.instanceMatrix.needsUpdate = true;
           batch.leafInst.instanceMatrix.needsUpdate = true;
+        },
+        setNearState(tree, state) {
+          if (!tree || !tree.userData || tree.userData.nearSlot === undefined) return;
+          if (tree.userData.nearState === state) return;
+          tree.userData.nearState = state;
+          const batch = tree.userData.nearBatch;
+          const slot = tree.userData.nearSlot;
+          const m = state === 'off' ? zeroMat : tree.userData.impostorMat;
+          const tint = tree.userData.leafTint || 0;
+          batch.branchShadow.setMatrixAt(slot, state === 'shadow' ? m : zeroMat);
+          batch.branchPlain.setMatrixAt(slot, state === 'plain' ? m : zeroMat);
+          for (let t = 0; t < 3; t++) {
+            batch.leaves[t].setMatrixAt(slot, (state !== 'off' && t === tint) ? m : zeroMat);
+          }
+          batch.dirty = true;
+        },
+        refreshNear(tree) {
+          if (!tree || !tree.userData || !tree.userData.nearState || tree.userData.nearState === 'off') return;
+          tree.updateMatrixWorld(true);
+          tree.userData.impostorMat.copy(tree.matrixWorld);
+          const state = tree.userData.nearState;
+          tree.userData.nearState = null;
+          this.setNearState(tree, state);
+        },
+        flushNear() {
+          nearBatches.forEach(batch => {
+            if (!batch.dirty) return;
+            batch.branchShadow.instanceMatrix.needsUpdate = true;
+            batch.branchPlain.instanceMatrix.needsUpdate = true;
+            batch.leaves.forEach(inst => { inst.instanceMatrix.needsUpdate = true; });
+            batch.dirty = false;
+          });
         }
       };
     })();
@@ -12805,6 +12883,16 @@
       treeObj.visible = true;
       if (window.treeImpostorSystem) {
         window.treeImpostorSystem.setImpostorActive(treeObj, false);
+        if (window.treeImpostorSystem.setNearState) window.treeImpostorSystem.setNearState(treeObj, 'off');
+        if (window.treeImpostorSystem.flushNear) window.treeImpostorSystem.flushNear();
+      }
+      if (treeObj.branchesMesh) {
+        treeObj.branchesMesh.visible = true;
+        treeObj.branchesMesh.castShadow = true;
+      }
+      if (treeObj.leavesMesh) {
+        treeObj.leavesMesh.visible = true;
+        treeObj.leavesMesh.castShadow = false;
       }
       const idx = interactiveTargets.indexOf(treeObj);
       if (idx !== -1) interactiveTargets.splice(idx, 1);
@@ -12880,11 +12968,13 @@
         hitTree.matrixAutoUpdate = true;
         hitTree.rotation.z += 0.045;
         hitTree.updateMatrixWorld(true);
+        if (window.treeImpostorSystem && window.treeImpostorSystem.refreshNear) window.treeImpostorSystem.refreshNear(hitTree);
         spawnWoodchipBurst(hitTree.position.x, player.pos.y + 0.85, hitTree.position.z, 0x9b7042, 7);
         setTimeout(() => {
           if (hitTree && !(hitTree.userData && hitTree.userData.isFalling)) {
             hitTree.rotation.z -= 0.045;
             hitTree.updateMatrixWorld(true);
+            if (window.treeImpostorSystem && window.treeImpostorSystem.refreshNear) window.treeImpostorSystem.refreshNear(hitTree);
           }
         }, 120);
 
@@ -14256,11 +14346,8 @@
       }
 
       // Event-driven directional shadow map updates: only re-render shadow map when falling trees animate or on governor stride
-      const shadStride = gov ? gov.shadowStride : 16;
-      if (renderer.shadowMap.enabled) {
-        if ((activeFallingTrees.length > 0 && (animate._frameCount & 1) === 0) || (animate._frameCount % shadStride) === 0) {
-          renderer.shadowMap.needsUpdate = true;
-        }
+      if (renderer.shadowMap.enabled && activeFallingTrees.length > 0 && (animate._frameCount & 1) === 0) {
+        renderer.shadowMap.needsUpdate = true;
       }
       if (window.ezTreePrototypes) {
         const protoKeys = animate._ezProtoKeys || (animate._ezProtoKeys = Object.keys(window.ezTreePrototypes));
@@ -14302,22 +14389,36 @@
             const maxTreeSq = (tr.userData && tr.userData.baseScale < 0.27) ? 144400.0 : 270400.0; // 380m saplings, 520m large trees
             if (dSq > maxTreeSq) {
               if (tr.visible) tr.visible = false;
-              if (impSys) impSys.setImpostorActive(tr, false);
+              if (impSys) {
+                impSys.setImpostorActive(tr, false);
+                impSys.setNearState(tr, 'off');
+              }
             } else if (dSq > fullDetailSq && impSys && tr.userData.impostorBatch) {
-              // Swap to batched GPU-instanced simplified EZ-Tree LOD1 (exact species branches & foliage silhouette)
+              if (tr.branchesMesh && tr.branchesMesh.visible) tr.branchesMesh.visible = false;
+              if (tr.leavesMesh && tr.leavesMesh.visible) tr.leavesMesh.visible = false;
               if (tr.visible) tr.visible = false;
+              impSys.setNearState(tr, 'off');
               impSys.setImpostorActive(tr, true);
+            } else if (impSys && tr.userData.nearSlot !== undefined) {
+              if (!tr.visible) tr.visible = true;
+              if (tr.branchesMesh && tr.branchesMesh.visible) {
+                tr.branchesMesh.visible = false;
+                tr.branchesMesh.castShadow = false;
+              }
+              if (tr.leavesMesh && tr.leavesMesh.visible) {
+                tr.leavesMesh.visible = false;
+                tr.leavesMesh.castShadow = false;
+              }
+              impSys.setImpostorActive(tr, false);
+              impSys.setNearState(tr, dSq <= shadRadSq ? 'shadow' : 'plain');
             } else {
-              // Near-field (< 68m * lodBias): full 3D EZ-Tree geometry and leaf wind shader
               if (!tr.visible) tr.visible = true;
               if (impSys) impSys.setImpostorActive(tr, false);
               if (tr.branchesMesh) {
                 const castShad = dSq <= shadRadSq;
-                if (tr.branchesMesh.castShadow !== castShad) {
-                  tr.branchesMesh.castShadow = castShad;
-                  tr.leavesMesh.castShadow = castShad;
-                }
-                const targetLayerMask = dSq <= 4225.0 ? 1 : 2; // Layer 0 within 65m, Layer 1 beyond 65m
+                if (tr.branchesMesh.castShadow !== castShad) tr.branchesMesh.castShadow = castShad;
+                if (tr.leavesMesh && tr.leavesMesh.castShadow) tr.leavesMesh.castShadow = false;
+                const targetLayerMask = dSq <= 4225.0 ? 1 : 2;
                 if (tr.branchesMesh.layers.mask !== targetLayerMask) {
                   tr.branchesMesh.layers.mask = targetLayerMask;
                 }
@@ -14326,6 +14427,7 @@
           }
         }
         animate._treeLodCursor = (startIdx + batchSize) % activeEZTrees.length;
+        if (impSys && impSys.flushNear) impSys.flushNear();
       }
 
       // Staggered 2-tier geometric LOD for basalt boulders (< 46m highGeo 22x16, > 46m lowGeo 8x6, > 260m culled) & GLB scatter distance culling
