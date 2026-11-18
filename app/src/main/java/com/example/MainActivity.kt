@@ -115,7 +115,7 @@ private object GameSfx {
   private val loopWant = HashMap<String, Float>()
   private val beds = HashMap<String, MediaPlayer>()
   private val bedWant = HashMap<String, Float>()
-  private val bedNames = setOf("ocean", "windbed", "wadebed")
+  private val bedNames = setOf("ocean", "windbed", "wadebed", "under", "cave", "rain", "firebed", "hull")
 
   fun warm(context: Context) {
     main.post {

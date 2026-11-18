@@ -42,6 +42,23 @@ https://freesound.org/people/synth2/sounds/844540/
 Explosion: Freesound 523783 by BennettFilmTeacher, CC0.
 https://freesound.org/people/BennettFilmTeacher/sounds/523783/
 
+Underwater bed: the shore recording, low-passed. Freesound 451533 by kyles, CC0.
+
+Cave bed: JaggedStone, OpenGameArt, "Loopable Dungeon Ambience", CC0.
+https://opengameart.org/content/loopable-dungeon-ambience
+
+Rain bed: rubberduck, the same CC0 water pack as the splashes.
+
+Fire bed: PagDev, OpenGameArt, "Fireplace Sound loop", CC0.
+https://opengameart.org/content/fireplace-sound-loop
+
+Hull wash: the shore recording, low-passed.
+
+Bubbles: rubberduck, the same CC0 water pack.
+
+Breath: rubberduck, OpenGameArt, "80 CC0 creature SFX #2", CC0.
+https://opengameart.org/content/80-cc0-creture-sfx-2
+
 Creak, bow, rock strike, thud, pebble: Kenney (kenney.nl), CC0.
 https://kenney.nl/assets/rpg-audio
 https://kenney.nl/assets/impact-sounds

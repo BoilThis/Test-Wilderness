@@ -1579,7 +1579,9 @@
         'step-rock': ['step-rock-1', 'step-rock-2', 'step-rock-3', 'step-rock-4'],
         'step-wood': ['step-wood-1', 'step-wood-2', 'step-wood-3'],
         gull: ['gull-1', 'gull-2', 'gull-3'],
-        insect: ['insect-1', 'insect-2', 'insect-3']
+        insect: ['insect-1', 'insect-2', 'insect-3'],
+        bubble: ['bubble-1', 'bubble-2', 'bubble-3'],
+        breath: ['breath']
       },
       init() {
         if (!this.ctx) {
@@ -1691,6 +1693,16 @@
         try { if (!this.ctx) this.init(); } catch (err) {}
         if (!this.ctx && !(window.AndroidBridge && AndroidBridge.playAsset)) return;
         this._playBank(kind === 'gull' ? 'gull' : 'insect', kind === 'gull' ? 0.16 : 0.1, 0.98 + Math.random() * 0.04);
+      },
+      playBubble() {
+        try { if (!this.ctx) this.init(); } catch (err) {}
+        if (!this.ctx && !(window.AndroidBridge && AndroidBridge.playAsset)) return;
+        this._playBank('bubble', 0.22, 0.96 + Math.random() * 0.08);
+      },
+      playBreath(volume) {
+        try { if (!this.ctx) this.init(); } catch (err) {}
+        if (!this.ctx && !(window.AndroidBridge && AndroidBridge.playAsset)) return;
+        this._playBank('breath', volume || 0.12, 0.94 + Math.random() * 0.08);
       },
       playSplash(kind) {
         try { if (!this.ctx || !this._splashBuffer) this.init(); } catch (err) {}
@@ -15007,7 +15019,7 @@
       if (inShallow && !player.wasShallow) {
         AudioEngine.playSplash('splash');
         addWaterRipple(player.pos.x, player.pos.z, 1.1);
-      } else if (!inShallow && player.wasShallow) {
+      } else if (!inShallow && player.wasShallow && !isSub) {
         AudioEngine.playSplash('wade');
       }
       player.wasShallow = inShallow;
@@ -15188,18 +15200,13 @@
       }
       player.effectiveEyeH = (player.effectiveEyeH || 1.88) + (targetEyeH - (player.effectiveEyeH || 1.88)) * Math.min(1.0, 8.0 * dt);
 
-      // Shore and inland beds. One-shots sit on top of these instead of in silence.
+      // Beds crossfade by volume. Underwater and the cave replace the outside instead of playing on top of it.
       if (caveNav && caveNav.isInside) {
-        if ((caveNav.portalDist || 0) > 8.0) {
+        if ((caveNav.portalDist || 0) > 4.0) {
+          const deep = Math.min(1, ((caveNav.portalDist || 0) - 4) / 14);
           if (!animate._nextCaveDripTime || timeSec >= animate._nextCaveDripTime) {
-            animate._nextCaveDripTime = timeSec + 2.6 + Math.random() * 3.8;
-            AudioEngine.playCaveDrip(0.8 + Math.random() * 0.45, 0.09);
-          }
-        }
-        if ((caveNav.portalDist || 0) > 2.5 && (caveNav.portalDist || 0) < 18.0) {
-          if (!animate._lastCaveDraftTime || timeSec - animate._lastCaveDraftTime > 4.5) {
-            animate._lastCaveDraftTime = timeSec;
-            AudioEngine.playWindGust(0.035, 340);
+            animate._nextCaveDripTime = timeSec + 3.4 + deep * 8 + Math.random() * 4.5;
+            AudioEngine.playCaveDrip(0.8 + Math.random() * 0.35, 0.08);
           }
         }
         if (caveNav.nearDropLedge && !animate._wasNearDropLedge) {
@@ -15219,22 +15226,88 @@
       let oceanVol = 0;
       let windVol = 0;
       let wadeVol = 0;
-      if (!(caveNav && caveNav.isInside)) {
-        if (wInfo.isWater && wInfo.surfaceY < 1.2) oceanVol = 0.2;
-        else if (!wInfo.isWater && terrY < 2.2 && player.pos.y < 6) oceanVol = 0.16 * (1 - terrY / 2.2);
-        if (inShallow) oceanVol = Math.max(oceanVol, wish.lengthSq() > 0.05 ? 0.3 : 0.24);
-        if (inShallow && wish.lengthSq() > 0.05) wadeVol = 0.12;
-        if (oceanVol < 0.05) windVol = 0.08 + Math.min(0.06, Math.max(0, player.pos.y - 6) * 0.003);
+      if (wInfo.isWater && wInfo.surfaceY < 1.2) oceanVol = 0.2;
+      else if (!wInfo.isWater && terrY < 2.2 && player.pos.y < 6) oceanVol = 0.16 * (1 - terrY / 2.2);
+      if (inShallow) oceanVol = Math.max(oceanVol, wish.lengthSq() > 0.05 ? 0.3 : 0.24);
+      if (inShallow && wish.lengthSq() > 0.05) wadeVol = 0.12;
+      if (oceanVol < 0.05) windVol = 0.08 + Math.min(0.06, Math.max(0, player.pos.y - 6) * 0.003);
+      const nearShore = oceanVol > 0.05;
+
+      const headY = player.pos.y + (player.effectiveEyeH || 1.88);
+      const depthUnder = (wInfo.isWater && wInfo.surfaceY > -10) ? (wInfo.surfaceY - headY) : -1;
+      const underAmt = depthUnder > -0.08 ? Math.max(0, Math.min(1, (depthUnder + 0.08) / 0.5)) : 0;
+      let caveAmt = 0;
+      if (caveNav && (caveNav.isInside || (caveNav.s || 0) > 0.01)) {
+        caveAmt = Math.max(0, Math.min(1, ((caveNav.portalDist || 0) - 1.0) / 7.0));
       }
+      const openAir = (1 - underAmt) * (1 - caveAmt);
+      const dayFactor = Math.max(0, Math.min(1, (window._surfaceSunInt != null ? window._surfaceSunInt : 1) / 1.1));
+      if (dayFactor < 0.28) windVol *= 0.65;
+      oceanVol *= openAir;
+      windVol *= openAir;
+      wadeVol *= (1 - underAmt) * (1 - Math.min(1, caveAmt));
+
+      let underVol = 0;
+      if (underAmt > 0) {
+        const trench = wInfo.seaBand === 'trench' ? 0.62 : 1;
+        const deepCut = depthUnder > 3 ? Math.max(0.5, 1 - (depthUnder - 3) * 0.05) : 1;
+        underVol = underAmt * 0.26 * trench * deepCut;
+      }
+      const caveVol = caveAmt * 0.18;
+      const rainI = (window.calderaCampaign && window.calderaCampaign.weather && window.calderaCampaign.weather.rainIntensity) || 0;
+      const rainVol = Math.min(0.26, rainI * 0.2) * (1 - underAmt) * (1 - caveAmt * 0.8);
+      let fireVol = 0;
+      if (window._calderaActiveTool === 'torch') fireVol = 0.11 + caveAmt * 0.05;
+      const fires = window.activeCampfires || [];
+      for (let fi = 0; fi < fires.length; fi++) {
+        const cf = fires[fi];
+        if (!cf || cf.isLit === false || !cf.group) continue;
+        const p = cf.group.position;
+        const dist = Math.hypot(player.pos.x - p.x, player.pos.z - p.z);
+        if (dist < 8) fireVol = Math.max(fireVol, 0.22 * (1 - dist / 8) * (1 - underAmt));
+      }
+      let hullVol = 0;
+      if (aboard) {
+        const spd = Math.hypot(player.vel.x, player.vel.z);
+        hullVol = Math.min(0.18, spd * 0.028) * (1 - underAmt);
+      }
+
       AudioEngine.setLoop('ocean', oceanVol);
       AudioEngine.setLoop('windbed', windVol);
       AudioEngine.setLoop('wadebed', wadeVol);
+      AudioEngine.setLoop('under', underVol);
+      AudioEngine.setLoop('cave', caveVol);
+      AudioEngine.setLoop('rain', rainVol);
+      AudioEngine.setLoop('firebed', fireVol);
+      AudioEngine.setLoop('hull', hullVol);
+
+      if (isSub && wish.lengthSq() > 0.05) {
+        if (!player._nextBubble) player._nextBubble = timeSec + 0.45;
+        if (timeSec >= player._nextBubble) {
+          player._nextBubble = timeSec + 0.85 + Math.random() * 0.9;
+          AudioEngine.playBubble();
+        }
+      } else if (!isSub) {
+        player._nextBubble = 0;
+      }
+      if (isSub) {
+        if (!player._nextBreath) player._nextBreath = timeSec + 2.2;
+        if (timeSec >= player._nextBreath) {
+          const tired = player.vitals && player.vitals.stamina < 35;
+          player._nextBreath = timeSec + (tired ? 1.5 : 3.2) + Math.random() * 0.7;
+          AudioEngine.playBreath(tired ? 0.2 : 0.1);
+        }
+      } else {
+        player._nextBreath = 0;
+      }
+
+      const indoors = caveAmt > 0.35;
       if (!player._nextScatter) player._nextScatter = timeSec + 5;
       if (timeSec >= player._nextScatter) {
-        player._nextScatter = timeSec + 8 + Math.random() * 14;
-        const indoors = caveNav && caveNav.isInside;
-        if (!indoors && (performance.now() / 1000 - (AudioEngine._loudAt || 0)) > 0.8) {
-          AudioEngine.playScatter(oceanVol > 0.05 ? 'gull' : 'insect');
+        const night = dayFactor < 0.28;
+        player._nextScatter = timeSec + (night ? 5 : 8) + Math.random() * (night ? 8 : 14);
+        if (!indoors && underAmt < 0.4 && (performance.now() / 1000 - (AudioEngine._loudAt || 0)) > 0.8) {
+          AudioEngine.playScatter(!night && nearShore ? 'gull' : 'insect');
         }
       }
 
