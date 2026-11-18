@@ -435,25 +435,52 @@
       position: absolute;
       top: calc(max(env(safe-area-inset-top, 14px), 44px) + 42px);
       right: 16px;
-      background: rgba(10, 12, 20, 0.84);
+      min-width: 248px;
+      background: rgba(10, 14, 22, 0.86);
       backdrop-filter: blur(14px);
-      border: 1px solid rgba(179, 136, 255, 0.48);
+      border: 1px solid rgba(179, 136, 255, 0.45);
       border-radius: 12px;
-      padding: 7px 11px;
+      padding: 8px 11px;
       font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      font-variant-numeric: tabular-nums;
       font-size: 10.5px;
-      line-height: 1.45;
-      color: #dcd3ff;
+      line-height: 1.48;
+      color: #e2dcf8;
       z-index: 29;
       pointer-events: none;
       display: none;
-      box-shadow: 0 6px 20px rgba(0,0,0,0.6);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.62);
     }
     #debug-telemetry-pill.visible {
       display: block;
     }
-    #debug-telemetry-pill .dbg-fps {
+    #debug-telemetry-pill .dbg-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+    #debug-telemetry-pill .dbg-row > span:first-child {
+      color: rgba(196, 190, 224, 0.72);
+      font-size: 9.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    #debug-telemetry-pill .dbg-val {
+      font-weight: 600;
+      text-align: right;
+    }
+    #debug-telemetry-pill .dbg-fps,
+    #debug-telemetry-pill .dbg-status-ok {
       color: #69f0ae;
+      font-weight: 700;
+    }
+    #debug-telemetry-pill .dbg-status-trim {
+      color: #ffd54f;
+      font-weight: 700;
+    }
+    #debug-telemetry-pill .dbg-status-throttle {
+      color: #ff7066;
       font-weight: 700;
     }
 
@@ -1174,12 +1201,14 @@
   </div>
 
   <div id="debug-telemetry-pill">
-    <div class="dbg-row"><span>FPS / Frame</span><span class="dbg-val"><span id="dbg-fps">60</span> FPS (<span id="dbg-ms">16.6</span>ms)</span></div>
+    <div class="dbg-row"><span>FPS / Frame</span><span class="dbg-val"><span id="dbg-fps" class="dbg-fps">60</span> FPS • <span id="dbg-ms">16.6</span>ms (<span id="dbg-p95">p95 16.6</span>)</span></div>
     <div class="dbg-row"><span>Draws / Tris</span><span class="dbg-val" id="dbg-draws">0 / 0k</span></div>
-    <div class="dbg-row"><span>Water Refl</span><span class="dbg-val" id="dbg-water-refl">288px (1/3)</span></div>
-    <div class="dbg-row"><span>Governor / Chunks</span><span class="dbg-val" id="dbg-gov">Balanced • 0 isl</span></div>
+    <div class="dbg-row"><span>DPR / Refl</span><span class="dbg-val" id="dbg-water-refl">1.50x • 256px (1/3)</span></div>
+    <div class="dbg-row"><span>Shadows</span><span class="dbg-val" id="dbg-shadows">Active (38m • 1/14)</span></div>
+    <div class="dbg-row"><span>Budgets</span><span class="dbg-val" id="dbg-budgets">Grass 100% • Part 85%</span></div>
+    <div class="dbg-row"><span>Governor / Isl</span><span class="dbg-val" id="dbg-gov">Balanced • 0 isl</span></div>
+    <div class="dbg-row"><span>Cave / Light</span><span class="dbg-val" id="dbg-depth">Surface (+16.4m)</span></div>
     <div class="dbg-row"><span>Coords</span><span class="dbg-val" id="dbg-pos">0, 18, 0</span></div>
-    <div class="dbg-row"><span>Medium</span><span class="dbg-val" id="dbg-depth">Surface (+16.4m)</span></div>
   </div>
 
   <!-- Left-Thumb Virtual Joystick & Right-Half Look Touch Zone -->
@@ -3025,28 +3054,65 @@
       }
     }
 
+    // Compute smooth [0..1] flattening factor across any junction doorway apron so floors meet seamlessly with zero rock curb
+    function getJunctionThresholdFactor(cave, sVal, wx, wz) {
+      const jps = cave && cave.junctionPortals;
+      if (!jps || !jps.length) return 0.0;
+      let maxFlat = 0.0;
+      for (let i = 0; i < jps.length; i++) {
+        const jp = jps[i];
+        if (Math.abs(sVal - jp.s) > 0.15) continue;
+        const ss = jp.seamSamples || [];
+        let minD = Math.hypot(wx - jp.wx, wz - jp.wz);
+        const segLim = Math.min(ss.length - 1, 18);
+        for (let si = 0; si < segLim; si++) {
+          const sa = ss[si], sb = ss[si + 1];
+          const vx = sb.x - sa.x, vz = sb.z - sa.z;
+          const l2 = vx * vx + vz * vz || 1.0;
+          const f = Math.max(0.0, Math.min(1.0, ((wx - sa.x) * vx + (wz - sa.z) * vz) / l2));
+          const d = Math.hypot(wx - (sa.x + vx * f), wz - (sa.z + vz * f));
+          if (d < minD) minD = d;
+        }
+        // Also extend 2.8m outward past the wall seam so the exterior lip & corner stay dead level
+        const exX = jp.wx + jp.seamOutX * 2.8, exZ = jp.wz + jp.seamOutZ * 2.8;
+        const evx = exX - jp.wx, evz = exZ - jp.wz;
+        const el2 = evx * evx + evz * evz || 1.0;
+        const ef = Math.max(0.0, Math.min(1.0, ((wx - jp.wx) * evx + (wz - jp.wz) * evz) / el2));
+        const ed = Math.hypot(wx - (jp.wx + evx * ef), wz - (jp.wz + evz * ef));
+        if (ed < minD) minD = ed;
+        const rInner = jp.mouthHalfW + 0.55;
+        const rOut = jp.mouthHalfW + 3.2;
+        if (minD < rOut) {
+          const fl = minD <= rInner ? 1.0 : (1.0 - smoothstep(rInner, rOut, minD));
+          if (fl > maxFlat) maxFlat = fl;
+        }
+      }
+      return maxFlat;
+    }
+
     // Shared 3D Geomorphic Floor Relief Function (used by BOTH 3D cave mesh generation and player grounding physics so cave floors are never flat)
-    function evalCaveFloorRelief(isLavaTube, distM, signedLat, halfW, wx, wz, sNorm = 0.5) {
+    function evalCaveFloorRelief(isLavaTube, distM, signedLat, halfW, wx, wz, sNorm = 0.5, thresholdFlat = 0.0) {
       const effHW = Math.max(1.2, halfW);
       const latNorm = Math.max(-1.0, Math.min(1.0, signedLat / effHW));
       const absLat = Math.abs(latNorm);
       // Smoothly taper relief right at the portal threshold (first 4.5m) so exterior terrain apron blends seamlessly
       const mouthFade = smoothstep(0.5, 5.2, distM);
       if (mouthFade <= 0.001) return 0.0;
+      const damp = 1.0 - thresholdFlat * 0.90;
 
       // 1. Concave lateral talus & breakdown scree banks along outer 42% of passage width (eliminates 90-degree flat-floor-to-wall corner)
       const talusT = Math.max(0.0, (absLat - 0.54) / 0.46);
       const talusNoise = 0.72 + 0.56 * fbm2(wx * 0.42 + 13.7, wz * 0.42 - 9.1, 2);
-      const talusRamp = Math.pow(talusT, 1.75) * (isLavaTube ? 0.44 : 0.92) * talusNoise;
+      const talusRamp = Math.pow(talusT, 1.75) * (isLavaTube ? 0.44 : 0.92) * talusNoise * (1.0 - thresholdFlat);
 
       if (isLavaTube) {
         // Volcanic Lava Tube: Stepped lateral solidification benches ("lava curbs") + crowned roped pahoehoe central flow channel
-        const benchStep = smoothstep(0.56, 0.66, absLat) * 0.46;
+        const benchStep = smoothstep(0.56, 0.66, absLat) * 0.46 * (1.0 - thresholdFlat);
         const benchRough = (fbm2(wx * 0.55, wz * 0.55, 2) - 0.45) * 0.14 * smoothstep(0.50, 0.70, absLat);
         const centralCrown = (1.0 - smoothstep(0.0, 0.54, absLat)) * 0.14;
         const pahoehoeRopes = Math.sin(distM * 2.6 - Math.pow(latNorm * 1.4, 2.0) * 3.2 + fbm2(wx * 0.6, wz * 0.6, 2) * 2.5) * 0.065 * (1.0 - absLat * 0.7);
         const bedrockWave = (fbm2(wx * 0.22 - 7.3, wz * 0.22 + 4.1, 2) - 0.46) * 0.24;
-        return (benchStep + benchRough + centralCrown + pahoehoeRopes + bedrockWave + talusRamp * 0.55) * mouthFade;
+        return (benchStep + (benchRough + centralCrown + pahoehoeRopes + bedrockWave + talusRamp * 0.55) * damp) * mouthFade;
       } else {
         // Karst Limestone Cavern: Stepped travertine rimstone terraces (gours), undulating flowstone hummocks & incised vadose stream channel
         const terraceFreq = distM * 0.115 + fbm2(wx * 0.16, wz * 0.16, 2) * 0.55;
@@ -3064,7 +3130,7 @@
         const dryLedge = (latNorm < 0.08 && latNorm > -0.58)
           ? 0.16 * Math.sin(((latNorm + 0.58) / 0.66) * Math.PI)
           : 0.0;
-        return (talusRamp + rimLip + stepWave + hummock + streamGroove + dryLedge) * mouthFade;
+        return (talusRamp + (rimLip + stepWave + hummock + streamGroove + dryLedge) * damp) * mouthFade;
       }
     }
     window.evalCaveFloorRelief = evalCaveFloorRelief;
@@ -3131,7 +3197,7 @@
           },
           {
             id: 'whisper_sink_grotto',
-            parentS: 0.43, reconnectS: null, side: 1, lateralPeak: 33.0, forwardExt: 56.0,
+            parentS: 0.43, reconnectS: null, side: 1, lateralPeak: 33.0, forwardExt: 36.0,
             dropY: -3.2, hasDropLedge: true, dropStartT: 0.34,
             baseHalfW: 3.5, chamberHalfW: 7.4, baseCeilH: 4.5, chamberCeilH: 6.8,
             hasPool: true, hasMineral: true, hasRockfall: true
@@ -3144,10 +3210,10 @@
             hasPool: false, hasMineral: true, hasRockfall: true
           },
           {
-            // Deep Interconnecting Subterranean Karst Aqueduct linking Whispering Caverns (Cave 0) directly to Cataract Cliff Grotto (Cave 1)!
+            // Deep Interconnecting Subterranean Karst Aqueduct linking Whispering Caverns (Cave 0) directly to Cataract Deep Rimstone Vault (Cave 1)!
             id: 'intercave_karst_aqueduct',
-            parentS: 0.64, reconnectS: null, targetCaveIdx: 1, targetS: 0.62, side: 1, lateralPeak: 18.0,
-            dropY: -9.5, hasDropLedge: false,
+            parentS: 0.64, reconnectS: null, targetCaveIdx: 1, targetS: 0.86, side: 1, lateralPeak: 20.0,
+            dropY: -10.5, hasDropLedge: false,
             baseHalfW: 3.2, chamberHalfW: 5.2, baseCeilH: 4.2, chamberCeilH: 5.6,
             hasPool: true, hasMineral: true, hasRockfall: true
           }
@@ -3173,7 +3239,7 @@
           { s: 0.48, radius: 4.2, sHalfSpan: 0.036, lightColor: 0xbee0f0, name: 'Cataract Skylight Rotunda' }
         ],
         waterfalls: [
-          { s: 0.51, side: -1, height: 6.2, width: 2.6, poolR: 6.4 }
+          { s: 0.42, side: -1, height: 6.2, width: 2.6, poolR: 5.6 }
         ],
         getPoint(s) {
           const distM = s * this.length;
@@ -3267,7 +3333,7 @@
         branchSpecs: [
           {
             id: 'lava_upper_tube',
-            parentS: 0.24, reconnectS: 0.66, side: -1, lateralPeak: 22.0,
+            parentS: 0.24, reconnectS: 0.66, side: -1, lateralPeak: 32.0,
             dropY: 2.2, baseHalfW: 3.0, baseCeilH: 3.9, hasPool: false, hasMineral: true
           },
           {
@@ -3330,49 +3396,54 @@
 
           let ctrlPts;
           let ptEndRef = null;
+          const outLatStart = Math.max((pt0.halfW || 4.0) + 6.8, latPeak * 0.58);
           if (isInterCave) {
             const pt1 = targetCave.getPoint(sp.targetS);
             ptEndRef = pt1;
-            const midX = 0.5 * (pt0.x + pt1.x) + (pt0.perpX * side * latPeak * 0.55);
-            const midZ = 0.5 * (pt0.z + pt1.z) + (pt0.perpZ * side * latPeak * 0.55);
-            const midY = 0.5 * (pt0.floorY + pt1.floorY) + (sp.dropY || -9.5);
+            const dY = sp.dropY || -10.5;
+            const outStartX = pt0.x + pt0.perpX * side * 20.0 + pt0.dirX * 3.0;
+            const outStartZ = pt0.z + pt0.perpZ * side * 20.0 + pt0.dirZ * 3.0;
+            const tgtSideSign = ((outStartZ - pt1.z) * pt1.perpZ + (outStartX - pt1.x) * pt1.perpX) >= 0 ? 1.0 : -1.0;
+            const outEndX = pt1.x + pt1.perpX * (tgtSideSign * 22.0);
+            const outEndZ = pt1.z + pt1.perpZ * (tgtSideSign * 22.0);
+            const midSouthX = Math.max(outStartX + 4.0, 192.0);
+            const midSouthZ = Math.max(outStartZ + 38.0, 126.0);
+            const arcZ = Math.max(midSouthZ + 28.0, outEndZ + 24.0);
             ctrlPts = [
               { x: pt0.x, z: pt0.z, y: pt0.floorY },
-              { x: pt0.x + rgt0X * side * 14.0 + fwd0X * 8.0, z: pt0.z + rgt0Z * side * 14.0 + fwd0Z * 8.0, y: pt0.floorY + (sp.dropY || -9.5) * 0.35 },
-              { x: midX, z: midZ, y: midY },
-              { x: pt1.x + targetCave.perpX * (-14.0) - targetCave.dirX * 8.0, z: pt1.z + targetCave.perpZ * (-14.0) - targetCave.dirZ * 8.0, y: pt1.floorY + (sp.dropY || -9.5) * 0.35 },
+              { x: outStartX, z: outStartZ, y: pt0.floorY + dY * 0.25 },
+              { x: midSouthX, z: midSouthZ, y: pt0.floorY + dY * 0.88 },
+              { x: (midSouthX + outEndX) * 0.45, z: arcZ, y: 0.5 * (pt0.floorY + pt1.floorY) + dY },
+              { x: -135.0, z: arcZ - 4.0, y: pt1.floorY + dY * 0.80 },
+              { x: outEndX, z: outEndZ, y: pt1.floorY + dY * 0.20 },
               { x: pt1.x, z: pt1.z, y: pt1.floorY }
             ];
           } else if (sp.reconnectS !== null && sp.reconnectS !== undefined) {
             const pt1 = cv.getPoint(sp.reconnectS);
             ptEndRef = pt1;
-            const pt1Prev = cv.getPoint(Math.max(0.0, sp.reconnectS - 0.02));
-            const tan1X = pt1.x - pt1Prev.x, tan1Z = pt1.z - pt1Prev.z;
-            const tan1Len = Math.hypot(tan1X, tan1Z) || 1.0;
-            const fwd1X = tan1X / tan1Len, fwd1Z = tan1Z / tan1Len;
-            const rgt1X = -fwd1Z, rgt1Z = fwd1X;
+            const outLatEnd = Math.max((pt1.halfW || 4.0) + 6.8, latPeak * 0.58);
             const midS = 0.5 * (sp.parentS + sp.reconnectS);
             const ptM = cv.getPoint(midS);
             ctrlPts = [
               { x: pt0.x, z: pt0.z, y: pt0.floorY },
-              { x: pt0.x + fwd0X * 14.0 + rgt0X * side * (latPeak * 0.42), z: pt0.z + fwd0Z * 14.0 + rgt0Z * side * (latPeak * 0.42), y: pt0.floorY + sp.dropY * 0.42 },
-              { x: ptM.x + ptM.perpX * side * latPeak, z: ptM.z + ptM.perpZ * side * latPeak, y: 0.5 * (pt0.floorY + pt1.floorY) + sp.dropY },
-              { x: pt1.x - fwd1X * 14.0 + rgt1X * side * (latPeak * 0.40), z: pt1.z - fwd1Z * 14.0 + rgt1Z * side * (latPeak * 0.40), y: pt1.floorY + sp.dropY * 0.40 },
+              { x: pt0.x + cv.dirX * 1.5 + cv.perpX * side * outLatStart, z: pt0.z + cv.dirZ * 1.5 + cv.perpZ * side * outLatStart, y: pt0.floorY + sp.dropY * 0.34 },
+              { x: ptM.x + cv.perpX * side * latPeak, z: ptM.z + cv.perpZ * side * latPeak, y: 0.5 * (pt0.floorY + pt1.floorY) + sp.dropY },
+              { x: pt1.x - cv.dirX * 1.5 + cv.perpX * side * outLatEnd, z: pt1.z - cv.dirZ * 1.5 + cv.perpZ * side * outLatEnd, y: pt1.floorY + sp.dropY * 0.34 },
               { x: pt1.x, z: pt1.z, y: pt1.floorY }
             ];
           } else {
             const ext = sp.forwardExt || 40.0;
             ctrlPts = [
               { x: pt0.x, z: pt0.z, y: pt0.floorY },
-              { x: pt0.x + fwd0X * 16.0 + rgt0X * side * (latPeak * 0.38), z: pt0.z + fwd0Z * 16.0 + rgt0Z * side * (latPeak * 0.38), y: pt0.floorY + sp.dropY * 0.22 },
-              { x: pt0.x + fwd0X * (ext * 0.48) + rgt0X * side * latPeak, z: pt0.z + fwd0Z * (ext * 0.48) + rgt0Z * side * latPeak, y: pt0.floorY + sp.dropY * 0.85 },
-              { x: pt0.x + fwd0X * (ext * 0.85) + rgt0X * side * (latPeak * 0.92), z: pt0.z + fwd0Z * (ext * 0.85) + rgt0Z * side * (latPeak * 0.92), y: pt0.floorY + sp.dropY },
-              { x: pt0.x + fwd0X * ext + rgt0X * side * (latPeak * 0.72), z: pt0.z + fwd0Z * ext + rgt0Z * side * (latPeak * 0.72), y: pt0.floorY + sp.dropY }
+              { x: pt0.x + cv.dirX * 1.8 + cv.perpX * side * outLatStart, z: pt0.z + cv.dirZ * 1.8 + cv.perpZ * side * outLatStart, y: pt0.floorY + sp.dropY * 0.14 },
+              { x: pt0.x + cv.dirX * (ext * 0.48) + cv.perpX * side * latPeak, z: pt0.z + cv.dirZ * (ext * 0.48) + cv.perpZ * side * latPeak, y: pt0.floorY + sp.dropY * 0.80 },
+              { x: pt0.x + cv.dirX * (ext * 0.85) + cv.perpX * side * (latPeak * 0.92), z: pt0.z + cv.dirZ * (ext * 0.85) + cv.perpZ * side * (latPeak * 0.92), y: pt0.floorY + sp.dropY },
+              { x: pt0.x + cv.dirX * ext + cv.perpX * side * (latPeak * 0.72), z: pt0.z + cv.dirZ * ext + cv.perpZ * side * (latPeak * 0.72), y: pt0.floorY + sp.dropY }
             ];
           }
 
           const segCount = ctrlPts.length - 1;
-          const numSamples = 72;
+          const numSamples = isInterCave ? 96 : 72;
           const samples = [];
           let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, maxTopY = -Infinity;
           let accumLen = 0.0;
@@ -3422,27 +3493,27 @@
               halfW *= domeCap;
               ceilH *= domeCap;
             }
-            const juncStart = t < 0.22 ? Math.pow(1.0 - t / 0.22, 1.25) * ((pt0.halfW * 0.56) + 1.4) : 0.0;
-            const juncEnd = (hasEndJunction && ptEndRef && t > 0.78)
-              ? Math.pow((t - 0.78) / 0.22, 1.25) * ((ptEndRef.halfW * 0.50) + 1.4)
+            const juncStart = t < 0.20 ? Math.pow(1.0 - t / 0.20, 1.25) * ((pt0.halfW * 0.32) + 0.95) : 0.0;
+            const juncEnd = (hasEndJunction && ptEndRef && t > 0.80)
+              ? Math.pow((t - 0.80) / 0.20, 1.25) * ((ptEndRef.halfW * 0.32) + 0.95)
               : 0.0;
             halfW += juncStart + juncEnd;
-            ceilH += (juncStart + juncEnd) * 0.40;
+            ceilH += (juncStart + juncEnd) * 0.35;
 
-            // Pin exact floor match at parentS and targetS/reconnectS junctions so there is never an abrupt vertical step at a fork mouth
-            if (t < 0.18) {
-              const pin0 = smoothCurve(1.0 - t / 0.18);
+            // Smooth wide-window floor pin at parentS and targetS/reconnectS so thresholds are dead level with zero sudden steps
+            if (t < 0.25) {
+              const pin0 = smoothCurve(1.0 - t / 0.25);
               floorY = floorY * (1.0 - pin0) + pt0.floorY * pin0;
             }
-            if (hasEndJunction && ptEndRef && t > 0.82) {
-              const pin1 = smoothCurve((t - 0.82) / 0.18);
+            if (hasEndJunction && ptEndRef && t > 0.75) {
+              const pin1 = smoothCurve((t - 0.75) / 0.25);
               floorY = floorY * (1.0 - pin1) + ptEndRef.floorY * pin1;
             }
 
             if (i > 0) {
               accumLen += Math.hypot(x - samples[i - 1].x, z - samples[i - 1].z);
             }
-            const faultDip = Math.sin(t * Math.PI * 3.0 + b * 1.7) * 0.32;
+            const faultDip = Math.sin(t * Math.PI * 3.0 + b * 1.7) * 0.28;
             samples.push({ x, z, floorY, halfW, ceilH, ceilY: floorY + ceilH, faultDip, t, distFromPortal: portalOffsetM + accumLen });
             const pad = halfW + 16.0;
             if (x - pad < minX) minX = x - pad;
@@ -3483,48 +3554,62 @@
           };
           cv.branches.push(branchObj);
 
-          // Register junction portal cutouts on parent cave (and target cave for inter-cave aqueduct) so main tunnel walls are open-cut at every fork!
-          const throatSample0 = samples[Math.min(samples.length - 1, 5)];
-          cv.junctionPortals.push({
-            s: sp.parentS,
-            side: side,
-            wx: throatSample0.x,
-            wz: throatSample0.z,
-            floorY: pt0.floorY,
-            ceilY: pt0.floorY + (sp.baseCeilH || 3.8) + 0.8,
-            cutRadius: (sp.baseHalfW || 3.0) + 1.55,
-            branch: branchObj,
-            isStart: true
-          });
+          // Helper to compute exact wall-seam crossing & throat corridor samples for crisp floor-to-arch portal carving
+          function buildPortalDescriptor(hostCave, hostS, isStartEnd) {
+            const ptHost = hostCave.getPoint(hostS);
+            const sliceCount = Math.min(samples.length, 24);
+            const throatSlice = isStartEnd
+              ? samples.slice(0, sliceCount)
+              : samples.slice(samples.length - sliceCount).reverse();
+            let seamSample = throatSlice[throatSlice.length - 1];
+            for (let k = 1; k < throatSlice.length; k++) {
+              const prev = throatSlice[k - 1];
+              const cur = throatSlice[k];
+              const dPrev = Math.hypot(prev.x - ptHost.x, prev.z - ptHost.z);
+              const dCur = Math.hypot(cur.x - ptHost.x, cur.z - ptHost.z);
+              if (dCur >= ptHost.halfW * 0.94) {
+                const frac = Math.max(0.0, Math.min(1.0, (ptHost.halfW * 0.96 - dPrev) / Math.max(0.001, dCur - dPrev)));
+                seamSample = {
+                  x: prev.x + (cur.x - prev.x) * frac,
+                  z: prev.z + (cur.z - prev.z) * frac,
+                  floorY: prev.floorY + (cur.floorY - prev.floorY) * frac,
+                  ceilH: prev.ceilH + (cur.ceilH - prev.ceilH) * frac,
+                  halfW: prev.halfW + (cur.halfW - prev.halfW) * frac
+                };
+                break;
+              }
+            }
+            const outDx = seamSample.x - ptHost.x;
+            const outDz = seamSample.z - ptHost.z;
+            const outLen = Math.hypot(outDx, outDz) || 1.0;
+            const seamOutX = outDx / outLen;
+            const seamOutZ = outDz / outLen;
+            const seamSide = (outDx * hostCave.perpX + outDz * hostCave.perpZ) >= 0 ? 1 : -1;
+            const mouthHalfW = (sp.baseHalfW || 3.0) + 0.95;
+            const mouthCeilH = (sp.baseCeilH || 3.8) + 0.70;
+            hostCave.junctionPortals.push({
+              s: hostS,
+              side: seamSide,
+              wx: seamSample.x,
+              wz: seamSample.z,
+              seamOutX,
+              seamOutZ,
+              hostHalfW: ptHost.halfW,
+              floorY: ptHost.floorY,
+              ceilY: ptHost.floorY + mouthCeilH,
+              mouthHalfW,
+              cutRadius: mouthHalfW + 1.15,
+              seamSamples: throatSlice,
+              branch: branchObj,
+              isStart: isStartEnd
+            });
+          }
+
+          buildPortalDescriptor(cv, sp.parentS, true);
           if (sp.reconnectS !== null && sp.reconnectS !== undefined) {
-            const pt1 = cv.getPoint(sp.reconnectS);
-            const throatSample1 = samples[Math.max(0, samples.length - 6)];
-            cv.junctionPortals.push({
-              s: sp.reconnectS,
-              side: side,
-              wx: throatSample1.x,
-              wz: throatSample1.z,
-              floorY: pt1.floorY,
-              ceilY: pt1.floorY + (sp.baseCeilH || 3.8) + 0.8,
-              cutRadius: (sp.baseHalfW || 3.0) + 1.55,
-              branch: branchObj,
-              isStart: false
-            });
+            buildPortalDescriptor(cv, sp.reconnectS, false);
           } else if (isInterCave && targetCave) {
-            const pt1 = targetCave.getPoint(sp.targetS);
-            const throatSample1 = samples[Math.max(0, samples.length - 6)];
-            const targetSide = ((throatSample1.x - pt1.x) * targetCave.perpX + (throatSample1.z - pt1.z) * targetCave.perpZ) >= 0 ? 1 : -1;
-            targetCave.junctionPortals.push({
-              s: sp.targetS,
-              side: targetSide,
-              wx: throatSample1.x,
-              wz: throatSample1.z,
-              floorY: pt1.floorY,
-              ceilY: pt1.floorY + (sp.baseCeilH || 3.8) + 0.8,
-              cutRadius: (sp.baseHalfW || 3.0) + 1.65,
-              branch: branchObj,
-              isStart: false
-            });
+            buildPortalDescriptor(targetCave, sp.targetS, false);
           }
         }
       }
@@ -3550,13 +3635,27 @@
           const bestDist = Math.hypot(signedLat, axialOff);
           if (bestPt && Math.abs(signedLat) < bestPt.halfW + 3.5 && Math.abs(axialOff) < 6.5) {
             const distM = Math.max(0.0, bestPt.s * cv.length);
-            const floorRelief = evalCaveFloorRelief(cv.isLavaTube, distM, signedLat, bestPt.halfW, x, z, bestPt.s);
+            const threshFlat = getJunctionThresholdFactor(cv, bestPt.s, x, z);
+            const floorRelief = evalCaveFloorRelief(cv.isLavaTube, distM, signedLat, bestPt.halfW, x, z, bestPt.s, threshFlat);
             const effFloorY = bestPt.floorY + floorRelief;
-            const inVert = (playerY === null) || (playerY < bestPt.floorY + bestPt.ceilH + 3.2 && playerY > effFloorY - 8.5);
+            const inVert = (playerY === null) || (playerY < bestPt.floorY + bestPt.ceilH + 2.4 && playerY > effFloorY - 3.6);
             if (inVert) {
               const clearance = bestPt.halfW - Math.abs(signedLat) - Math.max(0.0, Math.abs(axialOff) - 0.5);
-              const yPen = (playerY !== null) ? Math.abs(playerY - effFloorY) * 0.35 : 0.0;
-              const score = clearance - yPen;
+              const vertErr = (playerY !== null)
+                ? (playerY < effFloorY - 0.8 ? (effFloorY - 0.8 - playerY) * 2.8 : (playerY > bestPt.floorY + bestPt.ceilH ? (playerY - (bestPt.floorY + bestPt.ceilH)) * 2.8 : Math.abs(playerY - effFloorY) * 0.45))
+                : 0.0;
+              // Check if player is walking out through an open junction mouth on this cave
+              let inPortalMouth = false;
+              const jps = cv.junctionPortals || [];
+              for (let jpi = 0; jpi < jps.length; jpi++) {
+                const jp = jps[jpi];
+                const dToSeam = Math.hypot(x - jp.wx, z - jp.wz);
+                if (dToSeam < jp.mouthHalfW + 1.8 && Math.abs(exactS - jp.s) < 0.08) {
+                  inPortalMouth = true;
+                  break;
+                }
+              }
+              const score = clearance - vertErr;
               if (score > bestScore) {
                 bestScore = score;
                 bestMatch = {
@@ -3569,7 +3668,8 @@
                   dirX: cv.dirX, dirZ: cv.dirZ, perpX: cv.perpX, perpZ: cv.perpZ,
                   isSqueeze: bestPt.halfW < 1.55 || bestPt.ceilH < 2.55,
                   nearDropLedge: false,
-                  isInside: approxS > 0.004 && Math.abs(signedLat) < bestPt.halfW
+                  inPortalMouth,
+                  isInside: approxS > 0.004 && (Math.abs(signedLat) < bestPt.halfW || inPortalMouth)
                 };
               }
             }
@@ -3615,15 +3715,21 @@
             const signedLat = (x - cx) * perpX + (z - cz) * perpZ;
             const axialOff = (x - cx) * dirX + (z - cz) * dirZ;
             const pDist = a.distFromPortal + (bPt.distFromPortal - a.distFromPortal) * bBestFrac;
-            const juncPin = (tBranch < 0.14 ? (tBranch / 0.14) : (br.isLoop && tBranch > 0.86 ? ((1.0 - tBranch) / 0.14) : 1.0));
-            const floorRelief = evalCaveFloorRelief(cv.isLavaTube, pDist, signedLat, halfW, x, z, tBranch) * Math.max(0.25, juncPin);
+            const branchThreshFlat = Math.max(
+              tBranch < 0.28 ? (1.0 - smoothstep(0.08, 0.28, tBranch)) : 0.0,
+              (br.isLoop && tBranch > 0.72) ? (1.0 - smoothstep(0.92, 0.72, tBranch)) : 0.0
+            );
+            const floorRelief = evalCaveFloorRelief(cv.isLavaTube, pDist, signedLat, halfW, x, z, tBranch, branchThreshFlat);
             const effFloorY = baseFloorY + floorRelief;
-            const inVert = (playerY === null) || (playerY < baseFloorY + ceilH + 3.2 && playerY > effFloorY - 8.5);
+            const inVert = (playerY === null) || (playerY < baseFloorY + ceilH + 2.4 && playerY > effFloorY - 3.6);
             if (inVert) {
               const clearance = halfW - bDist;
-              const yPen = (playerY !== null) ? Math.abs(playerY - effFloorY) * 0.35 : 0.0;
-              const junctionBias = (tBranch < 0.05 || (br.isLoop && tBranch > 0.95)) ? -0.25 : 0.0;
-              const score = clearance - yPen + junctionBias;
+              const vertErr = (playerY !== null)
+                ? (playerY < effFloorY - 0.8 ? (effFloorY - 0.8 - playerY) * 2.8 : (playerY > baseFloorY + ceilH ? (playerY - (baseFloorY + ceilH)) * 2.8 : Math.abs(playerY - effFloorY) * 0.45))
+                : 0.0;
+              // Prefer branch when inside the outer throat zone so player hands off smoothly without hitting main-wall clamp
+              const throatAssist = (bDist < halfW * 0.85 && (tBranch > 0.04 && (!br.isLoop || tBranch < 0.96))) ? 1.8 : 0.0;
+              const score = clearance - vertErr + throatAssist;
               if (score > bestScore) {
                 bestScore = score;
                 bestMatch = {
@@ -3636,6 +3742,7 @@
                   dirX, dirZ, perpX, perpZ,
                   isSqueeze: halfW < 1.55 || ceilH < 2.55,
                   nearDropLedge: !!(br.hasDropLedge && tBranch > 0.24 && tBranch < 0.56),
+                  inPortalMouth: tBranch < 0.12 || (br.isLoop && tBranch > 0.88),
                   isInside: bDist < halfW
                 };
               }
@@ -10379,7 +10486,8 @@
       if (yieldFn) await yieldFn();
 
       window.maxGrassCount = placedGrass;
-      grassMesh.count = Math.min(placedGrass, 52000);
+      window._tierBaseGrassCount = Math.min(placedGrass, 52000);
+      grassMesh.count = window._tierBaseGrassCount;
       grassMesh.instanceMatrix.needsUpdate = true;
       if (grassMesh.instanceColor) grassMesh.instanceColor.needsUpdate = true;
       scene.add(grassMesh);
@@ -11958,7 +12066,7 @@
       const rockTint = new THREE.Color();
 
       // Shared helper to sculpt a 3D geological vertex on either a main cavern or branch passage
-      function evalGeologicalCaveVertex(cave, cx, cz, floorY, halfW, roofH, pt, distM, sClamped, u, isMouthZone) {
+      function evalGeologicalCaveVertex(cave, cx, cz, floorY, halfW, roofH, pt, distM, sClamped, u, isMouthZone, threshFlatOverride) {
         const ang = u * Math.PI * 2.0;
         const cosA = Math.cos(ang);
         const sinA = Math.sin(ang);
@@ -11974,10 +12082,13 @@
           const signedLat = cosA * rW;
           const vx = cx + pt.perpX * signedLat;
           const vz = cz + pt.perpZ * signedLat;
-          const floorRelief = evalCaveFloorRelief(cave.isLavaTube, distM, signedLat, halfW, vx, vz, sClamped);
+          const threshFlat = threshFlatOverride !== undefined
+            ? threshFlatOverride
+            : (isMouthZone ? getJunctionThresholdFactor(cave, sClamped, vx, vz) : 0.0);
+          const floorRelief = evalCaveFloorRelief(cave.isLavaTube, distM, signedLat, halfW, vx, vz, sClamped, threshFlat);
           // Concave corner blend right where floor meets lower wall (sinA in [-0.32..0.0])
           const cornerT = Math.max(0.0, 1.0 - Math.abs(sinA) / 0.32);
-          const cornerLift = Math.pow(cornerT, 2.0) * (cave.isLavaTube ? 0.34 : 0.68) * mouthRamp;
+          const cornerLift = Math.pow(cornerT, 2.0) * (cave.isLavaTube ? 0.34 : 0.68) * mouthRamp * (1.0 - threshFlat);
           const vy = floorY + floorRelief + cornerLift;
           const crevice = Math.min(1.0, cornerT * 0.65 + Math.max(0.0, -floorWallNoise) * 0.45);
           const wear = cave.isLavaTube && Math.abs(cosA) > 0.54 && Math.abs(cosA) < 0.72 ? 0.78 : 0.24;
@@ -12040,6 +12151,91 @@
         }
       }
 
+      // Geometric helpers so cave walls, props, and colliders never protrude into any main/branch/inter-cave passage
+      function isPointInMainCaveLumen(wx, wy, wz, radScale) {
+        const rs = radScale || 0.88;
+        for (let ci = 0; ci < CAVE_SYSTEMS.length; ci++) {
+          const cv = CAVE_SYSTEMS[ci];
+          const dx0 = wx - cv.px;
+          const dz0 = wz - cv.pz;
+          const approxS = (dx0 * cv.dirX + dz0 * cv.dirZ) / cv.length;
+          if (approxS < 0.005 || approxS > 0.995) continue;
+          const pt = cv.getPoint(approxS);
+          const lat = (wx - pt.x) * cv.perpX + (wz - pt.z) * cv.perpZ;
+          const ax = (wx - pt.x) * cv.dirX + (wz - pt.z) * cv.dirZ;
+          if (Math.abs(lat) < pt.halfW * rs && Math.abs(ax) < 4.0 &&
+              wy >= pt.floorY - 0.85 && wy <= pt.floorY + pt.ceilH + 0.6) {
+            return true;
+          }
+        }
+        return false;
+      }
+
+      function isBlockedByCorridorOrPortal(wx, wy, wz, propR) {
+        const padR = propR || 0.0;
+        for (let ci = 0; ci < CAVE_SYSTEMS.length; ci++) {
+          const cv = CAVE_SYSTEMS[ci];
+          // 1. Main tunnel central walkable lane
+          const dx0 = wx - cv.px;
+          const dz0 = wz - cv.pz;
+          const approxS = (dx0 * cv.dirX + dz0 * cv.dirZ) / cv.length;
+          if (approxS >= -0.02 && approxS <= 1.0) {
+            const pt = cv.getPoint(Math.max(0.0, Math.min(1.0, approxS)));
+            const lat = Math.abs((wx - pt.x) * cv.perpX + (wz - pt.z) * cv.perpZ);
+            const ax = Math.abs((wx - pt.x) * cv.dirX + (wz - pt.z) * cv.dirZ);
+            const laneHW = Math.max(2.15, pt.halfW * 0.56);
+            if (lat < laneHW + padR && ax < 4.5 && wy >= pt.floorY - 1.4 && wy <= pt.floorY + 2.8) {
+              return true;
+            }
+          }
+          // 2. All junction portal openings and throat zones on this cave
+          const jps = cv.junctionPortals || [];
+          for (let ji = 0; ji < jps.length; ji++) {
+            const jp = jps[ji];
+            if (Math.hypot(wx - jp.wx, wz - jp.wz) < jp.mouthHalfW + padR + 0.75 &&
+                wy >= jp.floorY - 1.5 && wy <= jp.ceilY + 1.0) {
+              return true;
+            }
+            const ss = jp.seamSamples || [];
+            const lim = Math.min(ss.length - 1, 14);
+            for (let si = 0; si < lim; si++) {
+              const a = ss[si], b = ss[si + 1];
+              const vx = b.x - a.x, vz = b.z - a.z;
+              const l2 = vx * vx + vz * vz || 1.0;
+              const f = Math.max(0.0, Math.min(1.0, ((wx - a.x) * vx + (wz - a.z) * vz) / l2));
+              const cx = a.x + vx * f, cz = a.z + vz * f;
+              const d = Math.hypot(wx - cx, wz - cz);
+              if (d < jp.mouthHalfW + padR + 0.45 && wy >= Math.min(a.floorY, b.floorY) - 1.5 && wy <= Math.max(a.floorY + a.ceilH, b.floorY + b.ceilH) + 0.8) {
+                return true;
+              }
+            }
+          }
+          // 3. All branch / squeeze / aqueduct central corridors
+          const brs = cv.branches || [];
+          for (let bi = 0; bi < brs.length; bi++) {
+            const br = brs[bi];
+            const bb = br.bbox;
+            if (wx < bb.minX - padR || wx > bb.maxX + padR || wz < bb.minZ - padR || wz > bb.maxZ + padR) continue;
+            const samp = br.samples;
+            for (let si = 0; si < samp.length - 1; si++) {
+              const a = samp[si], b = samp[si + 1];
+              const vx = b.x - a.x, vz = b.z - a.z;
+              const l2 = vx * vx + vz * vz || 1.0;
+              const f = Math.max(0.0, Math.min(1.0, ((wx - a.x) * vx + (wz - a.z) * vz) / l2));
+              const cx = a.x + vx * f, cz = a.z + vz * f;
+              const hw = a.halfW + (b.halfW - a.halfW) * f;
+              const fy = a.floorY + (b.floorY - a.floorY) * f;
+              const ch = a.ceilH + (b.ceilH - a.ceilH) * f;
+              const laneW = Math.max(1.65, hw * 0.68);
+              if (Math.hypot(wx - cx, wz - cz) < laneW + padR && wy >= fy - 1.3 && wy <= fy + Math.min(ch, 2.65)) {
+                return true;
+              }
+            }
+          }
+        }
+        return false;
+      }
+
       for (let cIndex = 0; cIndex < CAVE_SYSTEMS.length; cIndex++) {
         const cave = CAVE_SYSTEMS[cIndex];
         const activeWallMat = cave.isLavaTube ? lavaWallMat : karstWallMat;
@@ -12089,20 +12285,24 @@
           // Speleothems, Fused Columns, Flowstone Draperies, Lavacicles & Structural Wall Buttress Ribs
           if (i >= 10 && i <= lengthSteps - 6 && i % 3 === 0) {
             if (cave.isLavaTube) {
-              // Volcanic Sharks-Tooth Lavacicles hanging from the thermal arch roof
-              for (let lk = 0; lk < 2; lk++) {
-                if (lavacicleIdx >= lavacicleMax) break;
-                const lOff = (((i * 7 + lk * 11) % 13) / 6.0 - 1.0) * (halfW * 0.64);
-                const lx = cx + pt.perpX * lOff;
-                const lz = cz + pt.perpZ * lOff;
-                const archRatio = Math.pow(Math.max(0.12, 1.0 - Math.pow(lOff / Math.max(1.0, halfW), 2.0)), 0.55);
-                const ceilY = floorY + roofH * archRatio;
-                const lScale = 0.55 + ((i * 3 + lk * 5) % 7) * 0.12;
-                dummy.position.set(lx, ceilY - 0.42 * lScale, lz);
-                dummy.rotation.set((lk - 0.5) * 0.10, i * 0.85, Math.PI + (lk - 0.5) * 0.08);
-                dummy.scale.set(lScale, lScale * (0.85 + (i % 3) * 0.25), lScale);
-                dummy.updateMatrix();
-                lavacicleMesh.setMatrixAt(lavacicleIdx++, dummy.matrix);
+              // Volcanic Sharks-Tooth Lavacicles hanging strictly high from the thermal arch roof
+              if (!nearJunction && roofH > 3.4) {
+                for (let lk = 0; lk < 2; lk++) {
+                  if (lavacicleIdx >= lavacicleMax) break;
+                  const lOff = (((i * 7 + lk * 11) % 13) / 6.0 - 1.0) * (halfW * 0.64);
+                  const lx = cx + pt.perpX * lOff;
+                  const lz = cz + pt.perpZ * lOff;
+                  const archRatio = Math.pow(Math.max(0.12, 1.0 - Math.pow(lOff / Math.max(1.0, halfW), 2.0)), 0.55);
+                  const ceilY = floorY + roofH * archRatio;
+                  const lScale = 0.55 + ((i * 3 + lk * 5) % 7) * 0.10;
+                  if (ceilY - 1.15 * lScale > floorY + 2.25) {
+                    dummy.position.set(lx, ceilY - 0.36 * lScale, lz);
+                    dummy.rotation.set((lk - 0.5) * 0.10, i * 0.85, Math.PI + (lk - 0.5) * 0.08);
+                    dummy.scale.set(lScale, lScale * (0.80 + (i % 3) * 0.18), lScale);
+                    dummy.updateMatrix();
+                    lavacicleMesh.setMatrixAt(lavacicleIdx++, dummy.matrix);
+                  }
+                }
               }
             } else {
               // Karst Stalactites & Terraced Wall-Margin Stalagmites
@@ -12112,32 +12312,37 @@
                 const sideOff = (((i * 7 + k * 13) % 11) / 5.0 - 1.0) * (halfW * 0.72);
                 const sx = cx + pt.perpX * sideOff;
                 const sz = cz + pt.perpZ * sideOff;
-                const hScale = Math.min(0.68 + ((i * 3 + k * 5) % 9) * 0.13, Math.max(0.48, (roofH - 2.55) * 0.48));
+                const hScale = Math.min(0.68 + ((i * 3 + k * 5) % 9) * 0.13, Math.max(0.48, (roofH - 2.55) * 0.45));
                 const rScale = 0.50 + ((i * 5 + k * 3) % 7) * 0.09;
                 if (isStalactite) {
                   const archRatio = Math.sqrt(Math.max(0.15, 1.0 - Math.pow(sideOff / Math.max(1.0, halfW), 2.0)));
                   const ceilY = floorY + roofH * archRatio;
-                  dummy.position.set(sx, ceilY - 0.90 * hScale, sz);
-                  dummy.rotation.set((k - 0.5) * 0.08, i * 0.7, Math.PI + (k - 0.5) * 0.08);
-                  dummy.scale.set(rScale, hScale, rScale);
-                  dummy.updateMatrix();
-                  speleoMesh.setMatrixAt(speleoIdx++, dummy.matrix);
-                } else if (!nearJunction) {
-                  const rimSide = (sideOff >= 0 ? 1 : -1) * Math.max(Math.min(halfW * 0.82, Math.max(2.2, halfW - 1.15)), Math.abs(sideOff));
+                  if (!nearJunction && roofH > 3.4 && ceilY - 1.65 * hScale > floorY + 2.30) {
+                    dummy.position.set(sx, ceilY - 0.85 * hScale, sz);
+                    dummy.rotation.set((k - 0.5) * 0.08, i * 0.7, Math.PI + (k - 0.5) * 0.08);
+                    dummy.scale.set(rScale, hScale, rScale);
+                    dummy.updateMatrix();
+                    speleoMesh.setMatrixAt(speleoIdx++, dummy.matrix);
+                  }
+                } else if (!nearJunction && halfW > 3.2) {
+                  const rimSide = (sideOff >= 0 ? 1 : -1) * Math.max(Math.min(halfW * 0.84, Math.max(2.4, halfW - 1.15)), Math.abs(sideOff));
                   const gx = cx + pt.perpX * rimSide;
                   const gz = cz + pt.perpZ * rimSide;
                   const fRel = evalCaveFloorRelief(false, distM, rimSide, halfW, gx, gz, sClamped);
-                  dummy.position.set(gx, floorY + fRel + 0.65 * hScale, gz);
-                  dummy.rotation.set(0, i * 1.1, 0);
-                  dummy.scale.set(rScale * 1.12, hScale, rScale * 1.12);
-                  dummy.updateMatrix();
-                  speleoMesh.setMatrixAt(speleoIdx++, dummy.matrix);
+                  const gy = floorY + fRel + 0.65 * hScale;
+                  if (!isBlockedByCorridorOrPortal(gx, gy, gz, rScale * 1.15)) {
+                    dummy.position.set(gx, gy, gz);
+                    dummy.rotation.set(0, i * 1.1, 0);
+                    dummy.scale.set(rScale * 1.12, hScale, rScale * 1.12);
+                    dummy.updateMatrix();
+                    speleoMesh.setMatrixAt(speleoIdx++, dummy.matrix);
+                  }
                 }
               }
 
               // Fused Floor-to-Ceiling Travertine Columns / Pillars along chamber margins & vaulted rotundas
-              if (i % 9 === 0 && !nearJunction && columnIdx < columnMax && roofH > 4.2) {
-                const colSide = ((i % 18 === 0) ? 1 : -1) * Math.max(2.15, halfW * (0.64 + ((i * 3) % 5) * 0.04));
+              if (i % 9 === 0 && !nearJunction && columnIdx < columnMax && roofH > 4.2 && halfW > 3.8) {
+                const colSide = ((i % 18 === 0) ? 1 : -1) * Math.max(2.6, halfW * (0.68 + ((i * 3) % 5) * 0.04));
                 const colX = cx + pt.perpX * colSide;
                 const colZ = cz + pt.perpZ * colSide;
                 const fRel = evalCaveFloorRelief(false, distM, colSide, halfW, colX, colZ, sClamped);
@@ -12146,36 +12351,40 @@
                 const localCeilY = floorY + roofH * archRatio;
                 const spanH = Math.max(2.4, (localCeilY - localFloorY) + 0.55);
                 const colRad = 0.58 + ((i * 5) % 6) * 0.11;
-                dummy.position.set(colX, localFloorY + spanH * 0.48, colZ);
-                dummy.rotation.set(((i % 3) - 1) * 0.04, i * 0.95, ((i % 2) - 0.5) * 0.05);
-                dummy.scale.set(colRad, spanH, colRad);
-                dummy.updateMatrix();
-                caveColumnMesh.setMatrixAt(columnIdx++, dummy.matrix);
-                window.instancedRockColliders = window.instancedRockColliders || [];
-                window.instancedRockColliders.push({
-                  x: colX, y: localFloorY + spanH * 0.48, z: colZ,
-                  r: colRad * 0.75,
-                  minY: localFloorY - 0.5,
-                  maxY: localCeilY + 0.5,
-                  topY: localCeilY,
-                  climbable: false
-                });
+                if (!isBlockedByCorridorOrPortal(colX, localFloorY + 0.9, colZ, colRad + 0.45)) {
+                  dummy.position.set(colX, localFloorY + spanH * 0.48, colZ);
+                  dummy.rotation.set(((i % 3) - 1) * 0.04, i * 0.95, ((i % 2) - 0.5) * 0.05);
+                  dummy.scale.set(colRad, spanH, colRad);
+                  dummy.updateMatrix();
+                  caveColumnMesh.setMatrixAt(columnIdx++, dummy.matrix);
+                  window.instancedRockColliders = window.instancedRockColliders || [];
+                  window.instancedRockColliders.push({
+                    x: colX, y: localFloorY + spanH * 0.48, z: colZ,
+                    r: colRad * 0.75,
+                    minY: localFloorY - 0.5,
+                    maxY: localCeilY + 0.5,
+                    topY: localCeilY,
+                    climbable: false
+                  });
+                }
               }
 
               // Corrugated "Bacon-Rind" Flowstone Draperies clinging to upper overhanging walls
-              if (i % 6 === 0 && !nearJunction && draperyIdx < draperyMax) {
+              if (i % 6 === 0 && !nearJunction && draperyIdx < draperyMax && roofH > 3.6) {
                 const drSide = ((i % 12 === 0) ? 1 : -1);
                 const drLat = drSide * halfW * 0.78;
                 const drX = cx + pt.perpX * drLat;
                 const drZ = cz + pt.perpZ * drLat;
-                const drY = floorY + roofH * 0.68;
-                const wallYaw = Math.atan2(pt.perpX * (-drSide), pt.perpZ * (-drSide));
-                const drScale = 0.72 + ((i * 7) % 6) * 0.14;
-                dummy.position.set(drX, drY, drZ);
-                dummy.rotation.set(drSide * 0.18, wallYaw + ((i % 3) - 1) * 0.16, 0);
-                dummy.scale.set(drScale, drScale * (0.9 + (i % 3) * 0.22), drScale);
-                dummy.updateMatrix();
-                caveDraperyMesh.setMatrixAt(draperyIdx++, dummy.matrix);
+                const drY = floorY + roofH * 0.72;
+                if (drY > floorY + 2.35 && !isBlockedByCorridorOrPortal(drX, drY, drZ, 0.75)) {
+                  const wallYaw = Math.atan2(pt.perpX * (-drSide), pt.perpZ * (-drSide));
+                  const drScale = 0.72 + ((i * 7) % 6) * 0.14;
+                  dummy.position.set(drX, drY, drZ);
+                  dummy.rotation.set(drSide * 0.18, wallYaw + ((i % 3) - 1) * 0.16, 0);
+                  dummy.scale.set(drScale, drScale * (0.9 + (i % 3) * 0.22), drScale);
+                  dummy.updateMatrix();
+                  caveDraperyMesh.setMatrixAt(draperyIdx++, dummy.matrix);
+                }
               }
 
               // Stepped Crescent Rimstone Dams (Gours) across terraced karst floor & stream edges
@@ -12194,10 +12403,10 @@
               }
             }
 
-            // 3D Structural Wall Buttress Ribs, Cantilevered Rock Shelves & Talus Scree (Breaks up cylindrical sightlines!)
+            // 3D Structural Wall Buttress Ribs, Cantilevered Rock Shelves & Talus Scree
             if (i >= 8 && i <= lengthSteps - 6 && i % 4 === 0 && !nearJunction) {
               const sideSign = ((i + cIndex) % 8 === 0) ? 1.0 : -1.0;
-              const wallLat = sideSign * Math.max(2.25, halfW * (0.76 + ((i * 3) % 5) * 0.035));
+              const wallLat = sideSign * Math.max(2.6, halfW * (0.80 + ((i * 3) % 5) * 0.035));
               const rx = cx + pt.perpX * wallLat;
               const rz = cz + pt.perpZ * wallLat;
               const fRel = evalCaveFloorRelief(cave.isLavaTube, distM, wallLat, halfW, rx, rz, sClamped);
@@ -12211,91 +12420,100 @@
               // A: Fallen breakdown slabs & talus scree banked along wall base
               if (rubbleIdx < rubbleMax) {
                 const rSc = 0.38 + ((i * 5 + cIndex * 3) % 10) * 0.095;
-                dummy.position.set(rx, floorY + fRel + rSc * 0.14, rz);
-                dummy.scale.set(rSc * (0.95 + (i % 3) * 0.24), rSc * (0.58 + (i % 4) * 0.18), rSc * (0.90 + (i % 2) * 0.25));
-                dummy.rotation.set(((i % 3) - 1) * 0.20, i * 1.37, -sideSign * 0.26);
-                dummy.updateMatrix();
-                rubbleMesh.setMatrixAt(rubbleIdx, dummy.matrix);
-                rubbleMesh.setColorAt(rubbleIdx, rockTint);
-                rubbleIdx++;
+                const ry = floorY + fRel + rSc * 0.14;
+                if (!isBlockedByCorridorOrPortal(rx, ry, rz, rSc * 1.05)) {
+                  dummy.position.set(rx, ry, rz);
+                  dummy.scale.set(rSc * (0.95 + (i % 3) * 0.24), rSc * (0.58 + (i % 4) * 0.18), rSc * (0.90 + (i % 2) * 0.25));
+                  dummy.rotation.set(((i % 3) - 1) * 0.20, i * 1.37, -sideSign * 0.26);
+                  dummy.updateMatrix();
+                  rubbleMesh.setMatrixAt(rubbleIdx, dummy.matrix);
+                  rubbleMesh.setColorAt(rubbleIdx, rockTint);
+                  rubbleIdx++;
+                }
               }
 
               // B: Large split-fault cavern boulders tucked into chamber wall alcoves
-              if (i % 8 === 0 && caveBoulderIdx < caveBoulderMax) {
-                const bSide = -sideSign * Math.max(2.35, halfW * 0.80);
+              if (i % 8 === 0 && caveBoulderIdx < caveBoulderMax && halfW > 3.0) {
+                const bSide = -sideSign * Math.max(2.7, halfW * 0.84);
                 const bx = cx + pt.perpX * bSide;
                 const bz = cz + pt.perpZ * bSide;
                 const bfRel = evalCaveFloorRelief(cave.isLavaTube, distM, bSide, halfW, bx, bz, sClamped);
-                const bSc = 0.72 + ((i * 3 + cIndex * 5) % 8) * 0.15;
+                const bSc = 0.72 + ((i * 3 + cIndex * 5) % 8) * 0.14;
                 const by = floorY + bfRel + bSc * 0.22;
-                dummy.position.set(bx, by, bz);
-                dummy.scale.set(bSc * (0.95 + (i % 3) * 0.18), bSc * (0.68 + (i % 4) * 0.22), bSc * (0.92 + (i % 2) * 0.20));
-                dummy.rotation.set(((i % 3) - 1) * 0.16, i * 2.15, sideSign * 0.18);
-                dummy.updateMatrix();
-                caveBoulderMesh.setMatrixAt(caveBoulderIdx, dummy.matrix);
-                caveBoulderMesh.setColorAt(caveBoulderIdx, rockTint);
-                caveBoulderIdx++;
-                window.instancedRockColliders = window.instancedRockColliders || [];
-                window.instancedRockColliders.push({
-                  x: bx, y: by, z: bz,
-                  r: bSc * 0.80,
-                  minY: by - bSc,
-                  maxY: by + bSc * 0.65,
-                  topY: by + bSc * 0.70,
-                  climbable: true
-                });
-              }
-
-              // C: Protruding 3D Structural Wall Buttress Pillars & Overhanging Fault Ribs (Jut inward from walls to obscure tube silhouette)
-              if (caveCragIdx < caveCragMax) {
-                const cSide = ((i % 8 === 0) ? -sideSign : sideSign) * Math.max(2.20, halfW * 0.84);
-                const crx = cx + pt.perpX * cSide;
-                const crz = cz + pt.perpZ * cSide;
-                const cSc = 0.82 + ((i * 7 + cIndex * 3) % 8) * 0.16;
-                const isUpperBaffle = (i % 12 === 0);
-                const buttressY = isUpperBaffle
-                  ? (floorY + roofH * 0.62)
-                  : (floorY + roofH * 0.36);
-                const tiltInward = (cSide >= 0 ? 1 : -1) * (isUpperBaffle ? 0.42 : -0.18);
-                dummy.position.set(crx, buttressY, crz);
-                dummy.scale.set(cSc * 0.95, cSc * (1.25 + (i % 3) * 0.32), cSc * 1.15);
-                dummy.rotation.set(tiltInward, Math.atan2(pt.dirX, pt.dirZ) + ((i % 3) - 1) * 0.24, -tiltInward * 0.6);
-                dummy.updateMatrix();
-                caveCragMesh.setMatrixAt(caveCragIdx, dummy.matrix);
-                caveCragMesh.setColorAt(caveCragIdx, rockTint);
-                caveCragIdx++;
-                if (!isUpperBaffle) {
+                if (!isBlockedByCorridorOrPortal(bx, by, bz, bSc * 1.15)) {
+                  dummy.position.set(bx, by, bz);
+                  dummy.scale.set(bSc * (0.95 + (i % 3) * 0.18), bSc * (0.68 + (i % 4) * 0.22), bSc * (0.92 + (i % 2) * 0.20));
+                  dummy.rotation.set(((i % 3) - 1) * 0.16, i * 2.15, sideSign * 0.18);
+                  dummy.updateMatrix();
+                  caveBoulderMesh.setMatrixAt(caveBoulderIdx, dummy.matrix);
+                  caveBoulderMesh.setColorAt(caveBoulderIdx, rockTint);
+                  caveBoulderIdx++;
                   window.instancedRockColliders = window.instancedRockColliders || [];
                   window.instancedRockColliders.push({
-                    x: crx, y: buttressY, z: crz,
-                    r: cSc * 0.72,
-                    minY: floorY - 0.5,
-                    maxY: buttressY + cSc * 1.25,
-                    topY: buttressY + cSc * 1.25,
-                    climbable: false
+                    x: bx, y: by, z: bz,
+                    r: bSc * 0.80,
+                    minY: by - bSc,
+                    maxY: by + bSc * 0.65,
+                    topY: by + bSc * 0.70,
+                    climbable: true
                   });
+                }
+              }
+
+              // C: Protruding 3D Structural Wall Buttress Pillars & Overhanging Fault Ribs
+              if (caveCragIdx < caveCragMax && halfW > 3.2) {
+                const cSide = ((i % 8 === 0) ? -sideSign : sideSign) * Math.max(2.8, halfW * 0.88);
+                const crx = cx + pt.perpX * cSide;
+                const crz = cz + pt.perpZ * cSide;
+                const cSc = 0.78 + ((i * 7 + cIndex * 3) % 7) * 0.14;
+                const isUpperBaffle = (i % 12 === 0);
+                const buttressY = isUpperBaffle
+                  ? (floorY + roofH * 0.66)
+                  : (floorY + roofH * 0.36);
+                if (!isBlockedByCorridorOrPortal(crx, floorY + 1.0, crz, cSc * 1.25)) {
+                  const tiltInward = (cSide >= 0 ? 1 : -1) * (isUpperBaffle ? 0.42 : -0.18);
+                  dummy.position.set(crx, buttressY, crz);
+                  dummy.scale.set(cSc * 0.90, cSc * (1.20 + (i % 3) * 0.28), cSc * 1.05);
+                  dummy.rotation.set(tiltInward, Math.atan2(pt.dirX, pt.dirZ) + ((i % 3) - 1) * 0.24, -tiltInward * 0.6);
+                  dummy.updateMatrix();
+                  caveCragMesh.setMatrixAt(caveCragIdx, dummy.matrix);
+                  caveCragMesh.setColorAt(caveCragIdx, rockTint);
+                  caveCragIdx++;
+                  if (!isUpperBaffle) {
+                    window.instancedRockColliders = window.instancedRockColliders || [];
+                    window.instancedRockColliders.push({
+                      x: crx, y: buttressY, z: crz,
+                      r: cSc * 0.72,
+                      minY: floorY - 0.5,
+                      maxY: buttressY + cSc * 1.25,
+                      topY: buttressY + cSc * 1.25,
+                      climbable: false
+                    });
+                  }
                 }
               }
             }
 
             // Ultra-sparse dim mineral glints
-            if (i >= 18 && i % 24 === 0 && crystalIdx < crystalMax - 2) {
+            if (i >= 18 && i % 24 === 0 && crystalIdx < crystalMax - 2 && !nearJunction) {
               const sideSign = (i % 48 === 0) ? 1.0 : -1.0;
-              const wallDist = halfW * 0.76 * sideSign;
+              const wallDist = halfW * 0.78 * sideSign;
               const kx = cx + pt.perpX * wallDist;
               const kz = cz + pt.perpZ * wallDist;
               const kfRel = evalCaveFloorRelief(cave.isLavaTube, distM, wallDist, halfW, kx, kz, sClamped);
               const ky = floorY + kfRel + 0.08;
-              cTint.setHex(cave.isLavaTube ? 0x9a3d14 : 0x3b6e6a);
-              for (let shard = 0; shard < 2; shard++) {
-                dummy.position.set(kx + shard * 0.14, ky, kz - shard * 0.12);
-                dummy.rotation.set((shard - 0.5) * 0.24, i * 0.5 + shard * 1.1, sideSign * 0.22);
-                const cSc = 0.42 + shard * 0.18;
-                dummy.scale.set(cSc, cSc, cSc);
-                dummy.updateMatrix();
-                crystalMesh.setMatrixAt(crystalIdx, dummy.matrix);
-                crystalMesh.setColorAt(crystalIdx, cTint);
-                crystalIdx++;
+              if (!isBlockedByCorridorOrPortal(kx, ky, kz, 0.55)) {
+                cTint.setHex(cave.isLavaTube ? 0x9a3d14 : 0x3b6e6a);
+                for (let shard = 0; shard < 2; shard++) {
+                  dummy.position.set(kx + shard * 0.14, ky, kz - shard * 0.12);
+                  dummy.rotation.set((shard - 0.5) * 0.24, i * 0.5 + shard * 1.1, sideSign * 0.22);
+                  const cSc = 0.42 + shard * 0.18;
+                  dummy.scale.set(cSc, cSc, cSc);
+                  dummy.updateMatrix();
+                  crystalMesh.setMatrixAt(crystalIdx, dummy.matrix);
+                  crystalMesh.setColorAt(crystalIdx, cTint);
+                  crystalIdx++;
+                }
               }
             }
           }
@@ -12338,13 +12556,31 @@
               }
             }
 
-            // 2. Carve Open-Cut Branch & Inter-Cave Aqueduct Portals in parent tunnel wall (eliminates sealed wall seams at forks!)
-            if (!skipQuad && jPortals.length > 0 && sinMid > -0.14 && sinMid < 0.88) {
+            // 2. Carve Open-Cut Branch & Inter-Cave Aqueduct Portals in parent/target tunnel wall via true wall-seam throat capsule
+            if (!skipQuad && jPortals.length > 0 && sinMid > -0.28 && sinMid < 0.92) {
               for (let jpIdx = 0; jpIdx < jPortals.length; jpIdx++) {
                 const jp = jPortals[jpIdx];
-                if (Math.abs(rMeta.sClamped - jp.s) < 0.055 && (cosMid * jp.side) > 0.18) {
-                  const dPortalXZ = Math.hypot(qx - jp.wx, qz - jp.wz);
-                  if (dPortalXZ < jp.cutRadius && qy > jp.floorY - 0.25 && qy < jp.ceilY + 0.35) {
+                if (Math.abs(rMeta.sClamped - jp.s) < 0.15 && (cosMid * jp.side) > 0.02) {
+                  const ss = jp.seamSamples || [];
+                  let minSegD = Math.hypot(qx - jp.wx, qz - jp.wz);
+                  let segFloorY = jp.floorY;
+                  let segCeilH = jp.ceilY - jp.floorY;
+                  const segLim = Math.min(ss.length - 1, 18);
+                  for (let si = 0; si < segLim; si++) {
+                    const sa = ss[si], sb = ss[si + 1];
+                    const vx = sb.x - sa.x, vz = sb.z - sa.z;
+                    const l2 = vx * vx + vz * vz || 1.0;
+                    const f = Math.max(0.0, Math.min(1.0, ((qx - sa.x) * vx + (qz - sa.z) * vz) / l2));
+                    const d = Math.hypot(qx - (sa.x + vx * f), qz - (sa.z + vz * f));
+                    if (d < minSegD) {
+                      minSegD = d;
+                      segFloorY = sa.floorY + (sb.floorY - sa.floorY) * f;
+                      segCeilH = sa.ceilH + (sb.ceilH - sa.ceilH) * f;
+                    }
+                  }
+                  const minFloor = Math.min(jp.floorY, segFloorY);
+                  const maxCeil = Math.max(jp.ceilY, segFloorY + segCeilH);
+                  if (minSegD < jp.mouthHalfW + 0.75 && qy > minFloor + 0.04 && qy < maxCeil + 0.55) {
                     skipQuad = true;
                     break;
                   }
@@ -12371,24 +12607,27 @@
         tunnelMesh.layers.set(1);
         caveRoot.add(tunnelMesh);
 
-        // Frame every Open-Cut Branch Fork Portal with Flanking 3D Rock Buttress Pillars & Overhanging Lintel Ribs
+        // Frame every Open-Cut Branch Fork Portal cleanly along left/right jambs outside clear walkable threshold
         for (let jpIdx = 0; jpIdx < jPortals.length; jpIdx++) {
           const jp = jPortals[jpIdx];
-          const ptJ = cave.getPoint(jp.s);
-          const archYaw = Math.atan2(ptJ.dirX, ptJ.dirZ);
+          const jPerpX = -jp.seamOutZ, jPerpZ = jp.seamOutX;
+          const jYaw = Math.atan2(jp.seamOutX, jp.seamOutZ);
+          const jambOffset = jp.mouthHalfW + 1.25;
           [-1, 1].forEach(flankSign => {
             if (caveCragIdx < caveCragMax) {
-              const fx = jp.wx + ptJ.dirX * (flankSign * (jp.cutRadius * 0.74));
-              const fz = jp.wz + ptJ.dirZ * (flankSign * (jp.cutRadius * 0.74));
-              const fy = jp.floorY + (jp.ceilY - jp.floorY) * 0.46;
-              dummy.position.set(fx, fy, fz);
-              dummy.rotation.set(flankSign * 0.14, archYaw + flankSign * 0.35, -jp.side * 0.18);
-              dummy.scale.set(1.35, 1.85, 1.45);
-              dummy.updateMatrix();
-              rockTint.setRGB(cave.isLavaTube ? 0.45 : 0.78, cave.isLavaTube ? 0.38 : 0.82, cave.isLavaTube ? 0.35 : 0.86);
-              caveCragMesh.setMatrixAt(caveCragIdx, dummy.matrix);
-              caveCragMesh.setColorAt(caveCragIdx, rockTint);
-              caveCragIdx++;
+              const fx = jp.wx + jp.seamOutX * 0.40 + jPerpX * (flankSign * jambOffset);
+              const fz = jp.wz + jp.seamOutZ * 0.40 + jPerpZ * (flankSign * jambOffset);
+              const fy = jp.floorY + (jp.ceilY - jp.floorY) * 0.44;
+              if (!isBlockedByCorridorOrPortal(fx, jp.floorY + 0.9, fz, 1.05)) {
+                dummy.position.set(fx, fy, fz);
+                dummy.rotation.set(flankSign * 0.10, jYaw + flankSign * 0.30, -flankSign * 0.14);
+                dummy.scale.set(1.05, 1.75, 1.05);
+                dummy.updateMatrix();
+                rockTint.setRGB(cave.isLavaTube ? 0.45 : 0.78, cave.isLavaTube ? 0.38 : 0.82, cave.isLavaTube ? 0.35 : 0.86);
+                caveCragMesh.setMatrixAt(caveCragIdx, dummy.matrix);
+                caveCragMesh.setColorAt(caveCragIdx, rockTint);
+                caveCragIdx++;
+              }
             }
           });
         }
@@ -12487,13 +12726,17 @@
           caveRoot.add(oasisPool);
           branchMeshes.push(oasisPool);
 
-          for (let ob = 0; ob < 5; ob++) {
-            const oAng = (ob / 5) * Math.PI * 2.0 + 0.4;
-            const oRad = (ob === 0) ? 0.0 : (1.35 + (ob % 2) * 0.65);
-            const oSc = (ob === 0) ? 1.35 : (0.72 + (ob % 3) * 0.25);
+          for (let ob = 0; ob < 6; ob++) {
+            const oAng = (ob / 6) * Math.PI * 2.0 + 0.45;
+            const oRad = Math.min((skC.pt.halfW || 6.5) * 0.78, 4.8 + (ob % 2) * 1.4);
+            const oSc = 0.72 + (ob % 3) * 0.22;
+            const orx = skC.x + Math.cos(oAng) * oRad;
+            const orz = skC.z + Math.sin(oAng) * oRad;
+            if (isBlockedByCorridorOrPortal(orx, oasisFloorY, orz, oSc * 1.35)) continue;
             const oasisRock = createGraniteBoulder(oSc, cIndex * 11 + ob);
-            oasisRock.position.set(skC.x + Math.cos(oAng) * oRad, oasisFloorY + oSc * 0.22, skC.z + Math.sin(oAng) * oRad);
-            oasisRock.scale.set(1.25, 0.72, 1.15);
+            oasisRock.position.set(orx, oasisFloorY + oSc * 0.20, orz);
+            oasisRock.scale.set(1.22, 0.70, 1.12);
+            oasisRock.userData = { isOasisRock: true };
             oasisRock.layers.set(1);
             caveRoot.add(oasisRock);
             branchMeshes.push(oasisRock);
@@ -12552,7 +12795,7 @@
             const ledgeX = ptW.x + ptW.perpX * (wfSide * ptW.halfW * (0.52 + tRatio * 0.34));
             const ledgeZ = ptW.z + ptW.perpZ * (wfSide * ptW.halfW * (0.52 + tRatio * 0.34));
             const ledgeY = wfFloorY + wfH * tRatio;
-            if (caveBoulderIdx < caveBoulderMax) {
+            if (caveBoulderIdx < caveBoulderMax && !isBlockedByCorridorOrPortal(ledgeX, wfFloorY + 0.8, ledgeZ, 1.85)) {
               dummy.position.set(ledgeX, ledgeY, ledgeZ);
               dummy.rotation.set(0, Math.atan2(ptW.dirX, ptW.dirZ) + tier * 0.4, -wfSide * 0.15);
               dummy.scale.set(1.65, 0.58, 1.45);
@@ -12648,51 +12891,57 @@
             const flare = (i === 0 || (br.isLoop && i === bSteps)) ? 1.16 : 1.0;
             const rHW = sp.halfW * flare;
             const rCH = sp.ceilH * flare;
+            const bThreshFlat = Math.max(
+              sp.t < 0.28 ? (1.0 - smoothstep(0.08, 0.28, sp.t)) : 0.0,
+              (br.isLoop && sp.t > 0.72) ? (1.0 - smoothstep(0.92, 0.72, sp.t)) : 0.0
+            );
             for (let j = 0; j <= bRadial; j++) {
               const u = j / bRadial;
-              const vData = evalGeologicalCaveVertex(cave, sp.x, sp.z, sp.floorY, rHW, rCH, sp, sp.distFromPortal || bAccum, sp.t, u, false);
+              const vData = evalGeologicalCaveVertex(cave, sp.x, sp.z, sp.floorY, rHW, rCH, sp, sp.distFromPortal || bAccum, sp.t, u, false, bThreshFlat);
               bPos.push(vData.vx, vData.vy, vData.vz);
               bUVs.push(u * 5.5, bAccum * 0.16);
               bCrev.push(vData.crevice, vData.wear, vData.shelf);
             }
 
-            // Populate branch speleothems, fused columns, flowstone draperies, wall buttresses & mineral specks
+            // Populate branch speleothems, fused columns, wall buttresses & mineral specks strictly clear of walkable paths & squeezes
             if (i >= 5 && i <= bSteps - 5 && i % 3 === 0) {
-              if (!cave.isLavaTube && speleoIdx < speleoMax && sp.ceilH > 2.65) {
-                const sSide = ((i % 6 === 0) ? 1 : -1) * sp.halfW * 0.56;
-                dummy.position.set(sp.x + sp.perpX * sSide, sp.floorY + sp.ceilH - 0.68, sp.z + sp.perpZ * sSide);
+              if (!cave.isLavaTube && speleoIdx < speleoMax && sp.ceilH > 3.55 && sp.ceilH - 1.15 > 2.25) {
+                const sSide = ((i % 6 === 0) ? 1 : -1) * sp.halfW * 0.60;
+                dummy.position.set(sp.x + sp.perpX * sSide, sp.floorY + sp.ceilH - 0.62, sp.z + sp.perpZ * sSide);
                 dummy.rotation.set(0.05, i * 0.9, Math.PI);
-                const hs = 0.52 + (i % 4) * 0.13;
-                dummy.scale.set(0.48, hs, 0.48);
+                const hs = 0.48 + (i % 4) * 0.10;
+                dummy.scale.set(0.45, hs, 0.45);
                 dummy.updateMatrix();
                 speleoMesh.setMatrixAt(speleoIdx++, dummy.matrix);
-              } else if (cave.isLavaTube && lavacicleIdx < lavacicleMax && sp.ceilH > 2.55) {
-                const lSide = ((i % 6 === 0) ? 1 : -1) * sp.halfW * 0.52;
-                dummy.position.set(sp.x + sp.perpX * lSide, sp.floorY + sp.ceilH - 0.38, sp.z + sp.perpZ * lSide);
+              } else if (cave.isLavaTube && lavacicleIdx < lavacicleMax && sp.ceilH > 3.45 && sp.ceilH - 0.95 > 2.25) {
+                const lSide = ((i % 6 === 0) ? 1 : -1) * sp.halfW * 0.56;
+                dummy.position.set(sp.x + sp.perpX * lSide, sp.floorY + sp.ceilH - 0.35, sp.z + sp.perpZ * lSide);
                 dummy.rotation.set(0.06, i * 1.1, Math.PI);
-                dummy.scale.set(0.55, 0.68, 0.55);
+                dummy.scale.set(0.50, 0.62, 0.50);
                 dummy.updateMatrix();
                 lavacicleMesh.setMatrixAt(lavacicleIdx++, dummy.matrix);
               }
-              if (!cave.isLavaTube && i % 12 === 0 && columnIdx < columnMax && sp.ceilH > 4.0 && sp.halfW > 3.2) {
-                const cSide = ((i % 24 === 0) ? 1 : -1) * sp.halfW * 0.68;
+              if (!cave.isLavaTube && i % 12 === 0 && columnIdx < columnMax && sp.ceilH > 4.0 && sp.halfW > 3.8) {
+                const cSide = ((i % 24 === 0) ? 1 : -1) * sp.halfW * 0.72;
                 const colX = sp.x + sp.perpX * cSide;
                 const colZ = sp.z + sp.perpZ * cSide;
                 const spanH = sp.ceilH * 0.92;
-                dummy.position.set(colX, sp.floorY + spanH * 0.48, colZ);
-                dummy.rotation.set(0.03, i * 0.8, -0.03);
-                dummy.scale.set(0.54, spanH, 0.54);
-                dummy.updateMatrix();
-                caveColumnMesh.setMatrixAt(columnIdx++, dummy.matrix);
-                window.instancedRockColliders = window.instancedRockColliders || [];
-                window.instancedRockColliders.push({
-                  x: colX, y: sp.floorY + spanH * 0.48, z: colZ,
-                  r: 0.45,
-                  minY: sp.floorY - 0.5,
-                  maxY: sp.floorY + spanH + 0.5,
-                  topY: sp.floorY + spanH,
-                  climbable: false
-                });
+                if (!isBlockedByCorridorOrPortal(colX, sp.floorY + 0.9, colZ, 0.85)) {
+                  dummy.position.set(colX, sp.floorY + spanH * 0.48, colZ);
+                  dummy.rotation.set(0.03, i * 0.8, -0.03);
+                  dummy.scale.set(0.54, spanH, 0.54);
+                  dummy.updateMatrix();
+                  caveColumnMesh.setMatrixAt(columnIdx++, dummy.matrix);
+                  window.instancedRockColliders = window.instancedRockColliders || [];
+                  window.instancedRockColliders.push({
+                    x: colX, y: sp.floorY + spanH * 0.48, z: colZ,
+                    r: 0.45,
+                    minY: sp.floorY - 0.5,
+                    maxY: sp.floorY + spanH + 0.5,
+                    topY: sp.floorY + spanH,
+                    climbable: false
+                  });
+                }
               }
               const bShade = 0.70 + ((i * 5) % 7) * 0.04;
               if (cave.isLavaTube) {
@@ -12700,76 +12949,86 @@
               } else {
                 rockTint.setRGB(bShade * 0.88, bShade * 0.94, bShade * 0.97);
               }
-              if (rubbleIdx < rubbleMax && i % 3 === 0) {
-                const side = (i % 6 === 0 ? 1 : -1) * Math.max(1.15, sp.halfW * 0.72);
+              if (rubbleIdx < rubbleMax && i % 3 === 0 && sp.halfW > 2.2) {
+                const side = (i % 6 === 0 ? 1 : -1) * Math.max(1.85, sp.halfW * 0.78);
                 const rx = sp.x + sp.perpX * side, rz = sp.z + sp.perpZ * side;
                 const fRel = evalCaveFloorRelief(cave.isLavaTube, sp.distFromPortal || bAccum, side, sp.halfW, rx, rz, sp.t);
-                dummy.position.set(rx, sp.floorY + fRel + 0.12, rz);
-                dummy.rotation.set(i * 0.4, i * 1.3, 0.2);
-                const rs = 0.34 + ((i + bIdx * 3) % 6) * 0.18;
-                dummy.scale.set(rs * 1.18, rs * 0.66, rs);
-                dummy.updateMatrix();
-                rubbleMesh.setMatrixAt(rubbleIdx, dummy.matrix);
-                rubbleMesh.setColorAt(rubbleIdx, rockTint);
-                rubbleIdx++;
+                const rs = 0.34 + ((i + bIdx * 3) % 6) * 0.14;
+                const ry = sp.floorY + fRel + 0.12;
+                if (!isBlockedByCorridorOrPortal(rx, ry, rz, rs * 1.15)) {
+                  dummy.position.set(rx, ry, rz);
+                  dummy.rotation.set(i * 0.4, i * 1.3, 0.2);
+                  dummy.scale.set(rs * 1.18, rs * 0.66, rs);
+                  dummy.updateMatrix();
+                  rubbleMesh.setMatrixAt(rubbleIdx, dummy.matrix);
+                  rubbleMesh.setColorAt(rubbleIdx, rockTint);
+                  rubbleIdx++;
+                }
               }
-              if (caveBoulderIdx < caveBoulderMax && i % 6 === 0) {
-                const bSide = (i % 12 === 0 ? -1 : 1) * Math.max(1.35, sp.halfW * 0.76);
+              if (caveBoulderIdx < caveBoulderMax && i % 6 === 0 && sp.halfW > 2.6) {
+                const bSide = (i % 12 === 0 ? -1 : 1) * Math.max(2.15, sp.halfW * 0.82);
                 const bx = sp.x + sp.perpX * bSide, bz = sp.z + sp.perpZ * bSide;
                 const fRel = evalCaveFloorRelief(cave.isLavaTube, sp.distFromPortal || bAccum, bSide, sp.halfW, bx, bz, sp.t);
-                const bSc = 0.55 + ((i + bIdx * 5) % 5) * 0.22;
+                const bSc = 0.55 + ((i + bIdx * 5) % 5) * 0.18;
                 const by = sp.floorY + fRel + bSc * 0.20;
-                dummy.position.set(bx, by, bz);
-                dummy.rotation.set(0.14, i * 1.85, -0.12);
-                dummy.scale.set(bSc, bSc * 0.72, bSc * 1.08);
-                dummy.updateMatrix();
-                caveBoulderMesh.setMatrixAt(caveBoulderIdx, dummy.matrix);
-                caveBoulderMesh.setColorAt(caveBoulderIdx, rockTint);
-                caveBoulderIdx++;
-                window.instancedRockColliders = window.instancedRockColliders || [];
-                window.instancedRockColliders.push({
-                  x: bx, y: by, z: bz,
-                  r: bSc * 0.78,
-                  minY: by - bSc,
-                  maxY: by + bSc * 0.65,
-                  topY: by + bSc * 0.70,
-                  climbable: true
-                });
+                if (!isBlockedByCorridorOrPortal(bx, by, bz, bSc * 1.20)) {
+                  dummy.position.set(bx, by, bz);
+                  dummy.rotation.set(0.14, i * 1.85, -0.12);
+                  dummy.scale.set(bSc, bSc * 0.72, bSc * 1.08);
+                  dummy.updateMatrix();
+                  caveBoulderMesh.setMatrixAt(caveBoulderIdx, dummy.matrix);
+                  caveBoulderMesh.setColorAt(caveBoulderIdx, rockTint);
+                  caveBoulderIdx++;
+                  window.instancedRockColliders = window.instancedRockColliders || [];
+                  window.instancedRockColliders.push({
+                    x: bx, y: by, z: bz,
+                    r: bSc * 0.78,
+                    minY: by - bSc,
+                    maxY: by + bSc * 0.65,
+                    topY: by + bSc * 0.70,
+                    climbable: true
+                  });
+                }
               }
-              if (caveCragIdx < caveCragMax && i % 9 === 0) {
-                const cSide = (i % 18 === 0 ? 1 : -1) * Math.max(1.40, sp.halfW * 0.80);
-                const cSc = 0.58 + ((i + bIdx * 2) % 5) * 0.18;
+              if (caveCragIdx < caveCragMax && i % 9 === 0 && sp.halfW > 2.6) {
+                const cSide = (i % 18 === 0 ? 1 : -1) * Math.max(2.20, sp.halfW * 0.86);
+                const cSc = 0.58 + ((i + bIdx * 2) % 5) * 0.15;
                 const crx = sp.x + sp.perpX * cSide, crz = sp.z + sp.perpZ * cSide;
                 const cry = sp.floorY + sp.ceilH * 0.38;
-                dummy.position.set(crx, cry, crz);
-                dummy.rotation.set(-0.14, i * 1.45, 0.16);
-                dummy.scale.set(cSc * 0.90, cSc * 1.28, cSc * 0.95);
-                dummy.updateMatrix();
-                caveCragMesh.setMatrixAt(caveCragIdx, dummy.matrix);
-                caveCragMesh.setColorAt(caveCragIdx, rockTint);
-                caveCragIdx++;
-                window.instancedRockColliders = window.instancedRockColliders || [];
-                window.instancedRockColliders.push({
-                  x: crx, y: cry, z: crz,
-                  r: cSc * 0.68,
-                  minY: sp.floorY - 0.5,
-                  maxY: cry + cSc * 1.28,
-                  topY: cry + cSc * 1.28,
-                  climbable: false
-                });
+                if (!isBlockedByCorridorOrPortal(crx, sp.floorY + 1.0, crz, cSc * 1.25)) {
+                  dummy.position.set(crx, cry, crz);
+                  dummy.rotation.set(-0.14, i * 1.45, 0.16);
+                  dummy.scale.set(cSc * 0.90, cSc * 1.25, cSc * 0.95);
+                  dummy.updateMatrix();
+                  caveCragMesh.setMatrixAt(caveCragIdx, dummy.matrix);
+                  caveCragMesh.setColorAt(caveCragIdx, rockTint);
+                  caveCragIdx++;
+                  window.instancedRockColliders = window.instancedRockColliders || [];
+                  window.instancedRockColliders.push({
+                    x: crx, y: cry, z: crz,
+                    r: cSc * 0.68,
+                    minY: sp.floorY - 0.5,
+                    maxY: cry + cSc * 1.28,
+                    topY: cry + cSc * 1.28,
+                    climbable: false
+                  });
+                }
               }
-              if (br.hasMineral && crystalIdx < crystalMax && i % 15 === 0) {
-                const side = (i % 2 === 0 ? 1 : -1) * sp.halfW * 0.72;
+              if (br.hasMineral && crystalIdx < crystalMax && i % 15 === 0 && sp.halfW > 2.0) {
+                const side = (i % 2 === 0 ? 1 : -1) * sp.halfW * 0.76;
                 const kx = sp.x + sp.perpX * side, kz = sp.z + sp.perpZ * side;
                 const fRel = evalCaveFloorRelief(cave.isLavaTube, sp.distFromPortal || bAccum, side, sp.halfW, kx, kz, sp.t);
-                cTint.setHex(cave.isLavaTube ? 0x8a3010 : 0x315c5a);
-                dummy.position.set(kx, sp.floorY + fRel + 0.08, kz);
-                dummy.rotation.set(0.15, i * 0.7, -0.2);
-                dummy.scale.set(0.40, 0.45, 0.40);
-                dummy.updateMatrix();
-                crystalMesh.setMatrixAt(crystalIdx, dummy.matrix);
-                crystalMesh.setColorAt(crystalIdx, cTint);
-                crystalIdx++;
+                const ky = sp.floorY + fRel + 0.08;
+                if (!isBlockedByCorridorOrPortal(kx, ky, kz, 0.50)) {
+                  cTint.setHex(cave.isLavaTube ? 0x8a3010 : 0x315c5a);
+                  dummy.position.set(kx, ky, kz);
+                  dummy.rotation.set(0.15, i * 0.7, -0.2);
+                  dummy.scale.set(0.40, 0.45, 0.40);
+                  dummy.updateMatrix();
+                  crystalMesh.setMatrixAt(crystalIdx, dummy.matrix);
+                  crystalMesh.setColorAt(crystalIdx, cTint);
+                  crystalIdx++;
+                }
               }
             }
           }
@@ -12778,6 +13037,12 @@
           for (let i = 0; i < bSteps; i++) {
             for (let j = 0; j < bRadial; j++) {
               const a = i * bStride + j, b = a + 1, c = (i + 1) * bStride + j, d = c + 1;
+              const qx = (bPos[a * 3] + bPos[b * 3] + bPos[c * 3] + bPos[d * 3]) * 0.25;
+              const qy = (bPos[a * 3 + 1] + bPos[b * 3 + 1] + bPos[c * 3 + 1] + bPos[d * 3 + 1]) * 0.25;
+              const qz = (bPos[a * 3 + 2] + bPos[b * 3 + 2] + bPos[c * 3 + 2] + bPos[d * 3 + 2]) * 0.25;
+              if (isPointInMainCaveLumen(qx, qy, qz, 0.89)) {
+                continue;
+              }
               bIndices.push(a, b, c, b, d, c);
             }
           }
@@ -12790,6 +13055,7 @@
           bGeo.computeBoundingSphere();
           const bMesh = new THREE.Mesh(bGeo, activeWallMat);
           bMesh.receiveShadow = true;
+          bMesh.userData = { branchId: br.id };
           bMesh.layers.set(1);
           caveRoot.add(bMesh);
           branchMeshes.push(bMesh);
@@ -12844,7 +13110,7 @@
           cenoteMesh.layers.set(1);
           caveRoot.add(cenoteMesh);
 
-          // Ring of subterranean shoreline boulders & rimstone terraces around the Cenote / Lava Sump bank
+          // Ring of subterranean shoreline boulders & rimstone terraces around the Cenote / Lava Sump bank (clear of central spine)
           for (let cr = 0; cr < 10; cr++) {
             const cAng = (cr / 10) * Math.PI * 2 + 0.35;
             if (Math.cos(cAng) < -0.55) continue;
@@ -12852,6 +13118,7 @@
             const rbx = cenotePt.x + Math.cos(cAng) * bRad;
             const rbz = cenotePt.z + Math.sin(cAng) * bRad;
             const bSc = 0.58 + (cr % 4) * 0.32;
+            if (isBlockedByCorridorOrPortal(rbx, cenotePt.floorY + bSc * 0.20, rbz, bSc * 1.18)) continue;
             dummy.position.set(rbx, cenotePt.floorY + bSc * 0.20, rbz);
             dummy.scale.set(bSc * 1.18, bSc * 0.62, bSc * 0.96);
             dummy.rotation.set(0.12, cAng + 0.8, -0.10);
@@ -13793,31 +14060,44 @@
       inventory: { timber: 2, stone: 4 }
     };
 
-    // Quality tier architecture (Low / Medium / High) + Dynamic 60 FPS Adaptive Frame-Budget Governor
+    // Quality tier architecture (Low / Medium / High) + Dynamic Early-Trim Mobile Frame-Budget Governor
     window.qualityTier = 'medium';
     window.AdaptiveGovernor = {
       enabled: true,
       ewmaMs: 16.6,
+      lastFrameMs: 16.6,
+      p95Ms: 16.6,
+      maxSpikeMs: 16.6,
       targetMs: 16.6,
       tierLabel: 'Balanced',
       waterReflRes: 256,
       waterReflStride: 3,
       lodBias: 1.0,
-      grassRatio: 0.78,
+      grassRatio: 1.0,
       shadowStride: 14,
+      shadowSnapStep: 1.5,
       shadowRadiusSq: 1444.0, // 38m
-      particleBudgetScale: 1.0,
+      shadowEnabledGov: true,
+      skipWaterRefl: false,
+      particleBudgetScale: 0.85,
       lastAdjustTime: 0,
+      _frameHist: new Float32Array(60),
+      _sortedScratch: new Float32Array(60),
+      _histCursor: 0,
+      _histSamples: 0,
       applyPreset(tier) {
         if (tier === 'low') {
           this.tierLabel = 'Perf-Low';
           this.waterReflRes = 160;
-          this.waterReflStride = 5;
+          this.waterReflStride = 6;
           this.lodBias = 0.74;
-          this.grassRatio = 0.35;
-          this.shadowStride = 24;
-          this.shadowRadiusSq = 784.0; // 28m
-          this.particleBudgetScale = 0.45;
+          this.grassRatio = 0.65;
+          this.shadowStride = 28;
+          this.shadowSnapStep = 5.0;
+          this.shadowRadiusSq = 576.0; // 24m
+          this.shadowEnabledGov = false;
+          this.skipWaterRefl = true;
+          this.particleBudgetScale = 0.42;
         } else if (tier === 'high') {
           this.tierLabel = 'Ultra';
           this.waterReflRes = 256;
@@ -13825,55 +14105,124 @@
           this.lodBias = 1.22;
           this.grassRatio = 1.0;
           this.shadowStride = 10;
+          this.shadowSnapStep = 1.5;
           this.shadowRadiusSq = 2116.0; // 46m
+          this.shadowEnabledGov = true;
+          this.skipWaterRefl = false;
           this.particleBudgetScale = 1.0;
         } else {
           this.tierLabel = 'Balanced';
           this.waterReflRes = 256;
           this.waterReflStride = 3;
           this.lodBias = 1.0;
-          this.grassRatio = 0.78;
+          this.grassRatio = 1.0;
           this.shadowStride = 14;
+          this.shadowSnapStep = 1.5;
           this.shadowRadiusSq = 1444.0; // 38m
+          this.shadowEnabledGov = true;
+          this.skipWaterRefl = false;
           this.particleBudgetScale = 0.85;
         }
+        this.syncConsumers();
+      },
+      syncConsumers() {
         if (window.grassUniforms && window.grassUniforms.uLodBias) {
           window.grassUniforms.uLodBias.value = this.lodBias;
         }
+        if (window.instancedGrass) {
+          const maxAvail = window.maxGrassCount || 58000;
+          const tierBase = window._tierBaseGrassCount || Math.min(maxAvail, 52000);
+          const minFloor = Math.min(12000, maxAvail);
+          window.instancedGrass.count = Math.max(minFloor, Math.min(maxAvail, Math.round(tierBase * this.grassRatio)));
+        }
+        window._skipWaterReflectionPass = !!this.skipWaterRefl;
+      },
+      updatePercentileStats() {
+        const n = this._histSamples;
+        if (n <= 0) return;
+        let maxV = 0;
+        for (let i = 0; i < n; i++) {
+          const v = this._frameHist[i];
+          this._sortedScratch[i] = v;
+          if (v > maxV) maxV = v;
+        }
+        const slice = this._sortedScratch.subarray(0, n);
+        slice.sort();
+        const p95Idx = Math.min(n - 1, Math.max(0, Math.floor((n - 1) * 0.95)));
+        this.p95Ms = slice[p95Idx];
+        this.maxSpikeMs = maxV;
       },
       update(dt, timeSec) {
         const frameMs = Math.min(80.0, Math.max(4.0, dt * 1000.0));
-        this.ewmaMs = this.ewmaMs * 0.91 + frameMs * 0.09;
-        // Skip initial shader-warmup period (3.5s) so boot spikes do not trigger quality downgrades
-        if (!this.enabled || timeSec < 3.5 || timeSec - this.lastAdjustTime < 0.85) return;
+        this.lastFrameMs = frameMs;
+        this.ewmaMs = this.ewmaMs * 0.88 + frameMs * 0.12;
+        this._frameHist[this._histCursor] = frameMs;
+        this._histCursor = (this._histCursor + 1) % 60;
+        if (this._histSamples < 60) this._histSamples++;
+        if ((this._histCursor % 15) === 0) {
+          this.updatePercentileStats();
+        }
 
-        if (this.ewmaMs > 24.5) {
-          // Frame budget exceeded (< 41 FPS): step down distant/reflection/particle costs while keeping near-field & biome coverage intact
+        // Skip initial shader-warmup period (2.5s) so boot hydration does not falsely trigger downgrades
+        if (!this.enabled || timeSec < 2.5 || timeSec - this.lastAdjustTime < 0.45) return;
+        this.updatePercentileStats();
+
+        const rdr = typeof renderer !== 'undefined' ? renderer : null;
+        if (this.ewmaMs > 22.5) {
+          // Stage 2 Hard Throttle (< 44 FPS): trim grass density, DPR, water reflections & heavy shadows
           this.lastAdjustTime = timeSec;
+          this.particleBudgetScale = Math.max(0.30, +(this.particleBudgetScale - 0.18).toFixed(3));
+          this.shadowStride = Math.min(40, this.shadowStride + 8);
+          this.shadowSnapStep = Math.min(5.5, +(this.shadowSnapStep + 1.0).toFixed(2));
+          this.shadowRadiusSq = Math.max(484.0, this.shadowRadiusSq - 220.0); // floor 22m
+          this.shadowEnabledGov = (window.qualityTier !== 'low') && (this.ewmaMs <= 26.5);
+          this.waterReflRes = Math.max(128, this.waterReflRes - 32);
+          this.waterReflStride = Math.min(8, this.waterReflStride + 1);
+          this.skipWaterRefl = this.ewmaMs > 24.5;
+          this.grassRatio = Math.max(0.45, +(this.grassRatio - 0.12).toFixed(3));
+          this.lodBias = Math.max(0.72, +(this.lodBias - 0.06).toFixed(3));
+          this.tierLabel = !this.shadowEnabledGov ? 'Gov:Guard' : 'Gov:Throttle';
+          if (rdr && this.ewmaMs > 23.5 && rdr.getPixelRatio() > 1.0) {
+            rdr.setPixelRatio(Math.max(1.0, +(rdr.getPixelRatio() - 0.25).toFixed(2)));
+          }
+          this.syncConsumers();
+        } else if (this.ewmaMs > 18.8 || this.p95Ms > 25.5) {
+          // Stage 1 Early Soft Trim (< 53 FPS or frequent >25.5ms frame spikes): trim particles, shadows & reflections early
+          this.lastAdjustTime = timeSec;
+          this.particleBudgetScale = Math.max(0.38, +(this.particleBudgetScale - 0.14).toFixed(3));
+          this.shadowStride = Math.min(34, this.shadowStride + 6);
+          this.shadowSnapStep = Math.min(4.5, +(this.shadowSnapStep + 0.75).toFixed(2));
+          this.shadowRadiusSq = Math.max(676.0, this.shadowRadiusSq - 160.0); // floor 26m
+          this.shadowEnabledGov = (window.qualityTier !== 'low');
+          this.skipWaterRefl = false;
           this.waterReflRes = Math.max(160, this.waterReflRes - 32);
           this.waterReflStride = Math.min(6, this.waterReflStride + 1);
-          this.lodBias = Math.max(0.78, this.lodBias - 0.06);
-          this.particleBudgetScale = Math.max(0.40, this.particleBudgetScale - 0.14);
-          this.shadowStride = Math.min(24, this.shadowStride + 4);
-          this.tierLabel = this.ewmaMs > 29.0 ? 'Gov:Throttled' : 'Gov:Scaling';
-          if (this.ewmaMs > 31.0 && renderer.getPixelRatio() > 1.0) {
-            renderer.setPixelRatio(Math.max(1.0, renderer.getPixelRatio() - 0.20));
-          }
-        } else if (this.ewmaMs < 17.2) {
-          // Device has headroom: progressively restore maximum visual fidelity
+          this.lodBias = Math.max(0.78, +(this.lodBias - 0.04).toFixed(3));
+          this.tierLabel = 'Gov:Trim';
+          this.syncConsumers();
+        } else if (this.ewmaMs < 16.9 && this.p95Ms < 21.5) {
+          // Hysteresis recovery: headroom confirmed across both average & p95 spikes
           this.lastAdjustTime = timeSec;
           const maxRes = window.qualityTier === 'high' ? 256 : (window.qualityTier === 'low' ? 192 : 256);
-          const minStride = window.qualityTier === 'high' ? 2 : (window.qualityTier === 'low' ? 4 : 3);
-          const maxBias = window.qualityTier === 'high' ? 1.22 : (window.qualityTier === 'low' ? 0.84 : 1.08);
+          const minStride = window.qualityTier === 'high' ? 2 : (window.qualityTier === 'low' ? 5 : 3);
+          const maxBias = window.qualityTier === 'high' ? 1.22 : (window.qualityTier === 'low' ? 0.80 : 1.04);
+          const maxPartScale = window.qualityTier === 'high' ? 1.0 : (window.qualityTier === 'low' ? 0.45 : 0.85);
+          const minShadowStride = window.qualityTier === 'high' ? 10 : (window.qualityTier === 'low' ? 28 : 14);
+          const maxShadowRadSq = window.qualityTier === 'high' ? 2116.0 : (window.qualityTier === 'low' ? 576.0 : 1444.0);
+          const maxGrassRatio = window.qualityTier === 'low' ? 0.65 : 1.0;
+
+          this.shadowEnabledGov = (window.qualityTier !== 'low');
+          this.skipWaterRefl = (window.qualityTier === 'low');
+          this.shadowSnapStep = Math.max(1.5, +(this.shadowSnapStep - 0.5).toFixed(2));
+          this.shadowStride = Math.max(minShadowStride, this.shadowStride - 3);
+          this.shadowRadiusSq = Math.min(maxShadowRadSq, this.shadowRadiusSq + 160.0);
           this.waterReflRes = Math.min(maxRes, this.waterReflRes + 32);
           this.waterReflStride = Math.max(minStride, this.waterReflStride - 1);
-          this.lodBias = Math.min(maxBias, this.lodBias + 0.05);
-          this.particleBudgetScale = Math.min(1.0, this.particleBudgetScale + 0.12);
-          this.shadowStride = Math.max(10, this.shadowStride - 2);
+          this.lodBias = Math.min(maxBias, +(this.lodBias + 0.04).toFixed(3));
+          this.grassRatio = Math.min(maxGrassRatio, +(this.grassRatio + 0.08).toFixed(3));
+          this.particleBudgetScale = Math.min(maxPartScale, +(this.particleBudgetScale + 0.08).toFixed(3));
           this.tierLabel = 'Gov:Optimal';
-        }
-        if (window.grassUniforms && window.grassUniforms.uLodBias) {
-          window.grassUniforms.uLodBias.value = this.lodBias;
+          this.syncConsumers();
         }
       }
     };
@@ -13881,9 +14230,6 @@
     window.setQualityTier = function(tier, suppressToast = false) {
       window.qualityTier = tier;
       console.log('Quality tier set to:', tier);
-      if (window.AdaptiveGovernor) {
-        window.AdaptiveGovernor.applyPreset(tier);
-      }
 
       const qualityPills = document.querySelectorAll('#quality-pill-group .pill-btn');
       const qualityValBadge = document.getElementById('quality-val');
@@ -13892,15 +14238,14 @@
       });
 
       const bloomGroup = window.bloomGlowGroup;
+      const maxAvailGrass = window.maxGrassCount || 58000;
 
       if (tier === 'low') {
         if (qualityValBadge) qualityValBadge.innerText = 'Performance (Low)';
         renderer.setPixelRatio(1.0);
         renderer.shadowMap.enabled = false;
-        if (window.instancedGrass) {
-          window.instancedGrass.visible = true;
-          window.instancedGrass.count = Math.min(window.maxGrassCount || 58000, 28000);
-        }
+        window._tierBaseGrassCount = Math.min(maxAvailGrass, 42000);
+        if (window.instancedGrass) window.instancedGrass.visible = true;
         if (window.instancedFlowers) window.instancedFlowers.visible = false;
         if (window.instancedPebbles) window.instancedPebbles.visible = false;
         if (water && water.material && water.material.uniforms['distortionScale']) {
@@ -13913,10 +14258,8 @@
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
         renderer.shadowMap.enabled = !window._playerInsideCave;
         renderer.shadowMap.type = THREE.PCFShadowMap;
-        if (window.instancedGrass) {
-          window.instancedGrass.visible = true;
-          window.instancedGrass.count = Math.min(window.maxGrassCount || 58000, 52000);
-        }
+        window._tierBaseGrassCount = Math.min(maxAvailGrass, 52000);
+        if (window.instancedGrass) window.instancedGrass.visible = true;
         if (window.instancedFlowers) window.instancedFlowers.visible = true;
         if (window.instancedPebbles) window.instancedPebbles.visible = true;
         if (water && water.material && water.material.uniforms['distortionScale']) {
@@ -13929,10 +14272,8 @@
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2.0));
         renderer.shadowMap.enabled = !window._playerInsideCave;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-        if (window.instancedGrass) {
-          window.instancedGrass.visible = true;
-          window.instancedGrass.count = window.maxGrassCount || 58000;
-        }
+        window._tierBaseGrassCount = maxAvailGrass;
+        if (window.instancedGrass) window.instancedGrass.visible = true;
         if (window.instancedFlowers) window.instancedFlowers.visible = true;
         if (window.instancedPebbles) window.instancedPebbles.visible = true;
         if (water && water.material && water.material.uniforms['distortionScale']) {
@@ -13940,6 +14281,9 @@
         }
         if (bloomGroup) bloomGroup.visible = true;
         if (!suppressToast) showToast("💎 Cinematic Mode: Full soft shadows & bloom active");
+      }
+      if (window.AdaptiveGovernor) {
+        window.AdaptiveGovernor.applyPreset(tier);
       }
     };
 
@@ -15480,8 +15824,11 @@
       }
 
       // Attenuate exterior sunlight, hemisphere sky bounce, and exterior surface campfires inside caves or deep dives
-      // When the Pitch Torch is held inside a cave, provide warm indirect wall-bounce ambient fill so chambers & formations read clearly
-      const torchCaveBounce = (window._calderaActiveTool === 'torch' ? 0.34 : (window._calderaActiveTool === 'flare' ? 0.42 : 0.0)) * dFac;
+      // Keep natural darkness when unlit; Torch or lit Cave Flare adds localized bounce fill & clearer cavern fog
+      const torchActive = window._calderaActiveTool === 'torch';
+      const flareActive = window._calderaActiveTool === 'flare' || !!(window.calderaCampaign && window.calderaCampaign.activeFlares && window.calderaCampaign.activeFlares.length > 0);
+      window._caveLightingMode = (dFac <= 0.05) ? 'Surface' : (flareActive ? 'Flare' : (torchActive ? 'Torch' : 'Dark'));
+      const torchCaveBounce = (torchActive ? 0.34 : (flareActive ? 0.42 : 0.0)) * dFac;
       if (typeof sunLight !== 'undefined' && sunLight) {
         sunLight.intensity = (window._surfaceSunInt ?? 1.45) * (1.0 - 0.996 * dFac) * uwAtten;
       }
@@ -15561,16 +15908,23 @@
       const lodBias = gov ? gov.lodBias : 1.0;
       const partScale = gov ? gov.particleBudgetScale : 1.0;
 
-      // Shadow discipline: automatically disable directional shadow map pass when inside subterranean caves
-      const shouldEnableShadows = (window.qualityTier !== 'low') && !window._playerInsideCave && ((window.caveDarknessFactor || 0) < 0.55);
+      // Shadow discipline: automatically disable directional shadow map pass inside caves or when Governor engages heavy-load guard
+      animate._framesSinceShadow = (animate._framesSinceShadow || 0) + 1;
+      const govAllowsShadows = !gov || (gov.shadowEnabledGov !== false);
+      const shouldEnableShadows = (window.qualityTier !== 'low') && govAllowsShadows && !window._playerInsideCave && ((window.caveDarknessFactor || 0) < 0.55);
       if (renderer.shadowMap.enabled !== shouldEnableShadows) {
         renderer.shadowMap.enabled = shouldEnableShadows;
-        if (shouldEnableShadows) renderer.shadowMap.needsUpdate = true;
+        if (shouldEnableShadows) {
+          renderer.shadowMap.needsUpdate = true;
+          animate._framesSinceShadow = 0;
+        }
       }
 
-      // Event-driven directional shadow map updates: only re-render shadow map when falling trees animate or on governor stride
-      if (renderer.shadowMap.enabled && activeFallingTrees.length > 0 && (animate._frameCount & 1) === 0) {
+      // Event-driven directional shadow map updates: throttle falling-tree shadow redraws by governor shadowStride
+      const treeShadowInterval = Math.max(2, Math.floor((gov ? gov.shadowStride : 14) / 4));
+      if (renderer.shadowMap.enabled && activeFallingTrees.length > 0 && animate._framesSinceShadow >= treeShadowInterval) {
         renderer.shadowMap.needsUpdate = true;
+        animate._framesSinceShadow = 0;
       }
       if (window.ezTreePrototypes) {
         const protoKeys = animate._ezProtoKeys || (animate._ezProtoKeys = Object.keys(window.ezTreePrototypes));
@@ -15755,9 +16109,11 @@
       }
       if (waterfallMistSprites && waterfallMistSprites.length) {
         const showMist = nearWaterfall && minWfDistSq < 11025.0; // within 105m
+        const activeMistCount = Math.max(1, Math.round(waterfallMistSprites.length * partScale));
         waterfallMistSprites.forEach((m, idx) => {
-          m.sprite.visible = showMist;
-          if (!showMist) return;
+          const vis = showMist && idx < activeMistCount;
+          m.sprite.visible = vis;
+          if (!vis) return;
           m.phase = (m.phase + dt * m.speed) % 1.0;
           const p = m.phase;
           const swell = 0.72 + p * 0.52;
@@ -15851,11 +16207,17 @@
               }
             }
 
-            // Thin subtle rising smoke wisps (max opacity <= 0.14, distance-culled beyond 75m)
+            // Thin subtle rising smoke wisps (governor-trimmed & distance-culled beyond 75m)
             if (nearFireParticles && cf.smokePuffs) {
               const windDrift = 0.32 * windMult;
+              const activePuffs = Math.max(1, Math.round(cf.smokePuffs.length * partScale));
               for (let s = 0; s < cf.smokePuffs.length; s++) {
                 const p = cf.smokePuffs[s];
+                if (s >= activePuffs) {
+                  p.sprite.visible = false;
+                  continue;
+                }
+                p.sprite.visible = true;
                 p.phase = (p.phase + dt * p.speed) % 1.0;
                 const t = p.phase;
                 const heightY = 0.22 + t * 2.85;
@@ -15990,7 +16352,10 @@
         }
       }
       if (window.forestSunbeams) {
-        const dayFactor = Math.max(0.0, Math.min(1.0, (window._surfaceSunInt ?? sunLight.intensity) / 1.1));
+        const sbDx = player.pos.x + 68.0;
+        const sbDz = player.pos.z - 44.0;
+        const nearForest = !window._playerInsideCave && (sbDx * sbDx + sbDz * sbDz) < 27225.0; // within 165m of Elderwood
+        const dayFactor = nearForest ? Math.max(0.0, Math.min(1.0, (window._surfaceSunInt ?? sunLight.intensity) / 1.1)) : 0.0;
         if (window.forestSunbeams.group && window.forestSunbeams.mat) {
           const vis = dayFactor > 0.15 && window.qualityTier !== 'low';
           window.forestSunbeams.group.visible = vis;
@@ -16008,11 +16373,13 @@
         }
       }
 
-      // Dynamic player-anchored high-res shadow camera tracking (snapped to 1.5m steps to avoid per-frame shadow-map churn)
+      // Dynamic player-anchored high-res shadow camera tracking (cadence & snap-step controlled by AdaptiveGovernor)
       if (sunLight && sunLight.target) {
         animate.lastSunX = animate.lastSunX ?? -9999;
         animate.lastSunZ = animate.lastSunZ ?? -9999;
-        if (Math.hypot(player.pos.x - animate.lastSunX, player.pos.z - animate.lastSunZ) > 1.5) {
+        const shadSnapStep = gov ? gov.shadowSnapStep : 1.5;
+        const shadStride = gov ? gov.shadowStride : 14;
+        if (Math.hypot(player.pos.x - animate.lastSunX, player.pos.z - animate.lastSunZ) > shadSnapStep && animate._framesSinceShadow >= shadStride) {
           animate.lastSunX = player.pos.x;
           animate.lastSunZ = player.pos.z;
           sunLight.position.set(player.pos.x + 55, player.pos.y + 85, player.pos.z - 50);
@@ -16020,6 +16387,7 @@
           sunLight.target.updateMatrixWorld();
           if (renderer.shadowMap.enabled && !window._playerInsideCave) {
             renderer.shadowMap.needsUpdate = true;
+            animate._framesSinceShadow = 0;
           }
         }
       }
@@ -16287,7 +16655,7 @@
         // Keep player inside the sculpted rock cave walls when underground (main spine s > 0.020 or inside a branch)
         if (caveNav.s > 0.020 || caveNav.branch) {
           const maxWalkLat = Math.max(0.42, caveNav.halfW - 0.45);
-          if (Math.abs(caveNav.lateral) > maxWalkLat) {
+          if (!caveNav.inPortalMouth && Math.abs(caveNav.lateral) > maxWalkLat) {
             const clampedLat = Math.sign(caveNav.lateral) * maxWalkLat;
             const axOff = caveNav.axialOff || 0.0;
             player.pos.x = caveNav.cx + caveNav.dirX * axOff + caveNav.perpX * clampedLat;
@@ -16853,45 +17221,77 @@
         }
       }
 
-      // Live Debug Telemetry Overlay Update (4Hz refresh when enabled, exposing renderer.info & Governor metrics)
+      // Live Debug Telemetry Overlay Update (4Hz refresh when enabled, exposing renderer.info, p95 spikes & Governor budgets)
       animate.dbgTimer = (animate.dbgTimer || 0) + dt;
       animate.dbgFrames = (animate.dbgFrames || 0) + 1;
       if (animate.dbgTimer >= 0.25) {
+        const gObj = window.AdaptiveGovernor;
+        if (gObj && gObj.updatePercentileStats) gObj.updatePercentileStats();
         const pill = document.getElementById('debug-telemetry-pill');
         if (pill && pill.classList.contains('visible')) {
           const fps = Math.min(120, Math.round(animate.dbgFrames / animate.dbgTimer));
-          const ms = (1000 / Math.max(1, fps)).toFixed(1);
+          const ms = gObj ? gObj.ewmaMs.toFixed(1) : (1000 / Math.max(1, fps)).toFixed(1);
+          const p95 = gObj ? gObj.p95Ms.toFixed(1) : ms;
           const fpsEl = document.getElementById('dbg-fps');
           const msEl = document.getElementById('dbg-ms');
+          const p95El = document.getElementById('dbg-p95');
           const drawsEl = document.getElementById('dbg-draws');
           const reflEl = document.getElementById('dbg-water-refl');
+          const shadEl = document.getElementById('dbg-shadows');
+          const budEl = document.getElementById('dbg-budgets');
           const govEl = document.getElementById('dbg-gov');
           const posEl = document.getElementById('dbg-pos');
           const depthEl = document.getElementById('dbg-depth');
-          if (fpsEl) fpsEl.innerText = fps;
+          if (fpsEl) {
+            fpsEl.innerText = fps;
+            fpsEl.className = fps >= 50 ? 'dbg-fps' : (fps >= 38 ? 'dbg-status-trim' : 'dbg-status-throttle');
+          }
           if (msEl) msEl.innerText = ms;
+          if (p95El) p95El.innerText = `p95 ${p95}`;
           if (drawsEl && renderer && renderer.info && renderer.info.render) {
             const calls = renderer.info.render.calls || 0;
             const trisK = ((renderer.info.render.triangles || 0) / 1000).toFixed(1);
             drawsEl.innerText = `${calls} / ${trisK}k`;
           }
           if (reflEl) {
+            const dpr = renderer ? renderer.getPixelRatio().toFixed(2) : '1.00';
             const ws = window._waterReflStats;
-            reflEl.innerText = ws ? (ws.skipped ? `Skipped (${ws.reason})` : `${ws.res}px (1/${ws.stride})`) : '288px';
+            const rTxt = ws ? (ws.skipped ? `Skip (${ws.reason})` : `${ws.res}px (1/${ws.stride})`) : '256px';
+            reflEl.innerText = `${dpr}x • ${rTxt}`;
+          }
+          if (shadEl) {
+            if (window._playerInsideCave || (window.caveDarknessFactor || 0) >= 0.55) {
+              shadEl.innerText = 'Paused (cave)';
+            } else if (window.qualityTier === 'low' || (gObj && gObj.shadowEnabledGov === false)) {
+              shadEl.innerText = window.qualityTier === 'low' ? 'Off (low)' : 'Paused (gov)';
+            } else {
+              const radM = gObj ? Math.round(Math.sqrt(gObj.shadowRadiusSq)) : 38;
+              const str = gObj ? gObj.shadowStride : 14;
+              shadEl.innerText = `${radM}m • 1/${str}f`;
+            }
+          }
+          if (budEl) {
+            const gPct = gObj ? Math.round(gObj.grassRatio * 100) : 100;
+            const pPct = gObj ? Math.round(gObj.particleBudgetScale * 100) : 100;
+            budEl.innerText = `Grass ${gPct}% • Part ${pPct}%`;
           }
           if (govEl) {
-            const gTier = window.AdaptiveGovernor ? window.AdaptiveGovernor.tierLabel : window.qualityTier;
+            const gTier = gObj ? gObj.tierLabel : window.qualityTier;
             const chunks = (window.ArchipelagoChunkManager && window.ArchipelagoChunkManager.chunks)
               ? window.ArchipelagoChunkManager.chunks.filter(c => c.hydrated).length
               : 0;
-            govEl.innerText = `${gTier} (x${(window.AdaptiveGovernor ? window.AdaptiveGovernor.lodBias : 1.0).toFixed(2)}) • ${chunks} isl`;
+            govEl.innerText = `${gTier} (x${(gObj ? gObj.lodBias : 1.0).toFixed(2)}) • ${chunks} isl`;
+            govEl.className = 'dbg-val ' + (gTier === 'Gov:Throttle' || gTier === 'Gov:Guard'
+              ? 'dbg-status-throttle'
+              : (gTier === 'Gov:Trim' ? 'dbg-status-trim' : 'dbg-status-ok'));
           }
           if (posEl) posEl.innerText = `${player.pos.x.toFixed(1)}, ${player.pos.y.toFixed(1)}, ${player.pos.z.toFixed(1)}`;
           if (depthEl) {
             if (isCameraUnderwater) {
               depthEl.innerText = `Submerged (-${(wInfo.surfaceY - camera.position.y).toFixed(1)}m)`;
             } else if (caveNav && caveNav.s > 0.03) {
-              depthEl.innerText = `Cave (${(caveNav.s * 100).toFixed(0)}% in)`;
+              const lightMode = window._caveLightingMode || 'Dark';
+              depthEl.innerText = `Cave ${(caveNav.s * 100).toFixed(0)}% • ${lightMode}`;
             } else {
               depthEl.innerText = `Surface (+${player.pos.y.toFixed(1)}m)`;
             }

@@ -99,7 +99,8 @@
       duration: 95,
       rainIntensity: 0,
       lightningFlash: 0
-    }
+    },
+    activeFlares: []
   };
   window.calderaCampaign = campaign;
   window._calderaActiveTool = campaign.activeTool;
@@ -1612,12 +1613,99 @@
     }
 
     // --- Multi-Plume Dark & Gray Volcanic Smoke Billowing Directly from the Molten Lava Surface ---
+    // Optimized via 3 instanced billboard batches (ash, additive flame bursts, rim steam) with distance-scaled
+    // instance budgets, alpha-discard overdraw reduction, and crater lava occlusion culling.
     const vfx = window.getCampfireVFXAssets ? window.getCampfireVFXAssets() : null;
     let updateVolcanoPlumeFn = null;
     if (vfx && vfx.sharedSmokeTex) {
       const plumeGroup = new THREE.Group();
       plumeGroup.position.set(vx, lavaY + 0.6, vz);
       worldLandmarksGroup.add(plumeGroup);
+
+      const baseQuadGeo = new THREE.PlaneBufferGeometry(1.0, 1.0);
+      function createBillboardBatch(maxCount, isAdditive, useFog, boundCenterY, boundRadius, worldOriginCenter) {
+        const instGeo = new THREE.InstancedBufferGeometry();
+        instGeo.index = baseQuadGeo.index;
+        instGeo.attributes.position = baseQuadGeo.attributes.position;
+        instGeo.attributes.uv = baseQuadGeo.attributes.uv;
+
+        const offsets = new Float32Array(maxCount * 3);
+        const scaleRot = new Float32Array(maxCount * 3);
+        const colorAlpha = new Float32Array(maxCount * 4);
+
+        const offsetAttr = new THREE.InstancedBufferAttribute(offsets, 3);
+        const scaleRotAttr = new THREE.InstancedBufferAttribute(scaleRot, 3);
+        const colorAlphaAttr = new THREE.InstancedBufferAttribute(colorAlpha, 4);
+        offsetAttr.setUsage(THREE.DynamicDrawUsage);
+        scaleRotAttr.setUsage(THREE.DynamicDrawUsage);
+        colorAlphaAttr.setUsage(THREE.DynamicDrawUsage);
+
+        instGeo.setAttribute('iOffset', offsetAttr);
+        instGeo.setAttribute('iScaleRot', scaleRotAttr);
+        instGeo.setAttribute('iColorAlpha', colorAlphaAttr);
+        instGeo.instanceCount = 0;
+        const cx = worldOriginCenter ? vx : 0.0;
+        const cz = worldOriginCenter ? vz : 0.0;
+        instGeo.boundingSphere = new THREE.Sphere(new THREE.Vector3(cx, boundCenterY, cz), boundRadius);
+
+        const uniforms = useFog
+          ? THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uMap: { value: vfx.sharedSmokeTex } }])
+          : { uMap: { value: vfx.sharedSmokeTex } };
+
+        const mat = new THREE.ShaderMaterial({
+          uniforms,
+          fog: useFog,
+          transparent: true,
+          depthWrite: false,
+          depthTest: true,
+          side: THREE.DoubleSide,
+          blending: isAdditive ? THREE.AdditiveBlending : THREE.NormalBlending,
+          vertexShader: `
+            #include <common>
+            ${useFog ? '#include <fog_pars_vertex>' : ''}
+            attribute vec3 iOffset;
+            attribute vec3 iScaleRot;
+            attribute vec4 iColorAlpha;
+            varying vec2 vUv;
+            varying vec4 vColorAlpha;
+            void main() {
+              vUv = uv;
+              vColorAlpha = iColorAlpha;
+              vec3 camRight = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
+              vec3 camUp    = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
+              float c = cos(iScaleRot.z);
+              float s = sin(iScaleRot.z);
+              vec2 rotated = vec2(position.x * c - position.y * s, position.x * s + position.y * c);
+              vec2 scaled = rotated * iScaleRot.xy;
+              vec3 worldCenter = (modelMatrix * vec4(iOffset, 1.0)).xyz;
+              vec3 worldVert = worldCenter + camRight * scaled.x + camUp * scaled.y;
+              vec4 mvPosition = viewMatrix * vec4(worldVert, 1.0);
+              gl_Position = projectionMatrix * mvPosition;
+              ${useFog ? '#include <fog_vertex>' : ''}
+            }
+          `,
+          fragmentShader: `
+            #include <common>
+            ${useFog ? '#include <fog_pars_fragment>' : ''}
+            uniform sampler2D uMap;
+            varying vec2 vUv;
+            varying vec4 vColorAlpha;
+            void main() {
+              vec4 texel = texture2D(uMap, vUv);
+              float alpha = texel.a * vColorAlpha.a;
+              if (alpha < 0.035) discard;
+              gl_FragColor = vec4(texel.rgb * vColorAlpha.rgb, alpha);
+              ${useFog ? '#include <fog_fragment>' : ''}
+            }
+          `
+        });
+
+        const mesh = new THREE.Mesh(instGeo, mat);
+        mesh.raycast = () => {};
+        mesh.frustumCulled = true;
+        mesh.renderOrder = isAdditive ? 3 : 2;
+        return { mesh, instGeo, offsets, scaleRot, colorAlpha, offsetAttr, scaleRotAttr, colorAlphaAttr, maxCount };
+      }
 
       // 5 distinct smoke-generating convection vents across the 26.5m-radius molten lava lake inside the volcano core
       const lavaPlumeVents = [
@@ -1628,31 +1716,21 @@
         { ox:  7.6,  oz: -11.2, spreadScale: 0.86, heightScale: 0.92 }  // SSE lava core plume
       ];
 
-      // Layer A: 112 Multi-Plume Dark Soot, Charcoal & Ash-Gray Smoke Puffs boiling off the lava surface
+      // Layer A: 1 instanced draw call for dark soot, charcoal & ash-gray smoke puffs (up to 44 puffs near rim, 12 far silhouette)
+      const ashCount = 44;
+      const ashBatch = createBillboardBatch(ashCount, false, true, 62.0, 140.0, false);
+      plumeGroup.add(ashBatch.mesh);
       const ashPuffs = [];
-      const ashCount = 112;
       for (let i = 0; i < ashCount; i++) {
-        const aMat = new THREE.SpriteMaterial({
-          map: vfx.sharedSmokeTex,
-          color: 0x2b292e,
-          transparent: true,
-          opacity: 0.0,
-          depthWrite: false
-        });
-        const sp = new THREE.Sprite(aMat);
-        sp.raycast = () => {};
-        plumeGroup.add(sp);
         const vent = lavaPlumeVents[i % lavaPlumeVents.length];
-        const isSurfaceFume = (i % 4 === 0); // 25% of puffs roll thickly across the lava surface & inner rim
+        const isSurfaceFume = (i % 4 === 0);
         ashPuffs.push({
-          sprite: sp,
-          mat: aMat,
           ventOx: vent.ox,
           ventOz: vent.oz,
           spreadScale: vent.spreadScale,
           heightScale: vent.heightScale,
           isSurfaceFume,
-          shadeTier: i % 4, // 0: deep soot black, 1: dark charcoal, 2: slate gray, 3: medium-light ash gray
+          shadeTier: i % 4,
           phase: (i / ashCount + (i % 7) * 0.13) % 1.0,
           speed: isSurfaceFume ? (0.075 + (i % 5) * 0.012) : (0.048 + (i % 6) * 0.009),
           angle: (i * 2.39996),
@@ -1662,23 +1740,13 @@
         });
       }
 
+      // Layer B: 1 instanced additive draw call for caldera throat magma flame bursts (8 puffs max)
+      const flameCount = 8;
+      const flameBatch = createBillboardBatch(flameCount, true, false, 4.0, 32.0, false);
+      plumeGroup.add(flameBatch.mesh);
       const flameBursts = [];
-      const flameCount = 14;
       for (let i = 0; i < flameCount; i++) {
-        const fMat = new THREE.SpriteMaterial({
-          map: vfx.sharedSmokeTex,
-          color: 0xff6a12,
-          transparent: true,
-          opacity: 0.0,
-          depthWrite: false,
-          blending: THREE.AdditiveBlending
-        });
-        const fsp = new THREE.Sprite(fMat);
-        fsp.raycast = () => {};
-        plumeGroup.add(fsp);
         flameBursts.push({
-          sprite: fsp,
-          mat: fMat,
           phase: Math.random(),
           speed: 0.5 + (i % 5) * 0.09,
           ang: (i / flameCount) * Math.PI * 2 + (i % 3) * 0.4,
@@ -1686,7 +1754,7 @@
         });
       }
 
-      // Layer B: Gray-White Rim Fumarole Smoke & Steam Vents (6 fissures around rim crevices x 5 wisps = 30 sprites)
+      // Layer C: 1 instanced draw call for rim fumarole steam vents (6 crevices x 3 wisps = 18 puffs max)
       const steamGroup = new THREE.Group();
       worldLandmarksGroup.add(steamGroup);
       const rimVentAngles = [0.42, 1.48, 2.35, 3.25, 4.18, 5.15];
@@ -1696,29 +1764,20 @@
         const svx = vx + Math.cos(va) * vRad;
         const svz = vz + Math.sin(va) * vRad;
         const svy = getTerrainHeight(svx, svz) + 0.25;
-        for (let k = 0; k < 5; k++) {
-          const stMat = new THREE.SpriteMaterial({
-            map: vfx.sharedSmokeTex,
-            color: (k % 2 === 0) ? 0x6a6e75 : 0x9aa0a8,
-            transparent: true,
-            opacity: 0.0,
-            depthWrite: false
-          });
-          const stSp = new THREE.Sprite(stMat);
-          stSp.raycast = () => {};
-          steamGroup.add(stSp);
+        for (let k = 0; k < 3; k++) {
           steamPuffs.push({
-            sprite: stSp,
-            mat: stMat,
             bx: svx, by: svy, bz: svz,
-            phase: (k / 5 + vIdx * 0.17) % 1.0,
+            isLight: (k % 2 !== 0),
+            phase: (k / 3 + vIdx * 0.17) % 1.0,
             speed: 0.18 + (k % 3) * 0.04,
-            ang: va + (k - 2.0) * 0.28
+            ang: va + (k - 1.0) * 0.34
           });
         }
       });
+      const steamBatch = createBillboardBatch(steamPuffs.length, false, true, lavaY + 12.0, 58.0, true);
+      steamGroup.add(steamBatch.mesh);
 
-      // Layer C: Rising Incandescent Magma Cinders inside cauldron throat (44 sparks)
+      // Layer D: Rising Incandescent Magma Cinders inside cauldron throat (44 sparks in 1 Points draw call)
       let cinderPoints = null;
       let cinderPos = null;
       let cinderData = null;
@@ -1764,29 +1823,37 @@
       const _colSlateGray    = new THREE.Color(0x50535a);
       const _colAshGray      = new THREE.Color(0x787c84);
       const _colSilverSmoke  = new THREE.Color(0x969aa2);
+      const _tmpColor        = new THREE.Color();
 
       updateVolcanoPlumeFn = function (dt, timeSec, camPos, windMult, partScale) {
         if (window._playerInsideCave) {
           plumeGroup.visible = false;
           steamGroup.visible = false;
+          lavaPool.visible = false;
+          calderaLight.intensity = 0.0;
           return;
         }
         const dx = camPos.x - vx, dz = camPos.z - vz;
         const distSq = dx * dx + dz * dz;
-        // Ash smoke column visible up to 880m across the archipelago
+
+        // Cull recessed cauldron magma shader & point light when viewed strictly from low terrain outside the cone rim
+        const craterOccluded = (camPos.y < ((mc.rimY || 168.0) - 22.0)) && (distSq > 7225.0);
+        lavaPool.visible = !craterOccluded;
+
+        // Ash smoke column visible up to 880m across the archipelago with distance-scaled density
         const showAsh = distSq < 774400.0;
         plumeGroup.visible = showAsh;
         if (showAsh) {
-          const farFactor = distSq > 102400.0 ? 0.75 : 1.0; // keep 75% of smoke sprites active even at long range
-          const activeAsh = Math.max(24, Math.round(ashCount * partScale * farFactor));
+          const isNear = distSq < 32400.0;  // < 180m
+          const isMid  = distSq < 193600.0; // < 440m
+          const baseBudget = isNear ? 44 : (isMid ? 22 : 12);
+          const minBudget = isNear ? 10 : (isMid ? 7 : 4);
+          const activeAsh = Math.min(ashCount, Math.max(minBudget, Math.round(baseBudget * partScale)));
+          const lodScaleBoost = isNear ? 1.0 : (isMid ? 1.14 : 1.28);
           const wDrift = windMult * 19.0;
-          for (let i = 0; i < ashPuffs.length; i++) {
+
+          for (let i = 0; i < activeAsh; i++) {
             const p = ashPuffs[i];
-            if (i >= activeAsh) {
-              p.sprite.visible = false;
-              continue;
-            }
-            p.sprite.visible = true;
             p.phase = (p.phase + dt * p.speed) % 1.0;
             const t = p.phase;
             const maxRise = p.isSurfaceFume ? 44.0 : (144.0 * p.heightScale);
@@ -1794,14 +1861,20 @@
             const baseSpread = p.isSurfaceFume ? (7.5 + t * 18.0) : ((4.8 + Math.pow(t, 1.12) * 22.0) * p.spreadScale);
             const px = p.ventOx + Math.cos(p.angle + t * 2.4 + timeSec * 0.20) * baseSpread * p.radialJitter + Math.pow(t, 1.15) * wDrift;
             const pz = p.ventOz + Math.sin(p.angle + t * 2.1 + timeSec * 0.17) * baseSpread * p.radialJitter - Math.pow(t, 1.15) * wDrift * 0.34;
-            p.sprite.position.set(px, riseY, pz);
-            const sz = p.isSurfaceFume
-              ? (11.5 + Math.pow(t, 0.75) * 19.0)
-              : (9.2 + Math.pow(t, 0.85) * 28.0);
-            p.sprite.scale.set(sz, sz * 0.88, 1.0);
-            p.mat.rotation = p.rotOff + t * p.rotSpeed * 4.5;
 
-            // Layered dark soot, charcoal, slate gray, and billowing ash-gray smoke hues
+            const sz = (p.isSurfaceFume
+              ? (9.0 + Math.pow(t, 0.75) * 11.5)
+              : (7.8 + Math.pow(t, 0.85) * 14.2)) * lodScaleBoost;
+
+            const i3 = i * 3;
+            const i4 = i * 4;
+            ashBatch.offsets[i3]     = px;
+            ashBatch.offsets[i3 + 1] = riseY;
+            ashBatch.offsets[i3 + 2] = pz;
+            ashBatch.scaleRot[i3]     = sz;
+            ashBatch.scaleRot[i3 + 1] = sz * 0.88;
+            ashBatch.scaleRot[i3 + 2] = p.rotOff + t * p.rotSpeed * 4.5;
+
             const baseCol = p.shadeTier === 0 ? _colSootBlack
                           : p.shadeTier === 1 ? _colDarkCharcoal
                           : p.shadeTier === 2 ? _colSlateGray
@@ -1811,39 +1884,59 @@
                           : p.shadeTier === 2 ? _colAshGray
                           : _colSilverSmoke;
             if (t < 0.14) {
-              p.mat.color.lerpColors(_colThroat, baseCol, t / 0.14);
+              _tmpColor.lerpColors(_colThroat, baseCol, t / 0.14);
             } else {
-              p.mat.color.lerpColors(baseCol, topCol, Math.min(1.0, (t - 0.14) / 0.72));
+              _tmpColor.lerpColors(baseCol, topCol, Math.min(1.0, (t - 0.14) / 0.72));
             }
             const env = Math.sin(Math.pow(t, 0.58) * Math.PI);
             const peakAlpha = p.isSurfaceFume ? 0.68 : (p.shadeTier <= 1 ? 0.64 : 0.56);
-            p.mat.opacity = env * (peakAlpha - t * 0.18);
+            ashBatch.colorAlpha[i4]     = _tmpColor.r;
+            ashBatch.colorAlpha[i4 + 1] = _tmpColor.g;
+            ashBatch.colorAlpha[i4 + 2] = _tmpColor.b;
+            ashBatch.colorAlpha[i4 + 3] = env * (peakAlpha - t * 0.18);
           }
+          ashBatch.instGeo.instanceCount = activeAsh;
+          ashBatch.offsetAttr.needsUpdate = true;
+          ashBatch.scaleRotAttr.needsUpdate = true;
+          ashBatch.colorAlphaAttr.needsUpdate = true;
 
           let burst = 0.0;
-          const showFlames = distSq < 48400.0;
-          for (let i = 0; i < flameBursts.length; i++) {
-            const f = flameBursts[i];
-            if (!showFlames) {
-              f.sprite.visible = false;
-              continue;
+          const showFlames = !craterOccluded && distSq < 21025.0; // within 145m & visible
+          flameBatch.mesh.visible = showFlames;
+          if (showFlames) {
+            const activeFlames = Math.min(flameCount, Math.max(4, Math.round(6 * partScale)));
+            for (let i = 0; i < activeFlames; i++) {
+              const f = flameBursts[i];
+              f.phase = (f.phase + dt * f.speed) % 1.0;
+              const t = f.phase;
+              const hot = t < 0.36 ? Math.sin((t / 0.36) * Math.PI) : 0.0;
+              const rise = Math.pow(Math.min(t / 0.36, 1.0), 0.6) * 7.2;
+              const sc = 0.8 + hot * 4.6;
+              const i3 = i * 3, i4 = i * 4;
+              flameBatch.offsets[i3]     = Math.cos(f.ang) * f.rad;
+              flameBatch.offsets[i3 + 1] = rise;
+              flameBatch.offsets[i3 + 2] = Math.sin(f.ang) * f.rad;
+              flameBatch.scaleRot[i3]     = sc * 0.5;
+              flameBatch.scaleRot[i3 + 1] = sc;
+              flameBatch.scaleRot[i3 + 2] = 0.0;
+              const isHotCore = t < 0.1;
+              flameBatch.colorAlpha[i4]     = 1.0;
+              flameBatch.colorAlpha[i4 + 1] = isHotCore ? 0.949 : 0.29;
+              flameBatch.colorAlpha[i4 + 2] = isHotCore ? 0.690 : 0.0;
+              flameBatch.colorAlpha[i4 + 3] = hot * 0.9;
+              if (hot > burst) burst = hot;
             }
-            f.sprite.visible = true;
-            f.phase = (f.phase + dt * f.speed) % 1.0;
-            const t = f.phase;
-            const hot = t < 0.36 ? Math.sin((t / 0.36) * Math.PI) : 0.0;
-            const rise = Math.pow(Math.min(t / 0.36, 1.0), 0.6) * 7.2;
-            f.sprite.position.set(Math.cos(f.ang) * f.rad, rise, Math.sin(f.ang) * f.rad);
-            const sc = 0.8 + hot * 4.6;
-            f.sprite.scale.set(sc * 0.5, sc, 1.0);
-            f.mat.opacity = hot * 0.9;
-            f.mat.color.setHex(t < 0.1 ? 0xfff2b0 : 0xff4a00);
-            if (hot > burst) burst = hot;
+            flameBatch.instGeo.instanceCount = activeFlames;
+            flameBatch.offsetAttr.needsUpdate = true;
+            flameBatch.scaleRotAttr.needsUpdate = true;
+            flameBatch.colorAlphaAttr.needsUpdate = true;
+          } else {
+            flameBatch.instGeo.instanceCount = 0;
           }
-          calderaLight.intensity = 3.8 + burst * 5.5;
+          calderaLight.intensity = craterOccluded ? 0.0 : (3.8 + burst * 5.5);
 
           if (cinderPoints && cinderPos && cinderData) {
-            const showCinders = distSq < 13225.0; // within 115m
+            const showCinders = !craterOccluded && distSq < 13225.0; // within 115m
             cinderPoints.visible = showCinders;
             if (showCinders) {
               const activeSparks = Math.max(10, Math.floor(cinderCount * partScale));
@@ -1864,30 +1957,40 @@
               cinderPoints.geometry.attributes.position.needsUpdate = true;
             }
           }
+        } else {
+          calderaLight.intensity = 0.0;
         }
 
-        const showSteam = distSq < 62500.0; // within 250m
+        const showSteam = distSq < 34225.0; // within 185m
         steamGroup.visible = showSteam;
         if (showSteam) {
-          const activeSteam = Math.max(8, Math.round(steamPuffs.length * partScale));
-          for (let s = 0; s < steamPuffs.length; s++) {
+          const activeSteam = Math.min(steamPuffs.length, Math.max(3, Math.round(steamPuffs.length * partScale)));
+          for (let s = 0; s < activeSteam; s++) {
             const st = steamPuffs[s];
-            if (s >= activeSteam) {
-              st.sprite.visible = false;
-              continue;
-            }
-            st.sprite.visible = true;
             st.phase = (st.phase + dt * st.speed) % 1.0;
             const t = st.phase;
             const sy = st.by + t * 18.5;
             const sx = st.bx + Math.cos(st.ang) * (t * 3.4) + t * windMult * 3.2;
             const sz = st.bz + Math.sin(st.ang) * (t * 3.4) - t * windMult * 1.1;
-            st.sprite.position.set(sx, sy, sz);
-            const sc = 2.4 + Math.pow(t, 0.8) * 6.2;
-            st.sprite.scale.set(sc, sc * 0.88, 1.0);
-            st.mat.rotation = st.ang + t * 2.2;
-            st.mat.opacity = Math.sin(t * Math.PI) * 0.42;
+            const sc = 2.4 + Math.pow(t, 0.8) * 6.0;
+            const s3 = s * 3, s4 = s * 4;
+            steamBatch.offsets[s3]     = sx;
+            steamBatch.offsets[s3 + 1] = sy;
+            steamBatch.offsets[s3 + 2] = sz;
+            steamBatch.scaleRot[s3]     = sc;
+            steamBatch.scaleRot[s3 + 1] = sc * 0.88;
+            steamBatch.scaleRot[s3 + 2] = st.ang + t * 2.2;
+            steamBatch.colorAlpha[s4]     = st.isLight ? 0.604 : 0.416;
+            steamBatch.colorAlpha[s4 + 1] = st.isLight ? 0.627 : 0.431;
+            steamBatch.colorAlpha[s4 + 2] = st.isLight ? 0.659 : 0.459;
+            steamBatch.colorAlpha[s4 + 3] = Math.sin(t * Math.PI) * 0.42;
           }
+          steamBatch.instGeo.instanceCount = activeSteam;
+          steamBatch.offsetAttr.needsUpdate = true;
+          steamBatch.scaleRotAttr.needsUpdate = true;
+          steamBatch.colorAlphaAttr.needsUpdate = true;
+        } else {
+          steamBatch.instGeo.instanceCount = 0;
         }
       };
     }
@@ -8854,7 +8957,7 @@
     };
     managedPointLights.push(flareLightEntry);
 
-    activeSkyFlares.push({
+    const flareObj = {
       mesh: flareMesh,
       lightEntry: flareLightEntry,
       isCaveFlare: inCave,
@@ -8863,7 +8966,11 @@
         : new THREE.Vector3(fwd.x * 18, Math.max(22, fwd.y * 28), fwd.z * 18),
       age: 0,
       maxLife: inCave ? 28.0 : 14.0
-    });
+    };
+    activeSkyFlares.push(flareObj);
+    if (inCave && Array.isArray(campaign.activeFlares)) {
+      campaign.activeFlares.push(flareObj);
+    }
 
     if (inCave) {
       showToast('🧨 Signal Flare tossed into cavern — burning crimson for 28s!');
@@ -11580,6 +11687,10 @@
           fl.lightEntry.light.intensity = 0;
           const mIdx = managedPointLights.indexOf(fl.lightEntry);
           if (mIdx !== -1) managedPointLights.splice(mIdx, 1);
+        }
+        if (Array.isArray(campaign.activeFlares)) {
+          const fIdx = campaign.activeFlares.indexOf(fl);
+          if (fIdx !== -1) campaign.activeFlares.splice(fIdx, 1);
         }
         scene.remove(fl.mesh);
         activeSkyFlares.splice(i, 1);
