@@ -3135,6 +3135,265 @@
     }
     window.evalCaveFloorRelief = evalCaveFloorRelief;
 
+    // Shared 3D geological vertex sculptor used by BOTH cave/branch meshes and runtime rock-aware player collision
+    // Guarantees bit-for-bit identical wrap at u=0 / u=1 and smooth C1 floor-to-wall corner blending across sinA in [-0.14..+0.14]
+    function evalGeologicalCaveVertex(cave, cx, cz, floorY, halfW, roofH, pt, distM, sClamped, u, isMouthZone, threshFlatOverride) {
+      const uWrap = (u <= 0.0001 || u >= 0.9999) ? 0.0 : u;
+      const ang = uWrap * Math.PI * 2.0;
+      const cosA = Math.cos(ang);
+      const sinA = Math.sin(ang);
+      const mouthRamp = isMouthZone ? smoothstep(0.0, 0.045, sClamped) : 1.0;
+      const faultDip = (pt.faultDip || 0.0) * mouthRamp;
+      const keyholeW = (pt.keyholeWeight || 0.0) * mouthRamp;
+      const rotundaW = (pt.rotundaWeight || 0.0) * mouthRamp;
+      const perpX = pt.perpX !== undefined ? pt.perpX : cave.perpX;
+      const perpZ = pt.perpZ !== undefined ? pt.perpZ : cave.perpZ;
+      const dirX = pt.dirX !== undefined ? pt.dirX : cave.dirX;
+      const dirZ = pt.dirZ !== undefined ? pt.dirZ : cave.dirZ;
+
+      const evalFloor = () => {
+        const floorWallNoise = fbm2(cx * 0.26 + cosA * 2.2, cz * 0.26 + Math.min(0.0, sinA) * 2.2, 3) - 0.44;
+        const rW = halfW * (1.0 + 0.14 * floorWallNoise * mouthRamp);
+        const signedLat = cosA * rW;
+        const vx = cx + perpX * signedLat;
+        const vz = cz + perpZ * signedLat;
+        const threshFlat = threshFlatOverride !== undefined
+          ? threshFlatOverride
+          : (isMouthZone ? getJunctionThresholdFactor(cave, sClamped, vx, vz) : 0.0);
+        const floorRelief = evalCaveFloorRelief(cave.isLavaTube, distM, signedLat, halfW, vx, vz, sClamped, threshFlat);
+        const cornerT = Math.max(0.0, 1.0 - Math.abs(Math.min(0.0, sinA)) / 0.32);
+        const cornerLift = Math.pow(cornerT, 2.0) * (cave.isLavaTube ? 0.28 : 0.52) * mouthRamp * (1.0 - threshFlat);
+        const vy = floorY + floorRelief + cornerLift;
+        const crevice = Math.min(1.0, cornerT * 0.65 + Math.max(0.0, -floorWallNoise) * 0.45);
+        const wear = cave.isLavaTube && Math.abs(cosA) > 0.54 && Math.abs(cosA) < 0.72 ? 0.78 : 0.24;
+        const shelf = Math.max(0.25, 1.0 - cornerT * 0.75);
+        return { vx, vy, vz, crevice, wear, shelf, signedLat };
+      };
+
+      const evalWall = () => {
+        const posSin = Math.max(0.0, sinA);
+        const approxY = floorY + Math.pow(posSin, 0.72) * roofH;
+        const strataPhase = approxY * (cave.isLavaTube ? 2.1 : 3.25) + fbm2(cx * 0.14, cz * 0.14, 2) * 3.8;
+        const strataSin = Math.sin(strataPhase);
+        const strataStep = (smoothstep(-0.32, 0.32, strataSin) - 0.5) * (1.0 - Math.pow(posSin, 2.6));
+        const fracture = ridged2(cx * 0.22 + cosA * 2.35, cz * 0.22 + approxY * 0.26, 3) - 0.46;
+        const macroWave = fbm2(cx * 0.11 - posSin * 1.9, cz * 0.11 + cosA * 1.9, 2) - 0.45;
+        const keyholePinch = (!cave.isLavaTube)
+          ? keyholeW * Math.sin(posSin * Math.PI) * (1.0 - Math.pow(posSin, 1.8)) * 0.28
+          : 0.0;
+        const lavaBlister = cave.isLavaTube
+          ? (Math.sin(posSin * Math.PI * 2.0) * 0.14 + strataStep * 0.22)
+          : (strataStep * 0.34 + macroWave * 0.24);
+
+        const wallAtten = smoothstep(0.0, 0.18, posSin);
+        const radialMod = 1.0 - keyholePinch + (lavaBlister + fracture * 0.28) * mouthRamp * (0.35 + 0.65 * wallAtten);
+        const rW = halfW * Math.max(0.58, radialMod);
+        const dipOffset = faultDip * Math.pow(posSin, 0.85) * halfW * 0.55;
+        const signedLat = cosA * rW + dipOffset;
+        const axialShift = (fbm2(cx * 0.30 + posSin * 2.6, cz * 0.30 - cosA * 2.4, 2) - 0.45) * 0.68 * mouthRamp * wallAtten;
+
+        let archProfile;
+        if (cave.isLavaTube) {
+          archProfile = Math.pow(posSin, 0.78) * (0.94 + fracture * 0.16 * mouthRamp);
+        } else {
+          const corbelPower = 0.70 - rotundaW * 0.16 + keyholeW * 0.14;
+          const baseArch = Math.pow(posSin, corbelPower);
+          const corbelSlab = (posSin > 0.62)
+            ? (Math.floor(baseArch * 4.5) + smoothstep(0.35, 0.85, (baseArch * 4.5) % 1.0)) / 4.5
+            : baseArch;
+          const cupolaDome = (posSin > 0.78 && rotundaW > 0.25)
+            ? Math.max(0.0, fbm2(cx * 0.18, cz * 0.18, 2) - 0.35) * 0.28 * rotundaW
+            : 0.0;
+          archProfile = (baseArch * 0.45 + corbelSlab * 0.55 + cupolaDome) * (1.0 + (fracture * 0.20 + strataStep * 0.12) * mouthRamp);
+        }
+
+        const vx = cx + perpX * signedLat + dirX * axialShift;
+        const vz = cz + perpZ * signedLat + dirZ * axialShift;
+        const vy = floorY + roofH * Math.max(0.02, archProfile);
+        const crevice = Math.max(0.0, Math.min(1.0, (0.38 - fracture) * 0.95 + Math.max(0.0, -strataSin) * 0.42));
+        const wear = Math.max(0.0, Math.min(1.0, Math.max(0.0, strataSin - 0.25) * 0.95 + Math.max(0.0, fracture - 0.15) * 0.75));
+        const shelf = Math.max(0.0, Math.min(1.0, Math.abs(strataSin) > 0.75 ? 0.65 : 0.15));
+        return { vx, vy, vz, crevice, wear, shelf, signedLat };
+      };
+
+      if (sinA <= -0.14) return evalFloor();
+      if (sinA >= 0.14) return evalWall();
+      // Seamless angular blend across floor-to-wall joint (eliminates both right-wall wrap slit and left-wall step)
+      const wb = smoothstep(-0.14, 0.14, sinA);
+      const fl = evalFloor();
+      const wl = evalWall();
+      return {
+        vx: fl.vx + (wl.vx - fl.vx) * wb,
+        vy: fl.vy + (wl.vy - fl.vy) * wb,
+        vz: fl.vz + (wl.vz - fl.vz) * wb,
+        crevice: fl.crevice + (wl.crevice - fl.crevice) * wb,
+        wear: fl.wear + (wl.wear - fl.wear) * wb,
+        shelf: fl.shelf + (wl.shelf - fl.shelf) * wb,
+        signedLat: fl.signedLat + (wl.signedLat - fl.signedLat) * wb
+      };
+    }
+    window.evalGeologicalCaveVertex = evalGeologicalCaveVertex;
+
+    // Evaluates exact sculpted inner safe lateral bounds [minLat, maxLat] and ceiling height at player's lateral offset
+    // Samples current and immediate neighbor spline rings to account for curved bends, fault dip, and tapering domes
+    function evalCaveSafeEnvelope(caveNav, eyeY, camPad = 0.44) {
+      if (!caveNav || !caveNav.cave) return { minLat: -1.0, maxLat: 1.0, ceilAtLat: 999.0 };
+      const cave = caveNav.cave;
+      const isBranch = !!caveNav.branch;
+      const cx = caveNav.cx, cz = caveNav.cz;
+      const baseFloorY = caveNav.baseFloorY !== undefined ? caveNav.baseFloorY : caveNav.floorY;
+      const halfW = caveNav.halfW || 2.5;
+      const roofH = Math.max(1.8, (caveNav.ceilY || (baseFloorY + 3.5)) - baseFloorY);
+      const distM = caveNav.portalDist || 0.0;
+      const sClamped = isBranch ? (caveNav.branchT || 0.5) : Math.max(0.0, Math.min(1.0, caveNav.s || 0.0));
+      const basePerpX = caveNav.perpX, basePerpZ = caveNav.perpZ;
+      const baseDirX = caveNav.dirX, baseDirZ = caveNav.dirZ;
+      const pt = {
+        dirX: baseDirX, dirZ: baseDirZ,
+        perpX: basePerpX, perpZ: basePerpZ,
+        faultDip: caveNav.faultDip || 0.0,
+        keyholeWeight: caveNav.keyholeWeight || 0.0,
+        rotundaWeight: caveNav.rotundaWeight || 0.0
+      };
+      const isMouthZone = !isBranch;
+      const headReqY = eyeY + 0.30;
+      const waistMinY = baseFloorY + 0.25;
+
+      // Sample 28 cosine-clustered points across the upper sculpted arch (dense near eye-level lower walls u~0 and u~0.5)
+      const samples = 28;
+      let rightWallLat = halfW;
+      let leftWallLat = -halfW;
+      let maxCrownY = baseFloorY + roofH;
+      let crownLat = 0.0;
+      const archPts = [];
+
+      for (let k = 0; k <= samples; k++) {
+        const u = 0.5 * (0.5 - 0.5 * Math.cos((k / samples) * Math.PI));
+        const v = evalGeologicalCaveVertex(cave, cx, cz, baseFloorY, halfW, roofH, pt, distM, sClamped, u, isMouthZone, 0.0);
+        const lat = (v.vx - cx) * basePerpX + (v.vz - cz) * basePerpZ;
+        archPts.push({ lat, y: v.vy });
+        if (v.vy >= maxCrownY || k === samples / 2) {
+          if (v.vy >= maxCrownY) {
+            maxCrownY = v.vy;
+            crownLat = lat;
+          }
+        }
+      }
+
+      // Walk outward from crown toward right wall (decreasing k) and left wall (increasing k)
+      // First point where rock drops below headReqY OR any inward rock bulge between waist and headReqY+0.40m sets wall bound
+      let foundRight = false;
+      for (let k = Math.floor(samples * 0.5); k >= 0; k--) {
+        const ap = archPts[k];
+        if (ap.y <= headReqY + 0.40 && ap.y >= waistMinY && ap.lat < rightWallLat) {
+          rightWallLat = ap.lat;
+        }
+        if (ap.y <= headReqY && !foundRight) {
+          if (k < samples && archPts[k + 1].y > headReqY) {
+            const frac = (archPts[k + 1].y - headReqY) / Math.max(0.001, archPts[k + 1].y - ap.y);
+            const crossLat = archPts[k + 1].lat + (ap.lat - archPts[k + 1].lat) * frac;
+            if (crossLat < rightWallLat) rightWallLat = crossLat;
+          } else if (ap.lat < rightWallLat) {
+            rightWallLat = ap.lat;
+          }
+          foundRight = true;
+        }
+      }
+
+      let foundLeft = false;
+      for (let k = Math.ceil(samples * 0.5); k <= samples; k++) {
+        const ap = archPts[k];
+        if (ap.y <= headReqY + 0.40 && ap.y >= waistMinY && ap.lat > leftWallLat) {
+          leftWallLat = ap.lat;
+        }
+        if (ap.y <= headReqY && !foundLeft) {
+          if (k > 0 && archPts[k - 1].y > headReqY) {
+            const frac = (archPts[k - 1].y - headReqY) / Math.max(0.001, archPts[k - 1].y - ap.y);
+            const crossLat = archPts[k - 1].lat + (ap.lat - archPts[k - 1].lat) * frac;
+            if (crossLat > leftWallLat) leftWallLat = crossLat;
+          } else if (ap.lat > leftWallLat) {
+            leftWallLat = ap.lat;
+          }
+          foundLeft = true;
+        }
+      }
+
+      // Project neighboring spline rings (±2.4m and ±5.2m) into current frame with dense lower-wall sampling
+      // Accurately catches tight inside-of-bend walls on wide chambers (e.g. whisper_sink_grotto, aqueduct) & axial rock juts
+      const neighborRings = [];
+      if (!isBranch) {
+        const ds1 = Math.min(0.022, 2.4 / Math.max(40.0, cave.length));
+        const ds2 = Math.min(0.046, 5.2 / Math.max(40.0, cave.length));
+        for (const dOff of [-ds2, -ds1, ds1, ds2]) {
+          const ns = Math.max(0.0, Math.min(0.99, sClamped + dOff));
+          const nPt = cave.getPoint(ns);
+          neighborRings.push({
+            cx: nPt.x, cz: nPt.z, floorY: nPt.floorY, halfW: nPt.halfW, roofH: nPt.ceilH,
+            pt: nPt, distM: ns * cave.length, s: ns
+          });
+        }
+      } else if (caveNav.branch && caveNav.branch.samples && caveNav.branch.samples.length > 4) {
+        const bSamps = caveNav.branch.samples;
+        const maxIdx = bSamps.length - 1;
+        const curIdx = Math.max(0, Math.min(maxIdx, Math.round(sClamped * maxIdx)));
+        const mPerStep = Math.max(0.55, (caveNav.branch.length || 60.0) / maxIdx);
+        const step1 = Math.max(1, Math.min(5, Math.round(2.4 / mPerStep)));
+        const step2 = Math.max(step1 + 1, Math.min(10, Math.round(5.4 / mPerStep)));
+        for (const off of [-step2, -step1, step1, step2]) {
+          const ni = Math.max(0, Math.min(maxIdx, curIdx + off));
+          const nSp = bSamps[ni];
+          neighborRings.push({
+            cx: nSp.x, cz: nSp.z, floorY: nSp.floorY, halfW: nSp.halfW, roofH: nSp.ceilH,
+            pt: nSp, distM: nSp.distFromPortal || distM, s: nSp.t
+          });
+        }
+      }
+
+      const lowerWallUs = [0.006, 0.015, 0.026, 0.040, 0.058, 0.082, 0.115, 0.385, 0.418, 0.442, 0.460, 0.474, 0.485, 0.494];
+      const maxAxCheck = halfW > 5.0 ? 5.2 : 3.6;
+      for (let nr = 0; nr < neighborRings.length; nr++) {
+        const ring = neighborRings[nr];
+        for (let ui = 0; ui < lowerWallUs.length; ui++) {
+          const u = lowerWallUs[ui];
+          const v = evalGeologicalCaveVertex(cave, ring.cx, ring.cz, ring.floorY, ring.halfW, ring.roofH, ring.pt, ring.distM, ring.s, u, isMouthZone, 0.0);
+          if (v.vy < waistMinY || v.vy > headReqY + 0.55) continue;
+          const ax = Math.abs((v.vx - cx) * baseDirX + (v.vz - cz) * baseDirZ);
+          if (ax > maxAxCheck) continue;
+          const lat = (v.vx - cx) * basePerpX + (v.vz - cz) * basePerpZ;
+          if (u < 0.25 && lat > 0.25 && lat < rightWallLat) rightWallLat = lat;
+          if (u > 0.25 && lat < -0.25 && lat > leftWallLat) leftWallLat = lat;
+        }
+      }
+
+      const effPad = camPad + (halfW > 5.0 ? Math.min(0.45, (halfW - 5.0) * 0.09) : 0.0);
+      let maxLat = rightWallLat - effPad;
+      let minLat = leftWallLat + effPad;
+      if (minLat > maxLat) {
+        const mid = 0.5 * (leftWallLat + rightWallLat);
+        minLat = mid - 0.12;
+        maxLat = mid + 0.12;
+      }
+
+      // Compute exact arched ceiling Y at player's current lateral offset (conservative minimum across ±0.45m camera radius)
+      const pLat = Math.max(minLat, Math.min(maxLat, caveNav.lateral || 0.0));
+      let ceilAtLat = maxCrownY;
+      for (let k = 0; k < samples; k++) {
+        const a = archPts[k], b = archPts[k + 1];
+        if ((a.lat >= pLat && b.lat <= pLat) || (a.lat <= pLat && b.lat >= pLat)) {
+          const denom = b.lat - a.lat;
+          const f = Math.abs(denom) > 0.001 ? (pLat - a.lat) / denom : 0.5;
+          const yHere = a.y + (b.y - a.y) * Math.max(0.0, Math.min(1.0, f));
+          if (yHere < ceilAtLat) ceilAtLat = yHere;
+        }
+        if (Math.abs(a.lat - pLat) < 0.45 && a.y > baseFloorY + 1.2 && a.y < ceilAtLat) {
+          ceilAtLat = a.y;
+        }
+      }
+
+      return { minLat, maxLat, leftWallLat, rightWallLat, ceilAtLat, crownLat };
+    }
+    window.evalCaveSafeEnvelope = evalCaveSafeEnvelope;
+
     // Multi-Level Branching & Interconnected Subterranean Cave Networks (~1,020m total passages across 3 karst & volcanic caverns)
     const CAVE_SYSTEMS = [
       {
@@ -3170,7 +3429,7 @@
           const chamber2 = Math.exp(-Math.pow((sC - 0.82) / 0.13, 2.0)); // Great Cenote Vault
           const canyonSlot1 = Math.exp(-Math.pow((sC - 0.18) / 0.055, 2.0)); // Vadose Keyhole Canyon
           const canyonSlot2 = Math.exp(-Math.pow((sC - 0.61) / 0.050, 2.0)); // Fault Fissure Narrows
-          const endCap = sC > 0.94 ? Math.cos(((sC - 0.94) / 0.06) * Math.PI * 0.49) : 1.0;
+          const endCap = sC > 0.94 ? Math.max(0.24, Math.cos(((sC - 0.94) / 0.06) * Math.PI * 0.45)) : 1.0;
           const floorY = passageFloor(this, x, z, sC);
           const halfW = Math.max(1.45, (4.3 - canyonSlot1 * 1.55 - canyonSlot2 * 1.35 + chamber1 * 5.8 + chamber2 * 7.4) * endCap);
           const ceilH = Math.max(2.25, (4.9 + canyonSlot1 * 1.6 + canyonSlot2 * 1.2 + chamber1 * 5.6 + chamber2 * 6.8) * endCap);
@@ -3192,8 +3451,11 @@
           {
             id: 'whisper_squeeze_loop',
             parentS: 0.24, reconnectS: 0.56, side: -1, lateralPeak: 28.0,
-            dropY: -0.7, isSqueeze: true, squeezeT: 0.48, minHalfW: 1.15, minCeilH: 2.12,
-            baseHalfW: 2.8, baseCeilH: 3.6, hasPool: false, hasMineral: true
+            dropY: -0.7, isSqueeze: true, squeezeT: 0.44, minHalfW: 1.25, minCeilH: 2.22,
+            baseHalfW: 2.8, baseCeilH: 3.6, hasPool: false, hasMineral: true,
+            chambers: [
+              { t: 0.72, span: 0.11, halfW: 4.5, ceilH: 4.7, kind: 'fissure_alcove', name: 'Weathered Fissure Alcove' }
+            ]
           },
           {
             id: 'whisper_sink_grotto',
@@ -3205,7 +3467,7 @@
           {
             id: 'whisper_north_fault',
             parentS: 0.72, reconnectS: null, side: -1, lateralPeak: 24.0, forwardExt: 34.0,
-            dropY: 1.5, isSqueeze: true, squeezeT: 0.35, minHalfW: 1.20, minCeilH: 2.22,
+            dropY: 1.5, isSqueeze: true, squeezeT: 0.35, minHalfW: 1.24, minCeilH: 2.24,
             baseHalfW: 2.9, chamberHalfW: 5.4, baseCeilH: 3.9, chamberCeilH: 5.2,
             hasPool: false, hasMineral: true, hasRockfall: true
           },
@@ -3214,8 +3476,20 @@
             id: 'intercave_karst_aqueduct',
             parentS: 0.64, reconnectS: null, targetCaveIdx: 1, targetS: 0.86, side: 1, lateralPeak: 20.0,
             dropY: -10.5, hasDropLedge: false,
-            baseHalfW: 3.2, chamberHalfW: 5.2, baseCeilH: 4.2, chamberCeilH: 5.6,
-            hasPool: true, hasMineral: true, hasRockfall: true
+            baseHalfW: 3.2, chamberHalfW: 7.4, baseCeilH: 4.2, chamberCeilH: 7.0,
+            hasPool: true, hasMineral: true, hasRockfall: true,
+            chambers: [
+              { t: 0.22, span: 0.065, halfW: 6.8, ceilH: 6.4, kind: 'rimstone_hall', name: 'Travertine Rimstone Hall' },
+              { t: 0.48, span: 0.075, halfW: 7.6, ceilH: 7.2, kind: 'siphon_pool', name: 'Subterranean Siphon Pool' },
+              { t: 0.66, span: 0.065, halfW: 6.6, ceilH: 6.2, kind: 'breakdown_gallery', name: 'Collapsed Breakdown Gallery' },
+              { t: 0.80, span: 0.055, halfW: 6.2, ceilH: 5.8, kind: 'mineral_grotto', name: 'Mineral Seam Grotto' }
+            ],
+            narrows: [
+              { t: 0.12, span: 0.035, halfW: 2.4, ceilH: 3.3 },
+              { t: 0.35, span: 0.038, halfW: 2.3, ceilH: 3.2 },
+              { t: 0.57, span: 0.036, halfW: 2.25, ceilH: 3.15 },
+              { t: 0.73, span: 0.032, halfW: 2.4, ceilH: 3.3 }
+            ]
           }
         ]
       },
@@ -3250,7 +3524,7 @@
           const chamber1 = Math.exp(-Math.pow((sC - 0.48) / 0.12, 2.0)); // Skylight & Subterranean Cascade Hall
           const chamber2 = Math.exp(-Math.pow((sC - 0.85) / 0.13, 2.0)); // Deep Rimstone Vault
           const canyonSlot = Math.exp(-Math.pow((sC - 0.22) / 0.055, 2.0));
-          const endCap = sC > 0.94 ? Math.cos(((sC - 0.94) / 0.06) * Math.PI * 0.49) : 1.0;
+          const endCap = sC > 0.94 ? Math.max(0.24, Math.cos(((sC - 0.94) / 0.06) * Math.PI * 0.45)) : 1.0;
           const floorY = passageFloor(this, x, z, sC);
           const halfW = Math.max(1.45, (4.2 - canyonSlot * 1.35 + chamber1 * 5.4 + chamber2 * 6.2) * endCap);
           const ceilH = Math.max(2.25, (4.7 + canyonSlot * 1.5 + chamber1 * 5.2 + chamber2 * 5.6) * endCap);
@@ -3272,12 +3546,18 @@
             id: 'cataract_substream_loop',
             parentS: 0.28, reconnectS: 0.70, side: 1, lateralPeak: 25.0,
             dropY: -2.4, hasDropLedge: true, dropStartT: 0.25,
-            baseHalfW: 3.2, baseCeilH: 4.1, hasPool: true, hasMineral: true
+            baseHalfW: 3.2, baseCeilH: 4.1, hasPool: true, hasMineral: true,
+            chambers: [
+              { t: 0.52, span: 0.11, halfW: 5.6, ceilH: 5.5, kind: 'rimstone_hall', name: 'Cascade Scallop Chamber' }
+            ],
+            narrows: [
+              { t: 0.36, span: 0.06, halfW: 2.35, ceilH: 3.2 }
+            ]
           },
           {
             id: 'cataract_squeeze_fissure',
             parentS: 0.50, reconnectS: null, side: -1, lateralPeak: 26.0, forwardExt: 32.0,
-            dropY: -0.9, isSqueeze: true, squeezeT: 0.42, minHalfW: 1.12, minCeilH: 2.10,
+            dropY: -0.9, isSqueeze: true, squeezeT: 0.42, minHalfW: 1.22, minCeilH: 2.20,
             baseHalfW: 2.7, chamberHalfW: 5.0, baseCeilH: 3.5, chamberCeilH: 5.0,
             hasPool: false, hasMineral: true, hasRockfall: true
           },
@@ -3286,7 +3566,7 @@
             parentS: 0.80, reconnectS: null, side: 1, lateralPeak: 21.0, forwardExt: 38.0,
             dropY: -2.8, hasDropLedge: true, dropStartT: 0.30,
             baseHalfW: 3.3, chamberHalfW: 6.6, baseCeilH: 4.3, chamberCeilH: 6.4,
-            hasPool: true, hasRockfall: true
+            hasPool: true, hasMineral: true, hasRockfall: true
           }
         ]
       },
@@ -3315,7 +3595,7 @@
           const z = this.pz + this.dirZ * distM + this.perpZ * w;
           const chamber1 = Math.exp(-Math.pow((sC - 0.56) / 0.14, 2.0)); // Master Magma Blister Chamber
           const throat = Math.exp(-Math.pow((sC - 0.32) / 0.06, 2.0)) * 1.1;
-          const endCap = sC > 0.93 ? Math.cos(((sC - 0.93) / 0.07) * Math.PI * 0.49) : 1.0;
+          const endCap = sC > 0.93 ? Math.max(0.24, Math.cos(((sC - 0.93) / 0.07) * Math.PI * 0.45)) : 1.0;
           const floorY = passageFloor(this, x, z, sC);
           const halfW = Math.max(1.5, (4.3 - throat + chamber1 * 5.6) * endCap);
           const ceilH = Math.max(2.3, (4.6 - throat * 0.6 + chamber1 * 5.0) * endCap);
@@ -3334,13 +3614,20 @@
           {
             id: 'lava_upper_tube',
             parentS: 0.24, reconnectS: 0.66, side: -1, lateralPeak: 32.0,
-            dropY: 2.2, baseHalfW: 3.0, baseCeilH: 3.9, hasPool: false, hasMineral: true
+            dropY: 2.2, baseHalfW: 3.0, baseCeilH: 3.9, hasPool: false, hasMineral: true,
+            chambers: [
+              { t: 0.50, span: 0.12, halfW: 5.8, ceilH: 5.8, kind: 'thermal_vent', name: 'Thermal Vent Blister Chamber' }
+            ],
+            narrows: [
+              { t: 0.28, span: 0.06, halfW: 2.35, ceilH: 3.25 },
+              { t: 0.72, span: 0.06, halfW: 2.40, ceilH: 3.25 }
+            ]
           },
           {
             id: 'lava_magma_sump',
             parentS: 0.52, reconnectS: null, side: 1, lateralPeak: 24.0, forwardExt: 42.0,
             dropY: -3.2, hasDropLedge: true, dropStartT: 0.35,
-            isSqueeze: true, squeezeT: 0.28, minHalfW: 1.18, minCeilH: 2.20,
+            isSqueeze: true, squeezeT: 0.28, minHalfW: 1.24, minCeilH: 2.24,
             baseHalfW: 3.1, chamberHalfW: 6.4, baseCeilH: 4.0, chamberCeilH: 6.0,
             hasPool: true, hasMineral: true, hasRockfall: true
           }
@@ -3404,8 +3691,8 @@
             const outStartX = pt0.x + pt0.perpX * side * 20.0 + pt0.dirX * 3.0;
             const outStartZ = pt0.z + pt0.perpZ * side * 20.0 + pt0.dirZ * 3.0;
             const tgtSideSign = ((outStartZ - pt1.z) * pt1.perpZ + (outStartX - pt1.x) * pt1.perpX) >= 0 ? 1.0 : -1.0;
-            const outEndX = pt1.x + pt1.perpX * (tgtSideSign * 22.0);
-            const outEndZ = pt1.z + pt1.perpZ * (tgtSideSign * 22.0);
+            const outEndX = pt1.x + pt1.perpX * (tgtSideSign * 26.5);
+            const outEndZ = pt1.z + pt1.perpZ * (tgtSideSign * 26.5);
             const midSouthX = Math.max(outStartX + 4.0, 192.0);
             const midSouthZ = Math.max(outStartZ + 38.0, 126.0);
             const arcZ = Math.max(midSouthZ + 28.0, outEndZ + 24.0);
@@ -3443,7 +3730,7 @@
           }
 
           const segCount = ctrlPts.length - 1;
-          const numSamples = isInterCave ? 96 : 72;
+          const numSamples = isInterCave ? 216 : 84;
           const samples = [];
           let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, maxTopY = -Infinity;
           let accumLen = 0.0;
@@ -3474,22 +3761,50 @@
 
             let halfW = sp.baseHalfW || 3.0;
             let ceilH = sp.baseCeilH || 3.8;
+            let rotundaWeight = 0.0;
+            let keyholeWeight = 0.0;
             if (!hasEndJunction && sp.chamberHalfW && t > 0.62) {
               const cGlow = Math.exp(-Math.pow((t - 0.80) / 0.14, 2.0));
               halfW += (sp.chamberHalfW - halfW) * cGlow;
               ceilH += ((sp.chamberCeilH || 5.6) - ceilH) * cGlow;
-            } else if (isInterCave && sp.chamberHalfW) {
+              rotundaWeight = Math.max(rotundaWeight, cGlow);
+            } else if (isInterCave && sp.chamberHalfW && !(sp.chambers && sp.chambers.length)) {
               const midBell = Math.exp(-Math.pow((t - 0.50) / 0.18, 2.0));
               halfW += (sp.chamberHalfW - halfW) * midBell;
               ceilH += ((sp.chamberCeilH || 5.6) - ceilH) * midBell;
+              rotundaWeight = Math.max(rotundaWeight, midBell);
+            }
+            // Declarative intermediate landmark chambers (widened domes) & canyon narrows
+            if (sp.chambers && sp.chambers.length) {
+              for (let chI = 0; chI < sp.chambers.length; chI++) {
+                const ch = sp.chambers[chI];
+                const wCh = Math.exp(-Math.pow((t - ch.t) / (ch.span || 0.08), 2.0));
+                if (wCh > 0.01) {
+                  halfW += (ch.halfW - halfW) * wCh;
+                  ceilH += (ch.ceilH - ceilH) * wCh;
+                  rotundaWeight = Math.max(rotundaWeight, wCh);
+                }
+              }
+            }
+            if (sp.narrows && sp.narrows.length) {
+              for (let nI = 0; nI < sp.narrows.length; nI++) {
+                const nr = sp.narrows[nI];
+                const wNr = Math.exp(-Math.pow((t - nr.t) / (nr.span || 0.045), 2.0));
+                if (wNr > 0.01) {
+                  halfW = halfW * (1.0 - wNr) + nr.halfW * wNr;
+                  ceilH = ceilH * (1.0 - wNr) + nr.ceilH * wNr;
+                  keyholeWeight = Math.max(keyholeWeight, wNr * 0.75);
+                }
+              }
             }
             if (sp.isSqueeze) {
               const sq = Math.exp(-Math.pow((t - (sp.squeezeT || 0.45)) / 0.14, 2.0));
-              halfW = halfW * (1.0 - sq) + (sp.minHalfW || 1.12) * sq;
-              ceilH = ceilH * (1.0 - sq) + (sp.minCeilH || 2.10) * sq;
+              halfW = halfW * (1.0 - sq) + (sp.minHalfW || 1.22) * sq;
+              ceilH = ceilH * (1.0 - sq) + (sp.minCeilH || 2.20) * sq;
+              keyholeWeight = Math.max(keyholeWeight, sq * 0.85);
             }
             if (!hasEndJunction && t > 0.92) {
-              const domeCap = Math.cos(((t - 0.92) / 0.08) * Math.PI * 0.49);
+              const domeCap = Math.max(0.22, Math.cos(((t - 0.92) / 0.08) * Math.PI * 0.45));
               halfW *= domeCap;
               ceilH *= domeCap;
             }
@@ -3513,8 +3828,8 @@
             if (i > 0) {
               accumLen += Math.hypot(x - samples[i - 1].x, z - samples[i - 1].z);
             }
-            const faultDip = Math.sin(t * Math.PI * 3.0 + b * 1.7) * 0.28;
-            samples.push({ x, z, floorY, halfW, ceilH, ceilY: floorY + ceilH, faultDip, t, distFromPortal: portalOffsetM + accumLen });
+            const faultDip = Math.sin(t * Math.PI * 3.0 + b * 1.7) * 0.26;
+            samples.push({ x, z, floorY, halfW, ceilH, ceilY: floorY + ceilH, faultDip, keyholeWeight, rotundaWeight, t, distFromPortal: portalOffsetM + accumLen, branchDistM: accumLen });
             const pad = halfW + 16.0;
             if (x - pad < minX) minX = x - pad;
             if (x + pad > maxX) maxX = x + pad;
@@ -3548,6 +3863,8 @@
             hasPool: !!sp.hasPool,
             hasMineral: !!sp.hasMineral,
             hasRockfall: !!sp.hasRockfall,
+            chambers: sp.chambers || [],
+            narrows: sp.narrows || [],
             length: accumLen,
             samples,
             bbox: { minX, maxX, minZ, maxZ, maxTopY }
@@ -3644,17 +3961,19 @@
               const vertErr = (playerY !== null)
                 ? (playerY < effFloorY - 0.8 ? (effFloorY - 0.8 - playerY) * 2.8 : (playerY > bestPt.floorY + bestPt.ceilH ? (playerY - (bestPt.floorY + bestPt.ceilH)) * 2.8 : Math.abs(playerY - effFloorY) * 0.45))
                 : 0.0;
-              // Check if player is walking out through an open junction mouth on this cave
-              let inPortalMouth = false;
+              // Check which side(s), if any, open into a branch junction mouth right here (NEVER unlock the solid opposite wall!)
+              let openPortalLeft = false;
+              let openPortalRight = false;
               const jps = cv.junctionPortals || [];
               for (let jpi = 0; jpi < jps.length; jpi++) {
                 const jp = jps[jpi];
                 const dToSeam = Math.hypot(x - jp.wx, z - jp.wz);
-                if (dToSeam < jp.mouthHalfW + 1.8 && Math.abs(exactS - jp.s) < 0.08) {
-                  inPortalMouth = true;
-                  break;
+                if (dToSeam < jp.mouthHalfW + 1.8 && Math.abs(exactS - jp.s) < 0.065) {
+                  if (jp.side < 0) openPortalLeft = true;
+                  else openPortalRight = true;
                 }
               }
+              const inPortalMouth = (signedLat < 0 && openPortalLeft) || (signedLat > 0 && openPortalRight);
               const score = clearance - vertErr;
               if (score > bestScore) {
                 bestScore = score;
@@ -3663,13 +3982,19 @@
                   s: bestPt.s, portalDist: distM,
                   dist: bestDist, lateral: signedLat, axialOff,
                   floorY: effFloorY, baseFloorY: bestPt.floorY,
-                  ceilY: bestPt.floorY + bestPt.ceilH, halfW: bestPt.halfW,
+                  ceilY: bestPt.floorY + bestPt.ceilH, ceilH: bestPt.ceilH, halfW: bestPt.halfW,
+                  faultDip: bestPt.faultDip || 0.0,
+                  keyholeWeight: bestPt.keyholeWeight || 0.0,
+                  rotundaWeight: bestPt.rotundaWeight || 0.0,
                   cx: bestPt.x, cz: bestPt.z, centerX: bestPt.x, centerZ: bestPt.z,
                   dirX: cv.dirX, dirZ: cv.dirZ, perpX: cv.perpX, perpZ: cv.perpZ,
                   isSqueeze: bestPt.halfW < 1.55 || bestPt.ceilH < 2.55,
                   nearDropLedge: false,
+                  openPortalLeft, openPortalRight,
                   inPortalMouth,
-                  isInside: approxS > 0.004 && (Math.abs(signedLat) < bestPt.halfW || inPortalMouth)
+                  isDeadEnd: true,
+                  maxS: cv.isLavaTube ? 0.925 : 0.935,
+                  isInside: approxS > 0.002 && (Math.abs(signedLat) < bestPt.halfW || inPortalMouth)
                 };
               }
             }
@@ -3708,6 +4033,9 @@
             const cx = a.x + (bPt.x - a.x) * bBestFrac;
             const cz = a.z + (bPt.z - a.z) * bBestFrac;
             const tBranch = a.t + (bPt.t - a.t) * bBestFrac;
+            const faultDip = (a.faultDip || 0.0) + ((bPt.faultDip || 0.0) - (a.faultDip || 0.0)) * bBestFrac;
+            const keyholeWeight = (a.keyholeWeight || 0.0) + ((bPt.keyholeWeight || 0.0) - (a.keyholeWeight || 0.0)) * bBestFrac;
+            const rotundaWeight = (a.rotundaWeight || 0.0) + ((bPt.rotundaWeight || 0.0) - (a.rotundaWeight || 0.0)) * bBestFrac;
             const segVx = bPt.x - a.x, segVz = bPt.z - a.z;
             const segLen = Math.hypot(segVx, segVz) || 1.0;
             const dirX = segVx / segLen, dirZ = segVz / segLen;
@@ -3727,22 +4055,29 @@
               const vertErr = (playerY !== null)
                 ? (playerY < effFloorY - 0.8 ? (effFloorY - 0.8 - playerY) * 2.8 : (playerY > baseFloorY + ceilH ? (playerY - (baseFloorY + ceilH)) * 2.8 : Math.abs(playerY - effFloorY) * 0.45))
                 : 0.0;
-              // Prefer branch when inside the outer throat zone so player hands off smoothly without hitting main-wall clamp
-              const throatAssist = (bDist < halfW * 0.85 && (tBranch > 0.04 && (!br.isLoop || tBranch < 0.96))) ? 1.8 : 0.0;
+              // Prefer branch once player moves outside parent tunnel core; keep main cave active inside parent lumen so single-side wall clamping holds
+              const inParentLumenEnd = (tBranch <= 0.035) || (br.isLoop && tBranch >= 0.965);
+              const throatAssist = (!inParentLumenEnd && bDist < halfW * 0.85) ? 1.8 : (inParentLumenEnd ? -3.0 : 0.0);
               const score = clearance - vertErr + throatAssist;
               if (score > bestScore) {
                 bestScore = score;
+                const atJunctionOpen = tBranch < 0.035 || (br.isLoop && tBranch > 0.965);
                 bestMatch = {
                   cave: cv, branch: br,
                   s: Math.max(0.05, tBranch), branchT: tBranch, portalDist: pDist,
                   dist: bDist, lateral: signedLat, axialOff,
                   floorY: effFloorY, baseFloorY,
-                  ceilY: baseFloorY + ceilH, halfW,
+                  ceilY: baseFloorY + ceilH, ceilH, halfW,
+                  faultDip, keyholeWeight, rotundaWeight,
                   cx, cz, centerX: cx, centerZ: cz,
                   dirX, dirZ, perpX, perpZ,
                   isSqueeze: halfW < 1.55 || ceilH < 2.55,
                   nearDropLedge: !!(br.hasDropLedge && tBranch > 0.24 && tBranch < 0.56),
-                  inPortalMouth: tBranch < 0.12 || (br.isLoop && tBranch > 0.88),
+                  openPortalLeft: atJunctionOpen,
+                  openPortalRight: atJunctionOpen,
+                  inPortalMouth: atJunctionOpen,
+                  isDeadEnd: !br.isLoop,
+                  maxBranchT: 0.910,
                   isInside: bDist < halfW
                 };
               }
@@ -4635,16 +4970,16 @@
             }
             if (carveTri) break;
             // Check centroid AND all 3 vertices so coarse warped-grid triangles at Mount Caldera (-214.1, 68.4) never leave a diagonal wall across a portal
-            const archHalf = m.halfW + 0.55;
+            const archHalf = m.halfW + 0.70;
             const testPts = [[cx, cz], [x0, z0], [x1, z1], [x2, z2]];
             for (let tp = 0; tp < 4; tp++) {
               const tx = testPts[tp][0], tz = testPts[tp][1];
               const dP = (tx - cv.px) * cv.dirX + (tz - cv.pz) * cv.dirZ;
-              if (dP < -0.95 || dP > 4.65) continue;
+              if (dP < -1.05 || dP > 5.25) continue;
               const pP = Math.abs((tx - cv.px) * cv.perpX + (tz - cv.pz) * cv.perpZ);
               if (pP >= archHalf) continue;
-              const archTop = cv.baseY + (m.ceilH + 0.55) * Math.sqrt(Math.max(0.0, 1.0 - Math.pow(pP / archHalf, 2.0)));
-              if (maxY > cv.baseY + 0.22 && minY < archTop + 0.45 && cy < archTop + 0.35) {
+              const archTop = cv.baseY + (m.ceilH + 0.65) * Math.sqrt(Math.max(0.0, 1.0 - Math.pow(pP / archHalf, 2.0)));
+              if (maxY > cv.baseY + 0.18 && minY < archTop + 0.40 && (cy < archTop + 0.85 || (dP > 0.2 && minY < cv.baseY + m.ceilH * 0.85))) {
                 carveTri = true;
                 break;
               }
@@ -11855,7 +12190,7 @@
         fog: true
       });
       window.caveDynamicMats.push({ mat: speleoMat, mouthEnv: 0.22 });
-      const speleoMax = 520;
+      const speleoMax = 960;
       const speleoMesh = new THREE.InstancedMesh(speleoGeo, speleoMat, speleoMax);
       speleoMesh.castShadow = false;
       speleoMesh.receiveShadow = true;
@@ -11876,7 +12211,7 @@
         colP.setXYZ(i, vx * rMult, vy, vz * rMult);
       }
       columnGeo.computeVertexNormals();
-      const columnMax = 80;
+      const columnMax = 140;
       const caveColumnMesh = new THREE.InstancedMesh(columnGeo, speleoMat, columnMax);
       caveColumnMesh.castShadow = true;
       caveColumnMesh.receiveShadow = true;
@@ -11909,7 +12244,7 @@
         side: THREE.DoubleSide
       });
       window.caveDynamicMats.push({ mat: draperyMat, mouthEnv: 0.25 });
-      const draperyMax = 110;
+      const draperyMax = 240;
       const caveDraperyMesh = new THREE.InstancedMesh(draperyGeo, draperyMat, draperyMax);
       caveDraperyMesh.receiveShadow = true;
       caveDraperyMesh.layers.set(1);
@@ -11927,7 +12262,7 @@
         rmPos.setXYZ(i, vx * (1.0 + cren), flatTop, vz * (1.0 + cren));
       }
       rimstoneGeo.computeVertexNormals();
-      const rimstoneMax = 64;
+      const rimstoneMax = 140;
       const caveRimstoneMesh = new THREE.InstancedMesh(rimstoneGeo, draperyMat, rimstoneMax);
       caveRimstoneMesh.receiveShadow = true;
       caveRimstoneMesh.layers.set(1);
@@ -11954,7 +12289,7 @@
         fog: true
       });
       window.caveDynamicMats.push({ mat: lavacicleMat, mouthEnv: 0.22 });
-      const lavacicleMax = 150;
+      const lavacicleMax = 280;
       const lavacicleMesh = new THREE.InstancedMesh(lavacicleGeo, lavacicleMat, lavacicleMax);
       lavacicleMesh.layers.set(1);
       let lavacicleIdx = 0;
@@ -12014,7 +12349,7 @@
         envMapIntensity: 0.0,
         fog: true
       });
-      const crystalMax = 120;
+      const crystalMax = 220;
       const crystalMesh = new THREE.InstancedMesh(crystalClusterGeo, crystalMat, crystalMax);
       crystalMesh.layers.set(1);
       let crystalIdx = 0;
@@ -12035,26 +12370,26 @@
       const rubbleGeo = buildLoveRockGeometry(0.72, 2, 5);
       rubbleGeo.scale(1.38, 0.56, 1.16);
       rubbleGeo.computeVertexNormals();
-      const rubbleMax = 180;
+      const rubbleMax = 360;
       const rubbleMesh = new THREE.InstancedMesh(rubbleGeo, rubbleMat, rubbleMax);
       rubbleMesh.receiveShadow = true;
       rubbleMesh.layers.set(1);
       let rubbleIdx = 0;
 
-      // 9B. Subterranean Breakdown Boulders & Split-Fault Outcrops (95 instances)
+      // 9B. Subterranean Breakdown Boulders & Split-Fault Outcrops (190 instances)
       const caveBoulderGeo = buildLoveRockGeometry(1.16, 2, 11);
-      const caveBoulderMax = 95;
+      const caveBoulderMax = 190;
       const caveBoulderMesh = new THREE.InstancedMesh(caveBoulderGeo, rubbleMat, caveBoulderMax);
       caveBoulderMesh.receiveShadow = true;
       caveBoulderMesh.castShadow = true;
       caveBoulderMesh.layers.set(1);
       let caveBoulderIdx = 0;
 
-      // 9C. Protruding 3D Structural Wall Buttress Ribs & Cantilevered Fault Ledges (185 instances breaking up tunnel sightlines)
+      // 9C. Protruding 3D Structural Wall Buttress Ribs & Cantilevered Fault Ledges (320 instances breaking up tunnel sightlines)
       const caveCragGeo = buildLoveRockGeometry(1.08, 2, 25);
       caveCragGeo.scale(0.92, 1.85, 1.28);
       caveCragGeo.computeVertexNormals();
-      const caveCragMax = 185;
+      const caveCragMax = 320;
       const caveCragMesh = new THREE.InstancedMesh(caveCragGeo, rubbleMat, caveCragMax);
       caveCragMesh.receiveShadow = true;
       caveCragMesh.castShadow = true;
@@ -12065,95 +12400,11 @@
       const cTint = new THREE.Color();
       const rockTint = new THREE.Color();
 
-      // Shared helper to sculpt a 3D geological vertex on either a main cavern or branch passage
-      function evalGeologicalCaveVertex(cave, cx, cz, floorY, halfW, roofH, pt, distM, sClamped, u, isMouthZone, threshFlatOverride) {
-        const ang = u * Math.PI * 2.0;
-        const cosA = Math.cos(ang);
-        const sinA = Math.sin(ang);
-        const mouthRamp = isMouthZone ? smoothstep(0.0, 0.045, sClamped) : 1.0;
-        const faultDip = (pt.faultDip || 0.0) * mouthRamp;
-        const keyholeW = (pt.keyholeWeight || 0.0) * mouthRamp;
-        const rotundaW = (pt.rotundaWeight || 0.0) * mouthRamp;
-
-        if (sinA < 0.0) {
-          // GEOMORPHIC FLOOR & TALUS RAMP (Zero flat-floor clamping!)
-          const floorWallNoise = fbm2(cx * 0.26 + cosA * 2.2, cz * 0.26 + sinA * 2.2, 3) - 0.44;
-          const rW = halfW * (1.0 + 0.14 * floorWallNoise * mouthRamp);
-          const signedLat = cosA * rW;
-          const vx = cx + pt.perpX * signedLat;
-          const vz = cz + pt.perpZ * signedLat;
-          const threshFlat = threshFlatOverride !== undefined
-            ? threshFlatOverride
-            : (isMouthZone ? getJunctionThresholdFactor(cave, sClamped, vx, vz) : 0.0);
-          const floorRelief = evalCaveFloorRelief(cave.isLavaTube, distM, signedLat, halfW, vx, vz, sClamped, threshFlat);
-          // Concave corner blend right where floor meets lower wall (sinA in [-0.32..0.0])
-          const cornerT = Math.max(0.0, 1.0 - Math.abs(sinA) / 0.32);
-          const cornerLift = Math.pow(cornerT, 2.0) * (cave.isLavaTube ? 0.34 : 0.68) * mouthRamp * (1.0 - threshFlat);
-          const vy = floorY + floorRelief + cornerLift;
-          const crevice = Math.min(1.0, cornerT * 0.65 + Math.max(0.0, -floorWallNoise) * 0.45);
-          const wear = cave.isLavaTube && Math.abs(cosA) > 0.54 && Math.abs(cosA) < 0.72 ? 0.78 : 0.24;
-          const shelf = Math.max(0.25, 1.0 - cornerT * 0.75);
-          return { vx, vy, vz, crevice, wear, shelf };
-        } else {
-          // ASYMMETRIC FAULT-TILTED, STRATA-STEPPED WALLS & CORBELLED BREAKDOWN CEILING
-          const approxY = floorY + Math.pow(sinA, 0.72) * roofH;
-          // 1. Horizontal sedimentary bedding shelves & overhanging rock ledges
-          const strataPhase = approxY * (cave.isLavaTube ? 2.1 : 3.25) + fbm2(cx * 0.14, cz * 0.14, 2) * 3.8;
-          const strataSin = Math.sin(strataPhase);
-          const strataStep = (smoothstep(-0.32, 0.32, strataSin) - 0.5) * (1.0 - Math.pow(sinA, 2.6));
-          // 2. 3D Ridged tectonic fracture pockets & dissolution scallops
-          const fracture = ridged2(cx * 0.22 + cosA * 2.35, cz * 0.22 + approxY * 0.26, 3) - 0.46;
-          const macroWave = fbm2(cx * 0.11 - sinA * 1.9, cz * 0.11 + cosA * 1.9, 2) - 0.45;
-          // 3. Vadose keyhole mid-wall waist pinch vs. wide phreatic/rotunda ledges
-          const keyholePinch = (!cave.isLavaTube)
-            ? keyholeW * Math.sin(sinA * Math.PI) * (1.0 - Math.pow(sinA, 1.8)) * 0.28
-            : 0.0;
-          // 4. Lateral lava tube solidification curb / upper wall blister
-          const lavaBlister = cave.isLavaTube
-            ? (Math.sin(sinA * Math.PI * 2.0) * 0.14 + strataStep * 0.22)
-            : (strataStep * 0.34 + macroWave * 0.24);
-
-          const radialMod = 1.0 - keyholePinch + (lavaBlister + fracture * 0.28) * mouthRamp;
-          const rW = halfW * Math.max(0.58, radialMod);
-          // Asymmetric geological fault dip skews upper vault laterally
-          const dipOffset = faultDip * Math.pow(sinA, 0.85) * halfW * 0.55;
-          const signedLat = cosA * rW + dipOffset;
-
-          // Longitudinal axial rock facet shift so rings are never coplanar circles
-          const axialShift = (fbm2(cx * 0.30 + sinA * 2.6, cz * 0.30 - cosA * 2.4, 2) - 0.45) * 0.68 * mouthRamp;
-
-          // Ceiling arch profile: corbelled flat-slabbed breakdown roof & dissolution cupolas in karst vs. thermal arch in lava tube
-          let archProfile;
-          if (cave.isLavaTube) {
-            archProfile = Math.pow(sinA, 0.78) * (0.94 + fracture * 0.16 * mouthRamp);
-          } else {
-            const corbelPower = 0.70 - rotundaW * 0.16 + keyholeW * 0.14;
-            const baseArch = Math.pow(sinA, corbelPower);
-            // Stepped horizontal corbel slabs near ceiling crown (sinA > 0.65)
-            const corbelSlab = (sinA > 0.62)
-              ? (Math.floor(baseArch * 4.5) + smoothstep(0.35, 0.85, (baseArch * 4.5) % 1.0)) / 4.5
-              : baseArch;
-            const cupolaDome = (sinA > 0.78 && rotundaW > 0.25)
-              ? Math.max(0.0, fbm2(cx * 0.18, cz * 0.18, 2) - 0.35) * 0.28 * rotundaW
-              : 0.0;
-            archProfile = (baseArch * 0.45 + corbelSlab * 0.55 + cupolaDome) * (1.0 + (fracture * 0.20 + strataStep * 0.12) * mouthRamp);
-          }
-
-          const vx = cx + pt.perpX * signedLat + pt.dirX * axialShift;
-          const vz = cz + pt.perpZ * signedLat + pt.dirZ * axialShift;
-          const vy = floorY + roofH * Math.max(0.02, archProfile);
-
-          // Bake cavity AO, chiseled ledge wear, and shelf flatness into aRockCrevice
-          const crevice = Math.max(0.0, Math.min(1.0, (0.38 - fracture) * 0.95 + Math.max(0.0, -strataSin) * 0.42));
-          const wear = Math.max(0.0, Math.min(1.0, Math.max(0.0, strataSin - 0.25) * 0.95 + Math.max(0.0, fracture - 0.15) * 0.75));
-          const shelf = Math.max(0.0, Math.min(1.0, Math.abs(strataSin) > 0.75 ? 0.65 : 0.15));
-          return { vx, vy, vz, crevice, wear, shelf };
-        }
-      }
+      // Uses hoisted watertight evalGeologicalCaveVertex() defined alongside evalCaveFloorRelief()
 
       // Geometric helpers so cave walls, props, and colliders never protrude into any main/branch/inter-cave passage
       function isPointInMainCaveLumen(wx, wy, wz, radScale) {
-        const rs = radScale || 0.88;
+        const rs = radScale || 0.74;
         for (let ci = 0; ci < CAVE_SYSTEMS.length; ci++) {
           const cv = CAVE_SYSTEMS[ci];
           const dx0 = wx - cv.px;
@@ -12163,9 +12414,12 @@
           const pt = cv.getPoint(approxS);
           const lat = (wx - pt.x) * cv.perpX + (wz - pt.z) * cv.perpZ;
           const ax = (wx - pt.x) * cv.dirX + (wz - pt.z) * cv.dirZ;
-          if (Math.abs(lat) < pt.halfW * rs && Math.abs(ax) < 4.0 &&
-              wy >= pt.floorY - 0.85 && wy <= pt.floorY + pt.ceilH + 0.6) {
-            return true;
+          const normLat = Math.abs(lat) / Math.max(1.0, pt.halfW * rs);
+          if (normLat < 1.0 && Math.abs(ax) < 3.6) {
+            const archCeil = pt.floorY + pt.ceilH * Math.pow(Math.max(0.0, 1.0 - normLat * normLat), 0.42);
+            if (wy >= pt.floorY - 0.45 && wy <= archCeil + 0.15) {
+              return true;
+            }
           }
         }
         return false;
@@ -12175,7 +12429,7 @@
         const padR = propR || 0.0;
         for (let ci = 0; ci < CAVE_SYSTEMS.length; ci++) {
           const cv = CAVE_SYSTEMS[ci];
-          // 1. Main tunnel central walkable lane
+          // 1. Main tunnel central walkable lane (keeps generous >=3.6m center lane clear while letting wall-hugging details land)
           const dx0 = wx - cv.px;
           const dz0 = wz - cv.pz;
           const approxS = (dx0 * cv.dirX + dz0 * cv.dirZ) / cv.length;
@@ -12183,8 +12437,8 @@
             const pt = cv.getPoint(Math.max(0.0, Math.min(1.0, approxS)));
             const lat = Math.abs((wx - pt.x) * cv.perpX + (wz - pt.z) * cv.perpZ);
             const ax = Math.abs((wx - pt.x) * cv.dirX + (wz - pt.z) * cv.dirZ);
-            const laneHW = Math.max(2.15, pt.halfW * 0.56);
-            if (lat < laneHW + padR && ax < 4.5 && wy >= pt.floorY - 1.4 && wy <= pt.floorY + 2.8) {
+            const laneHW = Math.max(1.80, pt.halfW * 0.48);
+            if (lat < laneHW + padR && ax < 4.2 && wy >= pt.floorY - 1.4 && wy <= pt.floorY + 2.75) {
               return true;
             }
           }
@@ -12192,20 +12446,21 @@
           const jps = cv.junctionPortals || [];
           for (let ji = 0; ji < jps.length; ji++) {
             const jp = jps[ji];
-            if (Math.hypot(wx - jp.wx, wz - jp.wz) < jp.mouthHalfW + padR + 0.75 &&
-                wy >= jp.floorY - 1.5 && wy <= jp.ceilY + 1.0) {
+            if (Math.hypot(wx - jp.wx, wz - jp.wz) < jp.mouthHalfW + padR + 0.60 &&
+                wy >= jp.floorY - 1.4 && wy <= jp.ceilY + 0.8) {
               return true;
             }
             const ss = jp.seamSamples || [];
             const lim = Math.min(ss.length - 1, 14);
             for (let si = 0; si < lim; si++) {
               const a = ss[si], b = ss[si + 1];
+              if (Math.hypot(a.x - jp.wx, a.z - jp.wz) > 8.5 && Math.hypot(b.x - jp.wx, b.z - jp.wz) > 8.5) continue;
               const vx = b.x - a.x, vz = b.z - a.z;
               const l2 = vx * vx + vz * vz || 1.0;
               const f = Math.max(0.0, Math.min(1.0, ((wx - a.x) * vx + (wz - a.z) * vz) / l2));
               const cx = a.x + vx * f, cz = a.z + vz * f;
               const d = Math.hypot(wx - cx, wz - cz);
-              if (d < jp.mouthHalfW + padR + 0.45 && wy >= Math.min(a.floorY, b.floorY) - 1.5 && wy <= Math.max(a.floorY + a.ceilH, b.floorY + b.ceilH) + 0.8) {
+              if (d < jp.mouthHalfW + padR + 0.30 && wy >= Math.min(a.floorY, b.floorY) - 1.4 && wy <= Math.max(a.floorY + a.ceilH, b.floorY + b.ceilH) + 0.7) {
                 return true;
               }
             }
@@ -12226,8 +12481,8 @@
               const hw = a.halfW + (b.halfW - a.halfW) * f;
               const fy = a.floorY + (b.floorY - a.floorY) * f;
               const ch = a.ceilH + (b.ceilH - a.ceilH) * f;
-              const laneW = Math.max(1.65, hw * 0.68);
-              if (Math.hypot(wx - cx, wz - cz) < laneW + padR && wy >= fy - 1.3 && wy <= fy + Math.min(ch, 2.65)) {
+              const laneW = Math.min(hw * 0.62, Math.max(1.22, hw * 0.50));
+              if (Math.hypot(wx - cx, wz - cz) < laneW + padR && wy >= fy - 1.3 && wy <= fy + Math.min(ch, 2.60)) {
                 return true;
               }
             }
@@ -12253,15 +12508,15 @@
           const sRaw = -0.015 + tStep * 1.015;
           const sClamped = Math.max(0.0, sRaw);
           const pt = cave.getPoint(sClamped);
-          const cx = sRaw < 0.0 ? (cave.px + cave.dirX * (sRaw * cave.length)) : pt.x;
-          const cz = sRaw < 0.0 ? (cave.pz + cave.dirZ * (sRaw * cave.length)) : pt.z;
+          const cx = sRaw < 0.0 ? (pt.x + cave.dirX * (sRaw * cave.length)) : pt.x;
+          const cz = sRaw < 0.0 ? (pt.z + cave.dirZ * (sRaw * cave.length)) : pt.z;
           const floorY = sRaw < 0.0 ? cave.baseY : pt.floorY;
           const distM = Math.max(0.0, sRaw * cave.length);
 
           const entranceFlare = sRaw < 0.0 ? (1.0 + Math.abs(sRaw / 0.015) * 0.16) : 1.0;
-          const endCap = sClamped > 0.94 ? Math.cos(((sClamped - 0.94) / 0.06) * Math.PI * 0.49) : 1.0;
-          const halfW = pt.halfW * endCap * entranceFlare;
-          const roofH = (pt.ceilY - pt.floorY) * endCap * entranceFlare;
+          // Note: cave.getPoint(sClamped) already applies endCap taper; do NOT apply a second endCap here
+          const halfW = pt.halfW * entranceFlare;
+          const roofH = (pt.ceilY - pt.floorY) * entranceFlare;
           ringMeta.push({ sClamped, cx, cz, floorY, halfW, roofH, pt });
 
           for (let j = 0; j <= radialSegs; j++) {
@@ -12272,11 +12527,11 @@
             crevices.push(vData.crevice, vData.wear, vData.shelf);
           }
 
-          // Check if current ring is near any branch junction portal or skylight
+          // Check if current ring is right on top of a branch junction portal (tightened to 0.022 so adjacent corridor sections stay richly dressed)
           let nearJunction = false;
           const jPortals = cave.junctionPortals || [];
           for (let jpIdx = 0; jpIdx < jPortals.length; jpIdx++) {
-            if (Math.abs(sClamped - jPortals[jpIdx].s) < 0.038) {
+            if (Math.abs(sClamped - jPortals[jpIdx].s) < 0.022) {
               nearJunction = true;
               break;
             }
@@ -12545,26 +12800,27 @@
             const sinMid = Math.sin(angMid);
 
             let skipQuad = false;
-            // 1. Carve Collapsed Ceiling Skylight Aperture in upper cavern roof (sinMid > 0.62)
-            if (sinMid > 0.62 && skylightCutouts.length > 0) {
+            // 1. Carve Collapsed Ceiling Skylight Aperture in upper cavern roof (sinMid > 0.64, tightened so chimney base overlaps cleanly)
+            if (sinMid > 0.64 && skylightCutouts.length > 0) {
               for (let skIdx = 0; skIdx < skylightCutouts.length; skIdx++) {
                 const skC = skylightCutouts[skIdx];
-                if (Math.hypot(qx - skC.x, qz - skC.z) < skC.r * 0.94) {
+                if (Math.hypot(qx - skC.x, qz - skC.z) < skC.r * 0.86) {
                   skipQuad = true;
                   break;
                 }
               }
             }
 
-            // 2. Carve Open-Cut Branch & Inter-Cave Aqueduct Portals in parent/target tunnel wall via true wall-seam throat capsule
-            if (!skipQuad && jPortals.length > 0 && sinMid > -0.28 && sinMid < 0.92) {
+            // 2. Carve Elliptical Arch-Matched Branch & Inter-Cave Portals (tightly matched to curved branch shoulders so high roof crown stays sealed)
+            if (!skipQuad && jPortals.length > 0 && sinMid > -0.22 && sinMid < 0.76) {
               for (let jpIdx = 0; jpIdx < jPortals.length; jpIdx++) {
                 const jp = jPortals[jpIdx];
-                if (Math.abs(rMeta.sClamped - jp.s) < 0.15 && (cosMid * jp.side) > 0.02) {
+                if (Math.abs(rMeta.sClamped - jp.s) < 0.14 && (cosMid * jp.side) > 0.08) {
                   const ss = jp.seamSamples || [];
                   let minSegD = Math.hypot(qx - jp.wx, qz - jp.wz);
                   let segFloorY = jp.floorY;
                   let segCeilH = jp.ceilY - jp.floorY;
+                  let segHalfW = jp.mouthHalfW;
                   const segLim = Math.min(ss.length - 1, 18);
                   for (let si = 0; si < segLim; si++) {
                     const sa = ss[si], sb = ss[si + 1];
@@ -12576,13 +12832,18 @@
                       minSegD = d;
                       segFloorY = sa.floorY + (sb.floorY - sa.floorY) * f;
                       segCeilH = sa.ceilH + (sb.ceilH - sa.ceilH) * f;
+                      segHalfW = (sa.halfW + (sb.halfW - sa.halfW) * f);
                     }
                   }
-                  const minFloor = Math.min(jp.floorY, segFloorY);
-                  const maxCeil = Math.max(jp.ceilY, segFloorY + segCeilH);
-                  if (minSegD < jp.mouthHalfW + 0.75 && qy > minFloor + 0.04 && qy < maxCeil + 0.55) {
-                    skipQuad = true;
-                    break;
+                  const cutHalfW = Math.max(jp.mouthHalfW * 0.90, segHalfW * 0.94) + 0.10;
+                  const normD = minSegD / Math.max(1.0, cutHalfW);
+                  if (normD < 1.0) {
+                    const minFloor = Math.min(jp.floorY, segFloorY);
+                    const archCeilTop = segFloorY + (Math.min(jp.ceilY - jp.floorY, segCeilH) + 0.05) * Math.pow(Math.max(0.0, 1.0 - normD * normD), 0.46);
+                    if (qy > minFloor + 0.04 && qy < archCeilTop) {
+                      skipQuad = true;
+                      break;
+                    }
                   }
                 }
               }
@@ -12591,6 +12852,24 @@
             if (!skipQuad) {
               indices.push(a, b, c, b, d, c);
             }
+          }
+        }
+
+        // Seal main tunnel far end with a solid sculpted 3D rock dome cap fan (zero open sky pinholes)
+        {
+          const endMeta = ringMeta[lengthSteps];
+          const apexIdx = positions.length / 3;
+          const domeDepth = Math.max(1.3, endMeta.halfW * 0.95);
+          positions.push(
+            endMeta.cx + cave.dirX * domeDepth,
+            endMeta.floorY + endMeta.roofH * 0.46,
+            endMeta.cz + cave.dirZ * domeDepth
+          );
+          uvs.push(3.25, (cave.length + domeDepth) * 0.15);
+          crevices.push(0.55, 0.30, 0.35);
+          const lastRingStart = lengthSteps * stride;
+          for (let j = 0; j < radialSegs; j++) {
+            indices.push(lastRingStart + j, lastRingStart + j + 1, apexIdx);
           }
         }
 
@@ -12607,11 +12886,190 @@
         tunnelMesh.layers.set(1);
         caveRoot.add(tunnelMesh);
 
-        // Frame every Open-Cut Branch Fork Portal cleanly along left/right jambs outside clear walkable threshold
+        // Dress main tunnel sealed dead-end chamber (s = 0.89..0.925) with natural rock formations & subtle mineral pockets
+        {
+          const endS = cave.isLavaTube ? 0.905 : 0.915;
+          const endPt = cave.getPoint(endS);
+          const eDist = endS * cave.length;
+          const eTint = cave.isLavaTube ? 0x9a3d14 : 0x3b6e6a;
+          [-1, 1].forEach((sideSign, sIdx) => {
+            const bLat = sideSign * Math.max(1.2, endPt.halfW * 0.62);
+            const bx = endPt.x + endPt.perpX * bLat + cave.dirX * 1.4;
+            const bz = endPt.z + endPt.perpZ * bLat + cave.dirZ * 1.4;
+            const fRel = evalCaveFloorRelief(cave.isLavaTube, eDist, bLat, endPt.halfW, bx, bz, endS);
+            if (caveBoulderIdx < caveBoulderMax) {
+              const bSc = 0.85 + sIdx * 0.22;
+              dummy.position.set(bx, endPt.floorY + fRel + bSc * 0.22, bz);
+              dummy.scale.set(bSc * 1.15, bSc * 0.78, bSc * 1.05);
+              dummy.rotation.set(0.12, sideSign * 1.2 + cIndex, -sideSign * 0.18);
+              dummy.updateMatrix();
+              rockTint.setRGB(cave.isLavaTube ? 0.44 : 0.78, cave.isLavaTube ? 0.36 : 0.82, cave.isLavaTube ? 0.34 : 0.86);
+              caveBoulderMesh.setMatrixAt(caveBoulderIdx, dummy.matrix);
+              caveBoulderMesh.setColorAt(caveBoulderIdx, rockTint);
+              caveBoulderIdx++;
+            }
+            for (let mSh = 0; mSh < 2; mSh++) {
+              if (crystalIdx >= crystalMax) break;
+              const kLat = sideSign * Math.max(0.8, endPt.halfW * (0.48 + mSh * 0.16));
+              const kx = endPt.x + endPt.perpX * kLat + cave.dirX * (2.2 + mSh * 0.9);
+              const kz = endPt.z + endPt.perpZ * kLat + cave.dirZ * (2.2 + mSh * 0.9);
+              const kfRel = evalCaveFloorRelief(cave.isLavaTube, eDist + 2.0, kLat, endPt.halfW, kx, kz, endS);
+              cTint.setHex(eTint);
+              dummy.position.set(kx, endPt.floorY + kfRel + 0.08, kz);
+              dummy.rotation.set((mSh - 0.5) * 0.22, cIndex * 1.1 + mSh * 1.5, sideSign * 0.24);
+              const cSc = 0.50 + mSh * 0.18;
+              dummy.scale.set(cSc, cSc * 1.15, cSc);
+              dummy.updateMatrix();
+              crystalMesh.setMatrixAt(crystalIdx, dummy.matrix);
+              crystalMesh.setColorAt(crystalIdx, cTint);
+              crystalIdx++;
+            }
+          });
+          if (!cave.isLavaTube && speleoIdx < speleoMax - 2) {
+            for (let spI = -1; spI <= 1; spI += 2) {
+              const sx = endPt.x + endPt.perpX * (spI * endPt.halfW * 0.42) + cave.dirX * 1.8;
+              const sz = endPt.z + endPt.perpZ * (spI * endPt.halfW * 0.42) + cave.dirZ * 1.8;
+              dummy.position.set(sx, endPt.floorY + 0.62, sz);
+              dummy.rotation.set(0, spI * 1.4, 0);
+              dummy.scale.set(0.65, 1.05, 0.65);
+              dummy.updateMatrix();
+              speleoMesh.setMatrixAt(speleoIdx++, dummy.matrix);
+            }
+          }
+        }
+
+        // Frame every Open-Cut Branch Fork Portal with a watertight 3D Rock Arch Collar Sleeve + side jamb rock framing
+        const branchMeshes = [];
         for (let jpIdx = 0; jpIdx < jPortals.length; jpIdx++) {
           const jp = jPortals[jpIdx];
           const jPerpX = -jp.seamOutZ, jPerpZ = jp.seamOutX;
           const jYaw = Math.atan2(jp.seamOutX, jp.seamOutZ);
+
+          // Watertight Curved 3D Junction Arch Collar Sleeve swept along jp.seamSamples & culled against main-tunnel lumen
+          // Seals parent-to-branch crown corners on rising/dropping/curving branches while keeping parent tunnel 100% clear
+          {
+            const jcRings = 12;
+            const jcSegs = 28;
+            const jcPos = [], jcUVs = [], jcCrev = [], jcIdx = [];
+            const ss = jp.seamSamples || [];
+            // Build arc-length table along seamSamples starting from the parent-wall seam crossing
+            let startSIdx = 0;
+            let bestSeamD = Infinity;
+            for (let si = 0; si < ss.length; si++) {
+              const d = Math.hypot(ss[si].x - jp.wx, ss[si].z - jp.wz);
+              if (d < bestSeamD) { bestSeamD = d; startSIdx = si; }
+            }
+            const throatPath = [];
+            let pathAccum = 0.0;
+            for (let si = startSIdx; si < ss.length; si++) {
+              const sp = ss[si];
+              if (throatPath.length > 0) {
+                const prev = throatPath[throatPath.length - 1];
+                pathAccum += Math.hypot(sp.x - prev.x, sp.z - prev.z);
+              }
+              throatPath.push({
+                dist: pathAccum,
+                x: sp.x, z: sp.z,
+                floorY: sp.floorY,
+                ceilH: Math.max(jp.ceilY - jp.floorY, sp.ceilH || (jp.ceilY - jp.floorY)),
+                halfW: Math.max(jp.mouthHalfW, sp.halfW || jp.mouthHalfW)
+              });
+              if (pathAccum > 9.5) break;
+            }
+            const evalThroatAt = (along) => {
+              if (throatPath.length < 2 || along <= 0.0) {
+                const base = throatPath[0] || { x: jp.wx, z: jp.wz, floorY: jp.floorY, ceilH: jp.ceilY - jp.floorY, halfW: jp.mouthHalfW };
+                return {
+                  x: base.x + jp.seamOutX * along,
+                  z: base.z + jp.seamOutZ * along,
+                  floorY: base.floorY,
+                  ceilH: base.ceilH,
+                  halfW: base.halfW,
+                  perpX: jPerpX, perpZ: jPerpZ
+                };
+              }
+              for (let k = 0; k < throatPath.length - 1; k++) {
+                const a = throatPath[k], b = throatPath[k + 1];
+                if (along <= b.dist || k === throatPath.length - 2) {
+                  const span = Math.max(0.001, b.dist - a.dist);
+                  const f = Math.max(0.0, Math.min(1.5, (along - a.dist) / span));
+                  const dx = b.x - a.x, dz = b.z - a.z;
+                  const dl = Math.hypot(dx, dz) || 1.0;
+                  return {
+                    x: a.x + dx * f,
+                    z: a.z + dz * f,
+                    floorY: a.floorY + (b.floorY - a.floorY) * Math.min(1.0, f),
+                    ceilH: a.ceilH + (b.ceilH - a.ceilH) * Math.min(1.0, f),
+                    halfW: a.halfW + (b.halfW - a.halfW) * Math.min(1.0, f),
+                    perpX: -dz / dl, perpZ: dx / dl
+                  };
+                }
+              }
+              const last = throatPath[throatPath.length - 1];
+              return { x: last.x, z: last.z, floorY: last.floorY, ceilH: last.ceilH, halfW: last.halfW, perpX: jPerpX, perpZ: jPerpZ };
+            };
+
+            for (let r = 0; r <= jcRings; r++) {
+              const tr = r / jcRings;
+              let along, radScale;
+              if (r <= 2) {
+                const f = r / 2.0;
+                along = -2.20 + f * 2.50;
+                radScale = 1.78 - f * 0.64;
+              } else if (r <= 9) {
+                const f = (r - 2) / 7.0;
+                along = 0.30 + f * 7.60;
+                radScale = 1.14 + Math.sin(f * Math.PI) * 0.08;
+              } else {
+                const f = (r - 9) / 3.0;
+                along = 7.90 - f * 1.15;
+                radScale = 1.14 + f * 0.50;
+              }
+              const tp = evalThroatAt(along);
+              const ringHW = Math.max(2.6, tp.halfW * 1.12);
+              const ringCH = Math.max(3.8, tp.ceilH * 1.28);
+              for (let a = 0; a <= jcSegs; a++) {
+                const ua = a / jcSegs;
+                const ang = Math.PI * (-0.16 + ua * 1.32);
+                const cosA = Math.cos(ang), sinA = Math.sin(ang);
+                const crag = 1.0 + (fbm2(tp.x * 0.22 + cosA * 2.2, tp.z * 0.22 + sinA * 2.2, 2) - 0.45) * 0.12;
+                const latW = cosA * ringHW * radScale * crag;
+                const vx = tp.x + tp.perpX * latW;
+                const vz = tp.z + tp.perpZ * latW;
+                const vy = sinA >= 0
+                  ? (tp.floorY + Math.pow(sinA, 0.58) * ringCH * radScale * crag)
+                  : (tp.floorY + sinA * 2.2 * radScale);
+                jcPos.push(vx, vy, vz);
+                jcUVs.push(ua * 4.2, tr * 2.8);
+                jcCrev.push(0.45, 0.35, sinA > 0.65 ? 0.55 : 0.20);
+              }
+            }
+            const jcStride = jcSegs + 1;
+            for (let r = 0; r < jcRings; r++) {
+              for (let a = 0; a < jcSegs; a++) {
+                const pA = r * jcStride + a, pB = pA + 1, pC = (r + 1) * jcStride + a, pD = pC + 1;
+                const qx = (jcPos[pA * 3] + jcPos[pB * 3] + jcPos[pC * 3] + jcPos[pD * 3]) * 0.25;
+                const qy = (jcPos[pA * 3 + 1] + jcPos[pB * 3 + 1] + jcPos[pC * 3 + 1] + jcPos[pD * 3 + 1]) * 0.25;
+                const qz = (jcPos[pA * 3 + 2] + jcPos[pB * 3 + 2] + jcPos[pC * 3 + 2] + jcPos[pD * 3 + 2]) * 0.25;
+                // Keep walkable main-tunnel lumen 100% clear below 3.4m; keep high upper crown arch intact to seal vault seams
+                if (qy < jp.floorY + 3.40 && isPointInMainCaveLumen(qx, qy, qz, 0.86)) continue;
+                jcIdx.push(pA, pB, pC, pB, pD, pC);
+              }
+            }
+            const jcGeo = new THREE.BufferGeometry();
+            jcGeo.setAttribute('position', new THREE.Float32BufferAttribute(jcPos, 3));
+            jcGeo.setAttribute('uv', new THREE.Float32BufferAttribute(jcUVs, 2));
+            jcGeo.setAttribute('aRockCrevice', new THREE.Float32BufferAttribute(jcCrev, 3));
+            jcGeo.setIndex(jcIdx);
+            jcGeo.computeVertexNormals();
+            jcGeo.computeBoundingSphere();
+            const jcMesh = new THREE.Mesh(jcGeo, activeWallMat);
+            jcMesh.receiveShadow = true;
+            jcMesh.layers.set(1);
+            caveRoot.add(jcMesh);
+            branchMeshes.push(jcMesh);
+          }
+
           const jambOffset = jp.mouthHalfW + 1.25;
           [-1, 1].forEach(flankSign => {
             if (caveCragIdx < caveCragMax) {
@@ -12632,28 +13090,30 @@
           });
         }
 
-        // Build Collapsed Ceiling Skylight Oases (3D Sinkhole Chimney Collar, Volumetric God-Ray Shaft, Hanging Banyan Roots & Mossy Boulder Mound)
-        const branchMeshes = [];
+        // Build Collapsed Ceiling Skylight Oases (Watertight Deep-Skirted 3D Sinkhole Chimney Collar, God-Ray Shaft & Mossy Oasis)
         for (let skIdx = 0; skIdx < skylightCutouts.length; skIdx++) {
           const skC = skylightCutouts[skIdx];
           const surfY = getTerrainHeight(skC.x, skC.z, true);
-          const botY = skC.ceilY - 1.1;
-          const topY = Math.max(botY + 3.2, surfY + 0.55);
-          const chimRings = 10;
-          const chimSegs = 24;
+          const botY = skC.ceilY - 3.1;
+          const topY = Math.max(botY + 4.8, surfY + 0.75);
+          const chimRings = 12;
+          const chimSegs = 28;
           const chPos = [], chUVs = [], chCrev = [], chIdx = [];
           for (let r = 0; r <= chimRings; r++) {
             const tr = r / chimRings;
             const yRing = botY + tr * (topY - botY);
-            const flare = 0.86 + Math.pow(Math.abs(tr - 0.45) * 1.4, 2.0) * 0.38;
+            // Wide flared bottom skirt (1.38x) tucks cleanly outside the carved cavern arch so zero horizontal sky rays escape under the rim
+            const botFlare = tr < 0.25 ? (1.0 - tr / 0.25) * 0.52 : 0.0;
+            const topFlare = tr > 0.78 ? ((tr - 0.78) / 0.22) * 0.24 : 0.0;
+            const flare = 0.88 + botFlare + topFlare;
             for (let s = 0; s <= chimSegs; s++) {
-              const u = s / chimSegs;
+              const u = (s === chimSegs) ? 0.0 : (s / chimSegs);
               const ang = u * Math.PI * 2.0;
               const cosA = Math.cos(ang), sinA = Math.sin(ang);
-              const crag = 1.0 + (fbm2(skC.x * 0.25 + cosA * 2.2, skC.z * 0.25 + sinA * 2.2 + tr * 3.0, 2) - 0.45) * 0.26;
+              const crag = 1.0 + (fbm2(skC.x * 0.25 + cosA * 2.2, skC.z * 0.25 + sinA * 2.2 + tr * 3.0, 2) - 0.45) * 0.20;
               const rad = skC.r * flare * crag;
               chPos.push(skC.x + cosA * rad, yRing, skC.z + sinA * rad);
-              chUVs.push(u * 4.0, tr * 2.5);
+              chUVs.push((s / chimSegs) * 4.0, tr * 2.5);
               chCrev.push(0.45 * (1.0 - tr), 0.35, tr > 0.75 ? 0.85 : 0.25);
             }
           }
@@ -12884,11 +13344,19 @@
           const bRadial = 30;
           const bPos = [], bUVs = [], bCrev = [], bIndices = [];
           let bAccum = 0.0;
+          let nextSpeleoM = 3.5;
+          let nextRubbleM = 4.2;
+          let nextDraperyM = 6.5;
+          let nextBoulderM = 8.0;
+          let nextCragM = 9.0;
+          let nextColM = 14.0;
+          let nextMineralM = 18.0;
+          let propStepSeq = 0;
 
           for (let i = 0; i <= bSteps; i++) {
             const sp = samp[i];
             if (i > 0) bAccum += Math.hypot(sp.x - samp[i - 1].x, sp.z - samp[i - 1].z);
-            const flare = (i === 0 || (br.isLoop && i === bSteps)) ? 1.16 : 1.0;
+            const flare = (i === 0 || (br.isLoop && i === bSteps)) ? 1.18 : 1.0;
             const rHW = sp.halfW * flare;
             const rCH = sp.ceilH * flare;
             const bThreshFlat = Math.max(
@@ -12903,78 +13371,99 @@
               bCrev.push(vData.crevice, vData.wear, vData.shelf);
             }
 
-            // Populate branch speleothems, fused columns, wall buttresses & mineral specks strictly clear of walkable paths & squeezes
-            if (i >= 5 && i <= bSteps - 5 && i % 3 === 0) {
-              if (!cave.isLavaTube && speleoIdx < speleoMax && sp.ceilH > 3.55 && sp.ceilH - 1.15 > 2.25) {
-                const sSide = ((i % 6 === 0) ? 1 : -1) * sp.halfW * 0.60;
-                dummy.position.set(sp.x + sp.perpX * sSide, sp.floorY + sp.ceilH - 0.62, sp.z + sp.perpZ * sSide);
-                dummy.rotation.set(0.05, i * 0.9, Math.PI);
-                const hs = 0.48 + (i % 4) * 0.10;
-                dummy.scale.set(0.45, hs, 0.45);
-                dummy.updateMatrix();
-                speleoMesh.setMatrixAt(speleoIdx++, dummy.matrix);
-              } else if (cave.isLavaTube && lavacicleIdx < lavacicleMax && sp.ceilH > 3.45 && sp.ceilH - 0.95 > 2.25) {
-                const lSide = ((i % 6 === 0) ? 1 : -1) * sp.halfW * 0.56;
-                dummy.position.set(sp.x + sp.perpX * lSide, sp.floorY + sp.ceilH - 0.35, sp.z + sp.perpZ * lSide);
-                dummy.rotation.set(0.06, i * 1.1, Math.PI);
-                dummy.scale.set(0.50, 0.62, 0.50);
-                dummy.updateMatrix();
-                lavacicleMesh.setMatrixAt(lavacicleIdx++, dummy.matrix);
-              }
-              if (!cave.isLavaTube && i % 12 === 0 && columnIdx < columnMax && sp.ceilH > 4.0 && sp.halfW > 3.8) {
-                const cSide = ((i % 24 === 0) ? 1 : -1) * sp.halfW * 0.72;
-                const colX = sp.x + sp.perpX * cSide;
-                const colZ = sp.z + sp.perpZ * cSide;
-                const spanH = sp.ceilH * 0.92;
-                if (!isBlockedByCorridorOrPortal(colX, sp.floorY + 0.9, colZ, 0.85)) {
-                  dummy.position.set(colX, sp.floorY + spanH * 0.48, colZ);
-                  dummy.rotation.set(0.03, i * 0.8, -0.03);
-                  dummy.scale.set(0.54, spanH, 0.54);
-                  dummy.updateMatrix();
-                  caveColumnMesh.setMatrixAt(columnIdx++, dummy.matrix);
-                  window.instancedRockColliders = window.instancedRockColliders || [];
-                  window.instancedRockColliders.push({
-                    x: colX, y: sp.floorY + spanH * 0.48, z: colZ,
-                    r: 0.45,
-                    minY: sp.floorY - 0.5,
-                    maxY: sp.floorY + spanH + 0.5,
-                    topY: sp.floorY + spanH,
-                    climbable: false
-                  });
-                }
-              }
+            // Distance-based (arc-length meter) branch geological dressing so long routes (470m aqueduct, 119m squeeze loop, 94m lava tube) stay richly detailed
+            const clearOfEnds = bAccum >= 5.5 && (br.isLoop ? (bAccum <= br.length - 5.5) : (sp.t <= 0.90));
+            if (clearOfEnds) {
               const bShade = 0.70 + ((i * 5) % 7) * 0.04;
               if (cave.isLavaTube) {
                 rockTint.setRGB(bShade * 0.54, bShade * 0.44, bShade * 0.40);
               } else {
                 rockTint.setRGB(bShade * 0.88, bShade * 0.94, bShade * 0.97);
               }
-              if (rubbleIdx < rubbleMax && i % 3 === 0 && sp.halfW > 2.2) {
-                const side = (i % 6 === 0 ? 1 : -1) * Math.max(1.85, sp.halfW * 0.78);
+
+              // 1. Ceiling stalactites / lavacicles every ~5.5m (including compact nubs in low squeeze passages >= 2.25m)
+              if (bAccum >= nextSpeleoM) {
+                nextSpeleoM = bAccum + (br.isInterCave ? 6.2 : 5.0);
+                propStepSeq++;
+                const sSideSign = (propStepSeq % 2 === 0) ? 1 : -1;
+                if (!cave.isLavaTube && speleoIdx < speleoMax && sp.ceilH > 2.25) {
+                  const sSide = sSideSign * sp.halfW * 0.56;
+                  const archDrop = Math.sqrt(Math.max(0.28, 1.0 - 0.56 * 0.56));
+                  const cY = sp.floorY + sp.ceilH * archDrop;
+                  const hs = sp.ceilH > 2.85
+                    ? Math.min(0.45 + (propStepSeq % 4) * 0.12, Math.max(0.32, (cY - sp.floorY - 2.10) * 0.52))
+                    : 0.24;
+                  if (cY - hs * 1.25 > sp.floorY + 1.65) {
+                    dummy.position.set(sp.x + sp.perpX * sSide, cY - hs * 0.50, sp.z + sp.perpZ * sSide);
+                    dummy.rotation.set(0.05, propStepSeq * 0.9, Math.PI);
+                    dummy.scale.set(sp.ceilH > 2.85 ? 0.42 : 0.28, hs, sp.ceilH > 2.85 ? 0.42 : 0.28);
+                    dummy.updateMatrix();
+                    speleoMesh.setMatrixAt(speleoIdx++, dummy.matrix);
+                  }
+                } else if (cave.isLavaTube && lavacicleIdx < lavacicleMax && sp.ceilH > 2.40) {
+                  const lSide = sSideSign * sp.halfW * 0.54;
+                  const cY = sp.floorY + sp.ceilH * 0.86;
+                  if (cY - 0.70 > sp.floorY + 1.75) {
+                    dummy.position.set(sp.x + sp.perpX * lSide, cY - 0.30, sp.z + sp.perpZ * lSide);
+                    dummy.rotation.set(0.06, propStepSeq * 1.1, Math.PI);
+                    dummy.scale.set(0.42, 0.50 + (propStepSeq % 3) * 0.10, 0.42);
+                    dummy.updateMatrix();
+                    lavacicleMesh.setMatrixAt(lavacicleIdx++, dummy.matrix);
+                  }
+                }
+              }
+
+              // 2. Wall-hugging talus scree slabs every ~6m (down to halfW >= 1.15m so tight squeezes stay texturally grounded)
+              if (bAccum >= nextRubbleM && rubbleIdx < rubbleMax && sp.halfW >= 1.15) {
+                nextRubbleM = bAccum + (br.isInterCave ? 7.5 : 5.8);
+                const sideSign = (i % 2 === 0 ? 1 : -1);
+                const side = sideSign * Math.max(sp.halfW * 0.84, Math.min(sp.halfW * 0.90, 1.38));
                 const rx = sp.x + sp.perpX * side, rz = sp.z + sp.perpZ * side;
                 const fRel = evalCaveFloorRelief(cave.isLavaTube, sp.distFromPortal || bAccum, side, sp.halfW, rx, rz, sp.t);
-                const rs = 0.34 + ((i + bIdx * 3) % 6) * 0.14;
-                const ry = sp.floorY + fRel + 0.12;
-                if (!isBlockedByCorridorOrPortal(rx, ry, rz, rs * 1.15)) {
+                const rs = Math.min(0.28 + ((i + bIdx * 3) % 5) * 0.09, sp.halfW * 0.22);
+                const ry = sp.floorY + fRel + 0.08;
+                if (!isBlockedByCorridorOrPortal(rx, ry, rz, rs * 0.55)) {
                   dummy.position.set(rx, ry, rz);
-                  dummy.rotation.set(i * 0.4, i * 1.3, 0.2);
-                  dummy.scale.set(rs * 1.18, rs * 0.66, rs);
+                  dummy.rotation.set(i * 0.4, i * 1.3, -sideSign * 0.22);
+                  dummy.scale.set(rs * 1.15, rs * 0.58, rs);
                   dummy.updateMatrix();
                   rubbleMesh.setMatrixAt(rubbleIdx, dummy.matrix);
                   rubbleMesh.setColorAt(rubbleIdx, rockTint);
                   rubbleIdx++;
                 }
               }
-              if (caveBoulderIdx < caveBoulderMax && i % 6 === 0 && sp.halfW > 2.6) {
-                const bSide = (i % 12 === 0 ? -1 : 1) * Math.max(2.15, sp.halfW * 0.82);
+
+              // 3. Hanging flowstone draperies along upper karst walls every ~11m
+              if (!cave.isLavaTube && bAccum >= nextDraperyM && draperyIdx < draperyMax && sp.ceilH > 3.1 && sp.halfW >= 1.75) {
+                nextDraperyM = bAccum + (br.isInterCave ? 13.0 : 10.5);
+                const drSide = (Math.floor(bAccum) % 2 === 0) ? 1 : -1;
+                const drLat = drSide * sp.halfW * 0.76;
+                const drX = sp.x + sp.perpX * drLat, drZ = sp.z + sp.perpZ * drLat;
+                const drY = sp.floorY + sp.ceilH * 0.72;
+                if (drY > sp.floorY + 2.20 && !isBlockedByCorridorOrPortal(drX, drY, drZ, 0.55)) {
+                  const wallYaw = Math.atan2(sp.perpX * (-drSide), sp.perpZ * (-drSide));
+                  const drSc = 0.60 + (i % 4) * 0.12;
+                  dummy.position.set(drX, drY, drZ);
+                  dummy.rotation.set(drSide * 0.16, wallYaw, 0);
+                  dummy.scale.set(drSc, drSc * 0.95, drSc);
+                  dummy.updateMatrix();
+                  caveDraperyMesh.setMatrixAt(draperyIdx++, dummy.matrix);
+                }
+              }
+
+              // 4. Wall-margin breakdown boulders every ~13m
+              if (bAccum >= nextBoulderM && caveBoulderIdx < caveBoulderMax && sp.halfW > 2.3) {
+                nextBoulderM = bAccum + (br.isInterCave ? 14.5 : 12.5);
+                const sideSign = ((i + bIdx) % 2 === 0 ? -1 : 1);
+                const bSide = sideSign * Math.max(1.85, sp.halfW * 0.80);
                 const bx = sp.x + sp.perpX * bSide, bz = sp.z + sp.perpZ * bSide;
                 const fRel = evalCaveFloorRelief(cave.isLavaTube, sp.distFromPortal || bAccum, bSide, sp.halfW, bx, bz, sp.t);
-                const bSc = 0.55 + ((i + bIdx * 5) % 5) * 0.18;
+                const bSc = 0.52 + ((i + bIdx * 5) % 5) * 0.15;
                 const by = sp.floorY + fRel + bSc * 0.20;
-                if (!isBlockedByCorridorOrPortal(bx, by, bz, bSc * 1.20)) {
+                if (!isBlockedByCorridorOrPortal(bx, by, bz, bSc * 0.95)) {
                   dummy.position.set(bx, by, bz);
                   dummy.rotation.set(0.14, i * 1.85, -0.12);
-                  dummy.scale.set(bSc, bSc * 0.72, bSc * 1.08);
+                  dummy.scale.set(bSc, bSc * 0.70, bSc * 1.06);
                   dummy.updateMatrix();
                   caveBoulderMesh.setMatrixAt(caveBoulderIdx, dummy.matrix);
                   caveBoulderMesh.setColorAt(caveBoulderIdx, rockTint);
@@ -12982,7 +13471,7 @@
                   window.instancedRockColliders = window.instancedRockColliders || [];
                   window.instancedRockColliders.push({
                     x: bx, y: by, z: bz,
-                    r: bSc * 0.78,
+                    r: bSc * 0.75,
                     minY: by - bSc,
                     maxY: by + bSc * 0.65,
                     topY: by + bSc * 0.70,
@@ -12990,15 +13479,19 @@
                   });
                 }
               }
-              if (caveCragIdx < caveCragMax && i % 9 === 0 && sp.halfW > 2.6) {
-                const cSide = (i % 18 === 0 ? 1 : -1) * Math.max(2.20, sp.halfW * 0.86);
-                const cSc = 0.58 + ((i + bIdx * 2) % 5) * 0.15;
+
+              // 5. Structural wall buttress ribs every ~14m breaking up tunnel sightlines
+              if (bAccum >= nextCragM && caveCragIdx < caveCragMax && sp.halfW > 2.15) {
+                nextCragM = bAccum + (br.isInterCave ? 15.5 : 13.0);
+                const sideSign = ((i + bIdx) % 2 === 0 ? 1 : -1);
+                const cSide = sideSign * Math.max(1.85, sp.halfW * 0.85);
+                const cSc = 0.56 + ((i + bIdx * 2) % 5) * 0.14;
                 const crx = sp.x + sp.perpX * cSide, crz = sp.z + sp.perpZ * cSide;
-                const cry = sp.floorY + sp.ceilH * 0.38;
-                if (!isBlockedByCorridorOrPortal(crx, sp.floorY + 1.0, crz, cSc * 1.25)) {
+                const cry = sp.floorY + sp.ceilH * 0.42;
+                if (!isBlockedByCorridorOrPortal(crx, sp.floorY + 1.0, crz, cSc * 0.95)) {
                   dummy.position.set(crx, cry, crz);
                   dummy.rotation.set(-0.14, i * 1.45, 0.16);
-                  dummy.scale.set(cSc * 0.90, cSc * 1.25, cSc * 0.95);
+                  dummy.scale.set(cSc * 0.88, cSc * 1.25, cSc * 0.94);
                   dummy.updateMatrix();
                   caveCragMesh.setMatrixAt(caveCragIdx, dummy.matrix);
                   caveCragMesh.setColorAt(caveCragIdx, rockTint);
@@ -13006,24 +13499,51 @@
                   window.instancedRockColliders = window.instancedRockColliders || [];
                   window.instancedRockColliders.push({
                     x: crx, y: cry, z: crz,
-                    r: cSc * 0.68,
+                    r: cSc * 0.64,
                     minY: sp.floorY - 0.5,
-                    maxY: cry + cSc * 1.28,
-                    topY: cry + cSc * 1.28,
+                    maxY: cry + cSc * 1.25,
+                    topY: cry + cSc * 1.25,
                     climbable: false
                   });
                 }
               }
-              if (br.hasMineral && crystalIdx < crystalMax && i % 15 === 0 && sp.halfW > 2.0) {
-                const side = (i % 2 === 0 ? 1 : -1) * sp.halfW * 0.76;
+
+              // 6. Fused floor-to-ceiling karst columns in wider vaulted spans every ~22m
+              if (!cave.isLavaTube && bAccum >= nextColM && columnIdx < columnMax && sp.ceilH > 3.9 && sp.halfW > 3.6) {
+                nextColM = bAccum + 22.0;
+                const cSide = ((i % 2 === 0) ? 1 : -1) * sp.halfW * 0.72;
+                const colX = sp.x + sp.perpX * cSide, colZ = sp.z + sp.perpZ * cSide;
+                const spanH = sp.ceilH * 0.90;
+                if (!isBlockedByCorridorOrPortal(colX, sp.floorY + 0.9, colZ, 0.75)) {
+                  dummy.position.set(colX, sp.floorY + spanH * 0.48, colZ);
+                  dummy.rotation.set(0.03, i * 0.8, -0.03);
+                  dummy.scale.set(0.52, spanH, 0.52);
+                  dummy.updateMatrix();
+                  caveColumnMesh.setMatrixAt(columnIdx++, dummy.matrix);
+                  window.instancedRockColliders = window.instancedRockColliders || [];
+                  window.instancedRockColliders.push({
+                    x: colX, y: sp.floorY + spanH * 0.48, z: colZ,
+                    r: 0.42,
+                    minY: sp.floorY - 0.5,
+                    maxY: sp.floorY + spanH + 0.5,
+                    topY: sp.floorY + spanH,
+                    climbable: false
+                  });
+                }
+              }
+
+              // 7. Subtle mineral pockets tucked along strata edges (including tight fissure crevices)
+              if (br.hasMineral && bAccum >= nextMineralM && crystalIdx < crystalMax && sp.halfW >= 1.18) {
+                nextMineralM = bAccum + (br.isInterCave ? 28.0 : 18.0);
+                const side = (i % 2 === 0 ? 1 : -1) * sp.halfW * 0.84;
                 const kx = sp.x + sp.perpX * side, kz = sp.z + sp.perpZ * side;
                 const fRel = evalCaveFloorRelief(cave.isLavaTube, sp.distFromPortal || bAccum, side, sp.halfW, kx, kz, sp.t);
                 const ky = sp.floorY + fRel + 0.08;
-                if (!isBlockedByCorridorOrPortal(kx, ky, kz, 0.50)) {
+                if (!isBlockedByCorridorOrPortal(kx, ky, kz, 0.30)) {
                   cTint.setHex(cave.isLavaTube ? 0x8a3010 : 0x315c5a);
                   dummy.position.set(kx, ky, kz);
                   dummy.rotation.set(0.15, i * 0.7, -0.2);
-                  dummy.scale.set(0.40, 0.45, 0.40);
+                  dummy.scale.set(0.38, 0.42, 0.38);
                   dummy.updateMatrix();
                   crystalMesh.setMatrixAt(crystalIdx, dummy.matrix);
                   crystalMesh.setColorAt(crystalIdx, cTint);
@@ -13035,17 +13555,38 @@
 
           const bStride = bRadial + 1;
           for (let i = 0; i < bSteps; i++) {
+            const spI = samp[i];
             for (let j = 0; j < bRadial; j++) {
               const a = i * bStride + j, b = a + 1, c = (i + 1) * bStride + j, d = c + 1;
               const qx = (bPos[a * 3] + bPos[b * 3] + bPos[c * 3] + bPos[d * 3]) * 0.25;
               const qy = (bPos[a * 3 + 1] + bPos[b * 3 + 1] + bPos[c * 3 + 1] + bPos[d * 3 + 1]) * 0.25;
               const qz = (bPos[a * 3 + 2] + bPos[b * 3 + 2] + bPos[c * 3 + 2] + bPos[d * 3 + 2]) * 0.25;
-              if (isPointInMainCaveLumen(qx, qy, qz, 0.89)) {
+              const cullScale = (qy < spI.floorY + 3.40) ? 0.72 : 0.48;
+              if (isPointInMainCaveLumen(qx, qy, qz, cullScale)) {
                 continue;
               }
               bIndices.push(a, b, c, b, d, c);
             }
           }
+
+          // Seal every dead-end branch (!br.isLoop) with a solid sculpted 3D rock dome cap fan (zero open sky pinholes)
+          if (!br.isLoop) {
+            const endSp = samp[bSteps];
+            const bApexIdx = bPos.length / 3;
+            const bDomeDepth = Math.max(1.2, endSp.halfW * 0.95);
+            bPos.push(
+              endSp.x + endSp.dirX * bDomeDepth,
+              endSp.floorY + endSp.ceilH * 0.46,
+              endSp.z + endSp.dirZ * bDomeDepth
+            );
+            bUVs.push(2.75, (bAccum + bDomeDepth) * 0.16);
+            bCrev.push(0.55, 0.30, 0.35);
+            const bLastRing = bSteps * bStride;
+            for (let j = 0; j < bRadial; j++) {
+              bIndices.push(bLastRing + j, bLastRing + j + 1, bApexIdx);
+            }
+          }
+
           const bGeo = new THREE.BufferGeometry();
           bGeo.setAttribute('position', new THREE.Float32BufferAttribute(bPos, 3));
           bGeo.setAttribute('uv', new THREE.Float32BufferAttribute(bUVs, 2));
@@ -13059,6 +13600,150 @@
           bMesh.layers.set(1);
           caveRoot.add(bMesh);
           branchMeshes.push(bMesh);
+
+          // Dress Declarative Landmark Chambers along long branches (Aqueduct 4 Halls, Lava Upper Vent, Cascade Scallop, Fissure Alcove)
+          const brChambers = br.chambers || [];
+          for (let chI = 0; chI < brChambers.length; chI++) {
+            const ch = brChambers[chI];
+            const chSamp = samp[Math.min(samp.length - 1, Math.floor(samp.length * ch.t))];
+            const chYaw = Math.atan2(chSamp.dirX, chSamp.dirZ);
+            if (ch.kind === 'rimstone_hall') {
+              // Crescent rimstone gour dams + shallow reflective seepage pool + framing draperies/columns
+              for (let rI = 0; rI < 3; rI++) {
+                if (rimstoneIdx >= rimstoneMax) break;
+                const rLat = (rI - 1) * (chSamp.halfW * 0.34);
+                const rAlong = (rI - 1) * 2.6;
+                const gx = chSamp.x + chSamp.perpX * rLat + chSamp.dirX * rAlong;
+                const gz = chSamp.z + chSamp.perpZ * rLat + chSamp.dirZ * rAlong;
+                dummy.position.set(gx, chSamp.floorY + 0.08, gz);
+                dummy.rotation.set(0, chYaw + (rI - 1) * 0.35, 0);
+                const gSc = 0.82 + rI * 0.14;
+                dummy.scale.set(gSc * 1.2, gSc * 0.72, gSc);
+                dummy.updateMatrix();
+                caveRimstoneMesh.setMatrixAt(rimstoneIdx++, dummy.matrix);
+              }
+              const hallPoolGeo = new THREE.CircleGeometry(Math.max(2.6, chSamp.halfW * 0.62), 24);
+              hallPoolGeo.rotateX(-Math.PI / 2);
+              const hallPoolMat = new THREE.MeshStandardMaterial({
+                color: 0x062026, emissive: 0x031418, emissiveIntensity: 0.10,
+                roughness: 0.05, metalness: 0.22, transparent: true, opacity: 0.86, fog: true, side: THREE.DoubleSide
+              });
+              const hpMesh = new THREE.Mesh(hallPoolGeo, hallPoolMat);
+              hpMesh.position.set(chSamp.x, chSamp.floorY + 0.11, chSamp.z);
+              hpMesh.layers.set(1);
+              caveRoot.add(hpMesh);
+              branchMeshes.push(hpMesh);
+            } else if (ch.kind === 'breakdown_gallery') {
+              // Dramatic wall-flanking breakdown boulders & leaning structural buttresses
+              [-1, 1].forEach((sideS, k) => {
+                for (let bK = 0; bK < 2; bK++) {
+                  if (caveBoulderIdx >= caveBoulderMax) break;
+                  const bx = chSamp.x + chSamp.perpX * (sideS * chSamp.halfW * 0.68) + chSamp.dirX * ((bK - 0.5) * 4.5);
+                  const bz = chSamp.z + chSamp.perpZ * (sideS * chSamp.halfW * 0.68) + chSamp.dirZ * ((bK - 0.5) * 4.5);
+                  if (!isBlockedByCorridorOrPortal(bx, chSamp.floorY + 0.5, bz, 0.85)) {
+                    const bSc = 0.92 + bK * 0.28;
+                    dummy.position.set(bx, chSamp.floorY + bSc * 0.26, bz);
+                    dummy.scale.set(bSc * 1.15, bSc * 0.76, bSc * 1.10);
+                    dummy.rotation.set(0.18, chYaw + k + bK, -sideS * 0.22);
+                    dummy.updateMatrix();
+                    rockTint.setRGB(0.76, 0.82, 0.86);
+                    caveBoulderMesh.setMatrixAt(caveBoulderIdx, dummy.matrix);
+                    caveBoulderMesh.setColorAt(caveBoulderIdx, rockTint);
+                    caveBoulderIdx++;
+                  }
+                }
+              });
+            } else if (ch.kind === 'mineral_grotto' || ch.kind === 'fissure_alcove') {
+              // Natural rock shelves with clustered subtle mineral crystal glints
+              [-1, 1].forEach(sideS => {
+                for (let cK = 0; cK < 3; cK++) {
+                  if (crystalIdx >= crystalMax) break;
+                  const kx = chSamp.x + chSamp.perpX * (sideS * chSamp.halfW * 0.74) + chSamp.dirX * ((cK - 1) * 2.4);
+                  const kz = chSamp.z + chSamp.perpZ * (sideS * chSamp.halfW * 0.74) + chSamp.dirZ * ((cK - 1) * 2.4);
+                  cTint.setHex(cave.isLavaTube ? 0x9a3d14 : 0x356c68);
+                  dummy.position.set(kx, chSamp.floorY + 0.14 + (cK % 2) * 0.18, kz);
+                  dummy.rotation.set((cK - 1) * 0.18, chYaw + cK * 0.9, sideS * 0.24);
+                  const cSc = 0.48 + (cK % 2) * 0.18;
+                  dummy.scale.set(cSc, cSc * 1.2, cSc);
+                  dummy.updateMatrix();
+                  crystalMesh.setMatrixAt(crystalIdx, dummy.matrix);
+                  crystalMesh.setColorAt(crystalIdx, cTint);
+                  crystalIdx++;
+                }
+              });
+            } else if (ch.kind === 'thermal_vent') {
+              // Cooling volcanic magma blister floor vent + clustered sharks-tooth lavacicles & iron-ember mineral pockets
+              const ventPoolGeo = new THREE.CircleGeometry(Math.max(2.6, chSamp.halfW * 0.56), 24);
+              ventPoolGeo.rotateX(-Math.PI / 2);
+              const ventPoolMat = new THREE.MeshStandardMaterial({
+                color: 0x3b1206, emissive: 0x852204, emissiveIntensity: 0.42,
+                roughness: 0.10, metalness: 0.22, transparent: true, opacity: 0.88, fog: true, side: THREE.DoubleSide
+              });
+              const vpMesh = new THREE.Mesh(ventPoolGeo, ventPoolMat);
+              vpMesh.position.set(chSamp.x, chSamp.floorY + 0.12, chSamp.z);
+              vpMesh.layers.set(1);
+              caveRoot.add(vpMesh);
+              branchMeshes.push(vpMesh);
+              for (let lvK = 0; lvK < 5; lvK++) {
+                if (lavacicleIdx >= lavacicleMax) break;
+                const angLv = (lvK / 5) * Math.PI * 2.0;
+                const rLv = chSamp.halfW * 0.48;
+                dummy.position.set(chSamp.x + Math.cos(angLv) * rLv, chSamp.floorY + chSamp.ceilH * 0.84, chSamp.z + Math.sin(angLv) * rLv);
+                dummy.rotation.set(0.08, lvK * 1.2, Math.PI);
+                dummy.scale.set(0.60, 0.78 + (lvK % 2) * 0.20, 0.60);
+                dummy.updateMatrix();
+                lavacicleMesh.setMatrixAt(lavacicleIdx++, dummy.matrix);
+              }
+              [-1, 1].forEach(sideS => {
+                if (crystalIdx < crystalMax) {
+                  cTint.setHex(0x9e3b12);
+                  dummy.position.set(chSamp.x + chSamp.perpX * (sideS * chSamp.halfW * 0.72), chSamp.floorY + 0.16, chSamp.z + chSamp.perpZ * (sideS * chSamp.halfW * 0.72));
+                  dummy.rotation.set(0.15, chYaw, sideS * 0.22);
+                  dummy.scale.set(0.54, 0.62, 0.54);
+                  dummy.updateMatrix();
+                  crystalMesh.setMatrixAt(crystalIdx, dummy.matrix);
+                  crystalMesh.setColorAt(crystalIdx, cTint);
+                  crystalIdx++;
+                }
+              });
+            }
+          }
+
+          // Dead-End Chamber Payoffs: natural rock formations & subtle mineral pockets framing every sealed branch terminus
+          if (!br.isLoop) {
+            const termIdx = Math.max(0, Math.floor(samp.length * 0.87));
+            const termSp = samp[termIdx];
+            const tYaw = Math.atan2(termSp.dirX, termSp.dirZ);
+            [-1, 1].forEach((sideS, sK) => {
+              const bx = termSp.x + termSp.perpX * (sideS * Math.max(1.2, termSp.halfW * 0.62)) + termSp.dirX * 1.2;
+              const bz = termSp.z + termSp.perpZ * (sideS * Math.max(1.2, termSp.halfW * 0.62)) + termSp.dirZ * 1.2;
+              if (caveBoulderIdx < caveBoulderMax) {
+                const bSc = 0.76 + sK * 0.18;
+                dummy.position.set(bx, termSp.floorY + bSc * 0.22, bz);
+                dummy.scale.set(bSc * 1.1, bSc * 0.75, bSc);
+                dummy.rotation.set(0.14, tYaw + sideS * 0.8, -sideS * 0.18);
+                dummy.updateMatrix();
+                rockTint.setRGB(cave.isLavaTube ? 0.45 : 0.78, cave.isLavaTube ? 0.36 : 0.82, cave.isLavaTube ? 0.34 : 0.86);
+                caveBoulderMesh.setMatrixAt(caveBoulderIdx, dummy.matrix);
+                caveBoulderMesh.setColorAt(caveBoulderIdx, rockTint);
+                caveBoulderIdx++;
+              }
+              for (let mK = 0; mK < 2; mK++) {
+                if (crystalIdx >= crystalMax) break;
+                const kx = termSp.x + termSp.perpX * (sideS * Math.max(0.85, termSp.halfW * (0.48 + mK * 0.16))) + termSp.dirX * (1.8 + mK * 0.8);
+                const kz = termSp.z + termSp.perpZ * (sideS * Math.max(0.85, termSp.halfW * (0.48 + mK * 0.16))) + termSp.dirZ * (1.8 + mK * 0.8);
+                cTint.setHex(cave.isLavaTube ? 0x9a3d14 : 0x366b66);
+                dummy.position.set(kx, termSp.floorY + 0.10, kz);
+                dummy.rotation.set((mK - 0.5) * 0.22, tYaw + mK * 1.3, sideS * 0.24);
+                const cSc = 0.46 + mK * 0.16;
+                dummy.scale.set(cSc, cSc * 1.15, cSc);
+                dummy.updateMatrix();
+                crystalMesh.setMatrixAt(crystalIdx, dummy.matrix);
+                crystalMesh.setColorAt(crystalIdx, cTint);
+                crystalIdx++;
+              }
+            });
+          }
 
           // Subterranean dark cold water pool (or cooling ember magma sump in Cave 2) + rimstone dam border
           if (br.hasPool) {
@@ -13160,8 +13845,8 @@
           const bedIdx = [];
           for (let r = 0; r <= bedRows; r++) {
             const tr = r / bedRows;
-            // Start right at the carved threshold lip (sBed = -0.004) so no rectangular block protrudes out over coastal water
-            const sBed = -0.004 + tr * 0.145;
+            // Start right at the carved threshold lip (sBed = -0.004) and extend deep past the entrance collar
+            const sBed = -0.004 + tr * 0.160;
             const ptBed = cave.getPoint(Math.max(0.0, sBed));
             const baseFlY = (sBed < 0.0) ? cave.baseY : ptBed.floorY;
             const distBedM = Math.max(0.0, sBed * cave.length);
@@ -13170,7 +13855,7 @@
               const tc = (c / bedCols) * 2.0 - 1.0;
               const isSideSkirt = (c === 0 || c === bedCols);
               const isEndSkirt = (r === bedRows);
-              const latW = tc * (ptBed.halfW * 0.96);
+              const latW = tc * (ptBed.halfW * (isSideSkirt ? 1.24 : 1.04));
               const microbmp = Math.sin(r * 1.3 + c * 1.9) * 0.025;
               const vx = (sBed < 0.0 ? cave.px + cave.dirX * (sBed * cave.length) : ptBed.x) + cave.perpX * latW;
               const vz = (sBed < 0.0 ? cave.pz + cave.dirZ * (sBed * cave.length) : ptBed.z) + cave.perpZ * latW;
@@ -13224,39 +13909,46 @@
           bedMesh.castShadow = true;
           caveRoot.add(bedMesh);
 
-          const collarRings = 12;
-          const collarArcSegs = 28;
+          const collarRings = 14;
+          const collarArcSegs = 32;
           const colPos = [];
           const colUVs = [];
           const colCrev = [];
           const colIdx = [];
           const pt0 = cave.getPoint(0.0);
-          const innerW = pt0.halfW + 0.20;
-          const innerH = pt0.ceilH + 0.15;
+          const innerW = pt0.halfW + 0.14;
+          const innerH = pt0.ceilH + 0.10;
           for (let cr = 0; cr <= collarRings; cr++) {
             const tCol = cr / collarRings;
             let distCol, radScale;
             if (cr <= 2) {
-              distCol = -0.35 + (cr / 2) * 0.65;
-              radScale = 1.65 - (cr / 2) * 0.62;
-            } else if (cr <= 9) {
-              distCol = 0.30 + ((cr - 2) / 7) * 3.85;
-              radScale = 1.03 + Math.sin(((cr - 2) / 7) * Math.PI) * 0.06;
+              distCol = -0.50 + (cr / 2) * 0.75;
+              radScale = 1.75 - (cr / 2) * 0.72;
+            } else if (cr <= 10) {
+              distCol = 0.25 + ((cr - 2) / 8) * 7.25;
+              radScale = 1.03 + Math.sin(((cr - 2) / 8) * Math.PI) * 0.05;
             } else {
-              distCol = 4.15 - ((cr - 9) / 3) * 0.40;
-              radScale = 1.03 + ((cr - 9) / 3) * 0.52;
+              distCol = 7.50 - ((cr - 10) / 4) * 0.65;
+              radScale = 1.03 + ((cr - 10) / 4) * 0.58;
             }
+            const ptCol = cave.getPoint(Math.max(0.0, Math.min(1.0, distCol / cave.length)));
+            const colFloorY = distCol < 0.0 ? cave.baseY : ptCol.floorY;
+            const colCx = distCol < 0.0 ? (pt0.x + cave.dirX * distCol) : ptCol.x;
+            const colCz = distCol < 0.0 ? (pt0.z + cave.dirZ * distCol) : ptCol.z;
             for (let ca = 0; ca <= collarArcSegs; ca++) {
               const uCol = ca / collarArcSegs;
-              const ang = Math.PI * (0.02 + uCol * 0.96);
+              // Span -0.10*PI .. +1.10*PI so both entrance jamb walls tuck cleanly below the threshold stone bed
+              const ang = Math.PI * (-0.10 + uCol * 1.20);
               const cosA = Math.cos(ang), sinA = Math.sin(ang);
-              const strataStep = Math.sin(sinA * innerH * 2.8 + cr * 0.7) * 0.08;
-              const crag = 1.0 + (fbm2(cave.px * 0.22 + cosA * 2.4 + cr * 0.4, cave.pz * 0.22 + sinA * 2.4, 2) - 0.45) * 0.14 + strataStep;
-              const vx = cave.px + cave.dirX * distCol + cave.perpX * (cosA * innerW * radScale * crag);
-              const vz = cave.pz + cave.dirZ * distCol + cave.perpZ * (cosA * innerW * radScale * crag);
-              const vy = cave.baseY + sinA * innerH * radScale * crag;
+              const strataStep = Math.sin(Math.max(0.0, sinA) * innerH * 2.8 + cr * 0.7) * 0.07;
+              const crag = 1.0 + (fbm2(cave.px * 0.22 + cosA * 2.4 + cr * 0.4, cave.pz * 0.22 + sinA * 2.4, 2) - 0.45) * 0.12 + strataStep;
+              const vx = colCx + cave.perpX * (cosA * innerW * radScale * crag);
+              const vz = colCz + cave.perpZ * (cosA * innerW * radScale * crag);
+              const vy = sinA >= 0.0
+                ? (colFloorY + Math.pow(sinA, 0.76) * innerH * radScale * crag)
+                : (colFloorY + sinA * 2.2 * radScale);
               colPos.push(vx, vy, vz);
-              colUVs.push(uCol * 4.5, tCol * 2.8);
+              colUVs.push(uCol * 4.5, tCol * 3.2);
               colCrev.push(Math.max(0.0, 0.5 - crag) * 1.4, Math.max(0.0, crag - 0.95) * 1.5, sinA > 0.65 ? 0.55 : 0.15);
             }
           }
@@ -13295,9 +13987,13 @@
             // Cantilever the upper cliff-brow lintel forward over the portal threshold for a rugged rock-shelter overhang
             const browCantilever = isBrowCrown ? (-0.65 * Math.sin(archAng)) : 0.0;
             const depthOff = (ring === 0 ? 0.65 : 2.25) + ((a % 2) * 0.45) + browCantilever;
-            const bx = cave.px + cave.perpX * (Math.cos(archAng) * radW) + cave.dirX * depthOff;
-            const bz = cave.pz + cave.perpZ * (Math.cos(archAng) * radW) + cave.dirZ * depthOff;
-            const by = cave.baseY + Math.sin(archAng) * radH;
+            const ptB = cave.getPoint(Math.max(0.0, depthOff / cave.length));
+            const anchorX = depthOff >= 0.0 ? ptB.x : (ptArch0.x + cave.dirX * depthOff);
+            const anchorZ = depthOff >= 0.0 ? ptB.z : (ptArch0.z + cave.dirZ * depthOff);
+            const anchorY = depthOff >= 0.0 ? ptB.floorY : cave.baseY;
+            const bx = anchorX + cave.perpX * (Math.cos(archAng) * (radW + 0.45));
+            const bz = anchorZ + cave.perpZ * (Math.cos(archAng) * (radW + 0.45));
+            const by = anchorY + Math.sin(archAng) * radH;
             const bScale = (ring === 0 ? 1.35 : 1.55) + Math.sin(tArch * Math.PI) * 0.28;
             const archBoulder = createGraniteBoulder(bScale, cIndex * 5 + a);
             archBoulder.position.set(bx, by, bz);
@@ -13311,11 +14007,12 @@
 
         [-1, 1].forEach(sideSign => {
           for (let w = 0; w < 4; w++) {
-            const lat = sideSign * (ptArch0.halfW + 2.35 + w * 1.18);
+            const lat = sideSign * (ptArch0.halfW + 2.65 + w * 1.18);
             const fwd = 0.25 + w * 0.85;
-            const wx = cave.px + cave.perpX * lat + cave.dirX * fwd;
-            const wz = cave.pz + cave.perpZ * lat + cave.dirZ * fwd;
-            const wy = cave.baseY + 0.45 + w * 0.78;
+            const ptW = cave.getPoint(Math.max(0.0, fwd / cave.length));
+            const wx = ptW.x + cave.perpX * lat;
+            const wz = ptW.z + cave.perpZ * lat;
+            const wy = ptW.floorY + 0.45 + w * 0.78;
             const wingRock = createGraniteBoulder(2.05 - w * 0.18, cIndex * 3 + w);
             wingRock.position.set(wx, wy, wz);
             wingRock.scale.set(1.30, 1.00, 1.45);
@@ -16652,16 +17349,74 @@
         if (caveNav.isSqueeze || headClearance < 2.65) {
           targetEyeH = Math.min(1.88, Math.max(1.05, headClearance - 0.36));
         }
-        // Keep player inside the sculpted rock cave walls when underground (main spine s > 0.020 or inside a branch)
-        if (caveNav.s > 0.020 || caveNav.branch) {
-          const maxWalkLat = Math.max(0.42, caveNav.halfW - 0.45);
-          if (!caveNav.inPortalMouth && Math.abs(caveNav.lateral) > maxWalkLat) {
-            const clampedLat = Math.sign(caveNav.lateral) * maxWalkLat;
-            const axOff = caveNav.axialOff || 0.0;
-            player.pos.x = caveNav.cx + caveNav.dirX * axOff + caveNav.perpX * clampedLat;
-            player.pos.z = caveNav.cz + caveNav.dirZ * axOff + caveNav.perpZ * clampedLat;
+        // Rock-aware sculpted wall & curved-ceiling containment from entrance (s >= 0.0) to dead-end domes
+        // Uses exact evalCaveSafeEnvelope() with gentle inward pushback along sloped rock shoulders and single-side portal unlock
+        if (caveNav.s >= 0.0 || caveNav.branch) {
+          const effEyeY = Math.max(effectiveGroundY, player.pos.y) + targetEyeH;
+          const env = evalCaveSafeEnvelope(caveNav, effEyeY, 0.44);
+          let lat = caveNav.lateral;
+          let axOff = caveNav.axialOff || 0.0;
+          let cxUse = caveNav.cx, czUse = caveNav.cz;
+          let didAdjust = false;
+
+          // 1. Dead-end dome stop: prevent player head from penetrating tapered closed rock domes
+          if (!caveNav.branch && caveNav.isDeadEnd && caveNav.s > (caveNav.maxS || 0.935)) {
+            const stopPt = caveNav.cave.getPoint(caveNav.maxS || 0.935);
+            cxUse = stopPt.x;
+            czUse = stopPt.z;
+            axOff = Math.min(0.0, axOff);
+            didAdjust = true;
+          } else if (caveNav.branch && caveNav.isDeadEnd && caveNav.branchT > (caveNav.maxBranchT || 0.910)) {
+            const brSamp = caveNav.branch.samples;
+            const stopIdx = Math.min(brSamp.length - 1, Math.floor((brSamp.length - 1) * (caveNav.maxBranchT || 0.910)));
+            const stopSp = brSamp[stopIdx];
+            cxUse = stopSp.x;
+            czUse = stopSp.z;
+            axOff = Math.min(0.0, axOff);
+            didAdjust = true;
           }
-          const maxPlayerY = caveNav.ceilY - targetEyeH - 0.25;
+
+          // 2. Gentle inward pushback cushion (0.36m) + hard rock-envelope clamp strictly on non-portal walls
+          const cushion = 0.36;
+          if (!caveNav.openPortalRight && lat > env.maxLat - cushion) {
+            if (lat > env.maxLat) {
+              lat = env.maxLat;
+              didAdjust = true;
+            } else {
+              const penT = (lat - (env.maxLat - cushion)) / cushion;
+              lat -= penT * Math.min(0.18, 2.2 * dt);
+              didAdjust = true;
+            }
+            const velOut = player.vel.x * caveNav.perpX + player.vel.z * caveNav.perpZ;
+            if (velOut > 0) {
+              player.vel.x -= caveNav.perpX * velOut;
+              player.vel.z -= caveNav.perpZ * velOut;
+            }
+          }
+          if (!caveNav.openPortalLeft && lat < env.minLat + cushion) {
+            if (lat < env.minLat) {
+              lat = env.minLat;
+              didAdjust = true;
+            } else {
+              const penT = ((env.minLat + cushion) - lat) / cushion;
+              lat += penT * Math.min(0.18, 2.2 * dt);
+              didAdjust = true;
+            }
+            const velOut = -(player.vel.x * caveNav.perpX + player.vel.z * caveNav.perpZ);
+            if (velOut > 0) {
+              player.vel.x += caveNav.perpX * velOut;
+              player.vel.z += caveNav.perpZ * velOut;
+            }
+          }
+
+          if (didAdjust) {
+            player.pos.x = cxUse + caveNav.dirX * axOff + caveNav.perpX * lat;
+            player.pos.z = czUse + caveNav.dirZ * axOff + caveNav.perpZ * lat;
+          }
+
+          // 3. Curved arch-aware ceiling clamp (never lets player jump/stand into sloped rock ceiling)
+          const localCeilY = Math.min(caveNav.ceilY, env.ceilAtLat);
+          const maxPlayerY = localCeilY - targetEyeH - 0.24;
           if (player.pos.y > maxPlayerY) {
             player.pos.y = maxPlayerY;
             if (player.vel.y > 0) player.vel.y = 0;
