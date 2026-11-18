@@ -2493,12 +2493,12 @@
 
     // 28 Archipelago Islands: 5 Close Starter Islets + 1 Swim-Safe Sheltered Cay + 22 Outer Exploration Islands (4 Deep-Trench Raft Strongholds)
     const archipelagoIslets = [
-      // Close Starter Ring (k = 0..4 — pre-populated at boot)
-      { x: -52,  z: -120, r: 42, h: 15, name: "Sunken Ruins Atoll", arc: "inner_north" },
-      { x:  68,  z: -144, r: 28, h: 12.5, isBasalt: true, name: "Caldera Cinder Cay", arc: "inner_north" },
-      { x: -12,  z: -198, r: 54, h: 18, name: "Outer Sentinel Island", arc: "inner_north" },
-      { x: 118,  z: -98,  r: 44, h: 22, name: "Obsidian Spire Islet", arc: "inner_north" },
-      { x: -102, z: -142, r: 58, h: 16, isBamboo: true, name: "Emerald Bamboo & Mangrove Island", arc: "inner_north" },
+      // Close Starter Ring (k = 0..4 — pre-populated at boot). Forms differ on purpose.
+      { x: -52,  z: -120, r: 36, h: 9,  form: 'crescent', axis: 2.5, name: "Sunken Ruins Atoll", arc: "inner_north" },
+      { x:  68,  z: -144, r: 13, h: 26, form: 'stack', isBasalt: true, treeCount: 4, name: "Caldera Cinder Cay", arc: "inner_north" },
+      { x: -8,   z: -268, r: 84, h: 13, form: 'shield', name: "Outer Sentinel Island", arc: "inner_north" },
+      { x: 118,  z: -98,  r: 22, h: 34, form: 'ridge', axis: 0.15, elong: 1.45, name: "Obsidian Spire Islet", arc: "inner_north" },
+      { x: -102, z: -142, r: 44, h: 7,  form: 'spit', axis: -0.7, elong: 1.9, pinch: 0.42, isBamboo: true, name: "Emerald Bamboo & Mangrove Island", arc: "inner_north" },
 
       // Nearby Swim-Safe Coastal Cay (k = 5 — 52m across shallow 1.2–1.7m reef shelf, zero shark threat)
       { x: -342, z: 224,  r: 24, h: 7.2, isSwimSafe: true, sharkSafe: true, treeCount: 14, name: "Sheltered Reef Cay", arc: "swim_cay", shoreMat: true },
@@ -2506,22 +2506,22 @@
       // NW Basalt Arc (k = 6..10)
       { x: -380, z: -265, r: 46, h: 17, isBasalt: true, treeCount: 22, name: "Driftwood Basalt Atoll", arc: "nw_Basalt" },
       { x: -495, z: -410, r: 52, h: 24, isBasalt: true, treeCount: 26, name: "Basalt Arch Isle", arc: "nw_Basalt", part: "keel" },
-      { x: -640, z: -235, r: 42, h: 15, treeCount: 20, name: "Sea-Stack Shoal", arc: "nw_Basalt" },
+      { x: -640, z: -235, r: 14, h: 22, form: 'stack', treeCount: 3, name: "Sea-Stack Shoal", arc: "nw_Basalt" },
       { x: -610, z: -585, r: 56, h: 28, isBasalt: true, treeCount: 28, name: "Stormwatch Crag", arc: "nw_Basalt" },
       { x: -797, z: -814, r: 68, h: 36, isBasalt: true, isRaftOnly: true, sharkGuarded: true, treeCount: 34, name: "Northwest Obsidian Stronghold", arc: "nw_Basalt" },
 
       // NE Volcanic Arc (k = 11..16)
       { x: 395,  z: -310, r: 44, h: 19, isVolcano: false, isBasalt: true, treeCount: 20, name: "Pumice Spur Cay", arc: "ne_Volcanic" },
-      { x: 540,  z: -420, r: 55, h: 31, isVolcano: true, treeCount: 22, name: "Cinder Cone Islet", arc: "ne_Volcanic", part: "brace" },
-      { x: 660,  z: -245, r: 46, h: 20, treeCount: 21, name: "Sulfur Breeze Reef", arc: "ne_Volcanic" },
+      { x: 540,  z: -420, r: 40, h: 38, isVolcano: true, treeCount: 16, name: "Cinder Cone Islet", arc: "ne_Volcanic", part: "brace" },
+      { x: 660,  z: -245, r: 58, h: 5, form: 'spit', axis: 0.25, elong: 2.1, pinch: 0.34, treeCount: 8, name: "Sulfur Breeze Reef", arc: "ne_Volcanic" },
       { x: 480,  z: -620, r: 48, h: 23, isBasalt: true, treeCount: 22, name: "Tephra Ring Atoll", arc: "ne_Volcanic" },
-      { x: 695,  z: -560, r: 52, h: 26, isBasalt: true, treeCount: 24, name: "Basalt Finger Ridge", arc: "ne_Volcanic" },
+      { x: 695,  z: -560, r: 36, h: 32, form: 'ridge', axis: 0.55, elong: 1.7, isBasalt: true, treeCount: 14, name: "Basalt Finger Ridge", arc: "ne_Volcanic" },
       { x: 844,  z: -791, r: 70, h: 40, isVolcano: true, isRaftOnly: true, sharkGuarded: true, treeCount: 28, name: "Magma Trench Bastion", arc: "ne_Volcanic" },
 
       // SE Coral Arc (k = 17..22)
       { x: 508,  z: 295,  r: 45, h: 14, isCoral: true, treeCount: 24, name: "Coral Fan Cay", arc: "se_Coral", shoreMat: true },
-      { x: 590,  z: 430,  r: 50, h: 18, isCoral: true, treeCount: 26, name: "Pearlshell Atoll", arc: "se_Coral", part: "skin" },
-      { x: 350,  z: 495,  r: 44, h: 16, isCoral: true, treeCount: 22, name: "Lagoon Spit Key", arc: "se_Coral" },
+      { x: 590,  z: 430,  r: 56, h: 12, form: 'crescent', axis: 2.1, isCoral: true, treeCount: 18, name: "Pearlshell Atoll", arc: "se_Coral", part: "skin" },
+      { x: 350,  z: 495,  r: 70, h: 6, form: 'spit', axis: 1.15, elong: 2.2, pinch: 0.32, isCoral: true, treeCount: 10, name: "Lagoon Spit Key", arc: "se_Coral" },
       { x: 740,  z: 290,  r: 52, h: 21, isCoral: true, treeCount: 28, name: "Tradewind Terrace Isle", arc: "se_Coral" },
       { x: 560,  z: 710,  r: 56, h: 24, isCoral: true, treeCount: 28, name: "Sea-Turtle Barrier", arc: "se_Coral" },
       { x: 844,  z: 752,  r: 68, h: 32, isCoral: true, isRaftOnly: true, sharkGuarded: true, treeCount: 36, name: "Deep Coral Fortress", arc: "se_Coral" },
@@ -2531,7 +2531,9 @@
       { x: -330, z: 540,  r: 44, h: 15, isBamboo: true, treeCount: 24, name: "Fern Hollow Cay", arc: "sw_Kelp" },
       { x: -640, z: 355,  r: 50, h: 20, treeCount: 26, name: "Misty Barrier Island", arc: "sw_Kelp" },
       { x: -575, z: 620,  r: 54, h: 22, isBamboo: true, treeCount: 28, name: "Sunfish Sanctuary Reef", arc: "sw_Kelp" },
-      { x: -825, z: 760,  r: 66, h: 30, isBasalt: true, isRaftOnly: true, sharkGuarded: true, treeCount: 32, name: "Abyssal Outrider Reef", arc: "sw_Kelp" }
+      { x: -825, z: 760,  r: 66, h: 30, isBasalt: true, isRaftOnly: true, sharkGuarded: true, treeCount: 32, name: "Abyssal Outrider Reef", arc: "sw_Kelp" },
+      { x: -608, z: -208, r: 9,  h: 16, form: 'stack', treeCount: 2, name: "Needle Stack", arc: "nw_Basalt" },
+      { x: -676, z: -262, r: 8,  h: 12, form: 'stack', treeCount: 1, name: "Outer Needle", arc: "nw_Basalt" }
     ];
     window.archipelagoIslets = archipelagoIslets;
 
@@ -3613,19 +3615,48 @@
           const idist = Math.hypot(dx, dz);
           if (idist < maxReach) {
             const ang = Math.atan2(dz, dx);
+            const form = isl.form || 'dome';
+            const axis = isl.axis || 0.4;
+            let formMul = 1.0;
+            if (form === 'crescent') {
+              const open = Math.cos(ang - axis);
+              formMul = open > 0.15 ? (1.2 - open * 0.92) : 1.16;
+            } else if (form === 'ridge') {
+              formMul = 0.56 + Math.abs(Math.cos(ang - axis)) * (isl.elong || 1.4);
+            } else if (form === 'spit') {
+              formMul = (isl.pinch || 0.36) + Math.pow(Math.abs(Math.cos(ang - axis)), 0.55) * (isl.elong || 1.85);
+            } else if (form === 'stack') {
+              formMul = 0.76 + Math.max(0.0, Math.sin(ang * 3.0 + k)) * 0.14;
+            } else if (form === 'shield') {
+              formMul = 1.06 + Math.sin(ang * 2.0 + k * 0.7) * 0.1;
+            }
             const coveHarmonic = Math.sin(ang * 3.0 + k * 2.1) * 0.11 + Math.cos(ang * 5.0 - k * 1.7) * 0.06;
-            const shapeWarp = 1.0 + fbm2(Math.cos(ang) * 1.45 + k * 7.3, Math.sin(ang) * 1.45 + k * 4.1, 2) * 0.28 + coveHarmonic;
-            const effRadius = isl.r * 1.34 * Math.max(0.62, shapeWarp);
+            const shapeWarp = formMul * (1.0 + fbm2(Math.cos(ang) * 1.45 + k * 7.3, Math.sin(ang) * 1.45 + k * 4.1, 2) * 0.22 + coveHarmonic);
+            const effRadius = isl.r * 1.34 * Math.max(0.42, shapeWarp);
             const subRadius = effRadius * 1.48;
             if (idist < effRadius) {
               const norm = 1.0 - idist / effRadius;
               // Smooth sandy littoral shelf (norm < 0.22) transitioning into terraced headlands & interior ridges
               const terraceStep = Math.sin(norm * Math.PI * 3.5 + k * 1.3) * 0.65 * smoothstep(0.18, 0.75, norm);
               const gullyCut = Math.pow(Math.max(0.0, Math.sin(ang * 4.0 + norm * 2.5 + k * 3.7)), 3.0) * 1.35 * smoothstep(0.15, 0.70, norm);
-              let islH = -2.2 + Math.pow(norm, 1.18) * (isl.h + 2.6) + terraceStep - gullyCut;
+              let risePow = 1.18;
+              if (form === 'stack') risePow = 0.5;
+              else if (form === 'shield') risePow = 1.6;
+              else if (form === 'spit') risePow = 1.75;
+              let islH = -2.2 + Math.pow(norm, risePow) * (isl.h + 2.6) + terraceStep - gullyCut;
               islH += fbm2(x * 0.028 + k * 5.0, z * 0.028, 3) * norm * 2.65
                     + ridged2(x * 0.062 + k * 3.1, z * 0.062, 2) * norm * 1.15
                     + fbm2(x * 0.11 - k * 2.3, z * 0.11 + k * 1.9, 2) * smoothstep(0.08, 0.45, norm) * 0.48;
+              if (form === 'crescent') {
+                const lx = Math.cos(axis) * isl.r * 0.4;
+                const lz = Math.sin(axis) * isl.r * 0.4;
+                const ld = Math.hypot(dx - lx, dz - lz);
+                const lagoonR = isl.r * 0.42;
+                if (ld < lagoonR) {
+                  const lt = ld / lagoonR;
+                  islH = Math.min(islH, -1.5 + lt * lt * 3.4);
+                }
+              }
               if (isl.isVolcano && norm > 0.70) {
                 const craterT = smoothstep(0.70, 1.0, norm);
                 islH -= craterT * 8.5;
