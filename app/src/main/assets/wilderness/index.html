@@ -3004,6 +3004,28 @@
       return -4.4;
     }
 
+    // Karst drains toward the valley and sinks under high ground. A lava tube keeps a thin crust and follows the slope.
+    function passageFloor(cave, x, z, s) {
+      const sC = Math.max(0, Math.min(1, s));
+      const surf = getTerrainHeight(x, z, true);
+      const mouth = Math.min(1, sC / 0.07);
+      let floorY;
+      if (cave.isLavaTube) {
+        const skin = 4.6 + Math.sin(sC * Math.PI * 2.0) * 1.3 + Math.sin(sC * Math.PI) * 0.7;
+        floorY = surf - skin;
+      } else {
+        const cover = Math.max(0, surf - cave.baseY);
+        const depth = 3.6 + sC * 4.8 + Math.min(14, cover) * 0.62;
+        const loop = Math.sin(sC * Math.PI * 2.5) * 1.35 + Math.sin(sC * Math.PI * 5.0) * 0.45;
+        floorY = surf - depth + loop;
+        if (cave.hasCenote && sC > 0.68) {
+          floorY -= Math.sin(Math.min(1, (sC - 0.68) / 0.24) * Math.PI) * 2.4;
+        }
+      }
+      floorY = cave.baseY * (1 - mouth) + floorY * mouth;
+      return Math.min(floorY, surf - 3.1);
+    }
+
     // Multi-Level Branching Subterranean Cave Networks (~840m total passages across 3 karst & volcanic caverns)
     const CAVE_SYSTEMS = [
       {
@@ -3035,7 +3057,7 @@
           const cenoteDip = (this.hasCenote && sC > 0.68)
             ? Math.sin(Math.min(1.0, (sC - 0.68) / 0.24) * Math.PI) * 2.8
             : 0.0;
-          const floorY = this.baseY - sC * this.drop - cenoteDip;
+          const floorY = passageFloor(this, x, z, sC);
           const halfW = Math.max(1.4, (4.4 - throat + chamber1 * 5.0 + chamber2 * 6.8) * endCap);
           const ceilH = Math.max(2.1, (4.8 - throat * 0.9 + chamber1 * 4.5 + chamber2 * 6.0) * endCap);
           return {
@@ -3095,7 +3117,7 @@
           const chamber1 = Math.exp(-Math.pow((sC - 0.48) / 0.14, 2.0));
           const chamber2 = Math.exp(-Math.pow((sC - 0.85) / 0.14, 2.0));
           const endCap = sC > 0.94 ? Math.cos(((sC - 0.94) / 0.06) * Math.PI * 0.49) : 1.0;
-          const floorY = this.baseY - sC * this.drop + Math.sin(sC * Math.PI * 1.5) * 1.1;
+          const floorY = passageFloor(this, x, z, sC);
           const halfW = (4.3 + chamber1 * 4.6 + chamber2 * 5.6) * endCap;
           const ceilH = (4.7 + chamber1 * 4.2 + chamber2 * 5.0) * endCap;
           return {
@@ -3153,7 +3175,7 @@
           const z = this.pz + this.dirZ * distM + this.perpZ * w;
           const chamber1 = Math.exp(-Math.pow((sC - 0.56) / 0.16, 2.0));
           const endCap = sC > 0.93 ? Math.cos(((sC - 0.93) / 0.07) * Math.PI * 0.49) : 1.0;
-          const floorY = this.baseY - sC * this.drop + Math.sin(sC * Math.PI * 2.0) * 0.55;
+          const floorY = passageFloor(this, x, z, sC);
           const halfW = (4.2 + chamber1 * 5.2) * endCap;
           const ceilH = (4.6 + chamber1 * 4.8) * endCap;
           return {
@@ -3291,6 +3313,17 @@
               : 0.0;
             halfW += juncStart + juncEnd;
             ceilH += (juncStart + juncEnd) * 0.42;
+
+            const surfB = getTerrainHeight(x, z, true);
+            if (cv.isLavaTube) {
+              const skin = 4.8 - Math.min(2.2, sp.dropY || 0);
+              floorY = surfB - skin;
+            } else {
+              const want = 4.2 + t * 8.0 + Math.max(0, -(sp.dropY || 0)) * 0.85;
+              floorY = Math.min(floorY, surfB - want);
+            }
+            floorY = Math.min(floorY, surfB - 3.2);
+            if (floorY + ceilH > surfB - 1.6) floorY = surfB - 1.6 - ceilH;
 
             if (i > 0) {
               accumLen += Math.hypot(x - samples[i - 1].x, z - samples[i - 1].z);
@@ -3520,7 +3553,7 @@
       return 'grass';
     }
 
-    function getTerrainHeight(x, z) {
+    function getTerrainHeight(x, z, skipHood) {
       // Smooth low-frequency domain warp for natural flowing hills and coastlines
       const warpX = x + fbm2(x * 0.0055, z * 0.0055, 2) * 24.0;
       const warpZ = z + fbm2(x * 0.0055 + 31.7, z * 0.0055 - 19.3, 2) * 24.0;
@@ -4067,6 +4100,7 @@
       }
 
       // 5. Seamless Hillside Cave Entrance Threshold Aprons & Enclosing Mountain Overburden Hoods (All 3 Caves)
+      if (!skipHood) {
       for (let c = 0; c < CAVE_SYSTEMS.length; c++) {
         const cv = CAVE_SYSTEMS[c];
         const dx = x - cv.px;
@@ -4103,7 +4137,8 @@
             const hoodLat = 1.0 - smoothstep(pt.halfW + 1.6, maxHoodLat, effLat);
             const hoodLon = smoothstep(1.35, 4.4, distAlong) * (1.0 - smoothstep(cv.length - 4.0, cv.length + 14.0, distAlong));
             const hoodBlend = hoodLat * hoodLon;
-            const minHillY = pt.floorY + pt.ceilH + 7.4 + ridged2(x * 0.07, z * 0.07, 2) * 2.0;
+            const rockCover = cv.isLavaTube ? 2.6 : 6.2;
+            const minHillY = pt.floorY + pt.ceilH + rockCover + ridged2(x * 0.07, z * 0.07, 2) * 2.0;
             y = Math.max(y, y * (1.0 - hoodBlend) + Math.max(y, minHillY) * hoodBlend);
           }
         }
@@ -4133,6 +4168,7 @@
             y = Math.max(y, y * (1.0 - bHood) + Math.max(y, minBranchHill) * bHood);
           }
         }
+      }
       }
 
       return y;
@@ -11562,9 +11598,20 @@
             const isFloor = sinA < -0.15;
             const cragNoise = fbm2(cx * 0.24 + cosA * 2.1, cz * 0.24 + sinA * 2.1, 3);
             const rW = halfW * (1.0 + (isFloor ? 0.06 : (sClamped < 0.04 ? 0.05 : 0.19)) * (cragNoise - 0.42));
-            const rY = sinA >= 0.0
-              ? roofH * (1.0 + (sClamped < 0.04 ? 0.04 : 0.20) * (cragNoise - 0.42)) * sinA
-              : (isFloor ? -0.05 : sinA * 0.22);
+            // Karst is a keyhole: a round phreatic arch with a stream groove along one wall.
+            // A lava tube stays round, with a flat floor where the last flow drained.
+            let rY;
+            if (cave.isLavaTube) {
+              rY = sinA >= 0.0
+                ? roofH * (0.92 + (cragNoise - 0.42) * 0.1) * Math.pow(sinA, 0.82)
+                : sinA * roofH * 0.22;
+            } else {
+              const stream = sinA < -0.28 && Math.abs(cosA - 0.5) < 0.24;
+              const groove = stream ? (1 - Math.abs(cosA - 0.5) / 0.24) * Math.min(1.15, roofH * 0.22) : 0;
+              rY = sinA >= 0.0
+                ? roofH * (1.0 + (sClamped < 0.04 ? 0.04 : 0.14) * (cragNoise - 0.42)) * Math.pow(Math.max(0, sinA), 0.72)
+                : (isFloor ? -0.05 - groove : sinA * 0.26);
+            }
 
             const vx = cx + pt.perpX * (cosA * rW);
             const vz = cz + pt.perpZ * (cosA * rW);
@@ -11584,21 +11631,24 @@
               const sz = cz + pt.perpZ * sideOff;
               const hScale = Math.min(0.62 + ((i * 3 + k * 5) % 9) * 0.11, Math.max(0.45, (roofH - 2.65) * 0.45));
               const rScale = 0.48 + ((i * 5 + k * 3) % 7) * 0.08;
-              if (isStalactite) {
+              if (!cave.isLavaTube && isStalactite) {
                 const archRatio = Math.sqrt(Math.max(0.1, 1.0 - Math.pow(sideOff / Math.max(1.0, halfW), 2.0)));
                 const ceilY = floorY + roofH * archRatio;
                 dummy.position.set(sx, ceilY - 0.92 * hScale, sz);
                 dummy.rotation.set((k - 0.5) * 0.08, i * 0.7, Math.PI + (k - 0.5) * 0.08);
-              } else {
+                dummy.scale.set(rScale, hScale, rScale);
+                dummy.updateMatrix();
+                speleoMesh.setMatrixAt(speleoIdx++, dummy.matrix);
+              } else if (!cave.isLavaTube) {
                 const rimSide = (sideOff >= 0 ? 1 : -1) * Math.max(Math.min(halfW * 0.84, Math.max(2.3, halfW - 1.05)), Math.abs(sideOff));
                 const gx = cx + pt.perpX * rimSide;
                 const gz = cz + pt.perpZ * rimSide;
                 dummy.position.set(gx, floorY + 0.68 * hScale, gz);
                 dummy.rotation.set(0, i * 1.1, 0);
+                dummy.scale.set(rScale, hScale, rScale);
+                dummy.updateMatrix();
+                speleoMesh.setMatrixAt(speleoIdx++, dummy.matrix);
               }
-              dummy.scale.set(rScale, hScale, rScale);
-              dummy.updateMatrix();
-              speleoMesh.setMatrixAt(speleoIdx++, dummy.matrix);
             }
 
             // Subterranean Cavern Rocks tucked into the outer 72%..92% wall perimeter so the central walk corridor stays 100% unobstructed
