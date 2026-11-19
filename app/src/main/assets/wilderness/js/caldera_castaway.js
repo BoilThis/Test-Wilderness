@@ -1113,6 +1113,7 @@
   }
 
   // --- 5B. AAA PELICAN WATERPROOF AVIONICS SURVIVAL CRATES (Molded Ribs, Purge Valve, Heavy Latches & Beacon) ---
+  const storyCrates = [];
   function spawnStoryCrate(x, z, moduleKey, title, toastMsg, yOverride) {
     const ty = yOverride !== undefined ? yOverride : getTerrainHeight(x, z);
     const crateGroup = new THREE.Group();
@@ -1178,6 +1179,7 @@
 
     worldLandmarksGroup.add(crateGroup);
     registerInteractiveTarget(crateGroup);
+    storyCrates.push(crateGroup);
   }
 
   // --- 5C. RUINS ON THE LEE SHORE OF OUTER SENTINEL (-62, -268) ---
@@ -10684,6 +10686,7 @@
               <div class="cc-tool-slot" data-tool="dynamite" style="width:100%;"><span class="ico">🧨</span><span>Blast</span></div>
               <div class="cc-tool-slot" data-tool="build" style="width:100%;"><span class="ico">🔨</span><span>Build</span></div>
             </div>
+            <button class="cc-btn-secondary" id="cc-act-unlock-all" style="margin-top:10px;min-height:48px;background:rgba(255,193,7,0.16);border-color:rgba(255,213,79,0.55);color:#ffe082;">🎁 Unlock All Weapons, Boats &amp; Collectibles</button>
           </div>
 
           <div class="cc-pack-pane" id="pack-tab-craft">
@@ -10895,23 +10898,8 @@
       updateCastawayHUD();
     });
 
-    document.getElementById('cc-act-boat').addEventListener('click', () => {
-      const parts = campaign.boatParts;
-      const missing = ['keel', 'brace', 'skin', 'sail'].filter(k => !parts[k]);
-      if (missing.length) {
-        showToast('The keel is still short: ' + missing.join(', ') + '. One piece from each arc, not from a stronghold.');
-        return;
-      }
-      const dist = Math.hypot(player.pos.x - raftState.boatPos.x, player.pos.z - raftState.boatPos.z);
-      if (dist > 22) {
-        showToast('Bring the four pieces back to the keel on the home beach.');
-        return;
-      }
-      if (campaign.boatBuilt) {
-        showToast('The keeled boat is already built.');
-        return;
-      }
-      campaign.boatBuilt = true;
+    function buildKeeledBoatHull() {
+      if (raftState.boatMesh) return;
       const hull = new THREE.Group();
       // Carved keel spine + flared port/starboard carvel hull strakes + pointed prow stempost + ribs
       const keelSpine = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.36, 6.6), matTimberLog);
@@ -10993,6 +10981,120 @@
       scene.add(hull);
       raftState.boatMesh = hull;
       if (raftState.keel) raftState.keel.visible = false;
+    }
+
+    function unlockAllWeaponsBoatsAndCollectibles() {
+      // 1. Unlock all weapons (Bow, Crossbow, Pistol, Rifle; Hatchet, Spear, Rod, Torch, Flare, Dynamite, Build already equippable)
+      campaign.unlockedWeapons.bow = true;
+      campaign.unlockedWeapons.crossbow = true;
+      campaign.unlockedWeapons.pistol = true;
+      campaign.unlockedWeapons.rifle = true;
+
+      // 2. Grant generous stockpiles of all crafting materials, collectibles, ammo & rations (never decreasing existing higher counts)
+      const sandboxMin = {
+        timber: 60,
+        stone: 60,
+        bamboo: 40,
+        obsidian: 25,
+        fiber: 40,
+        hide: 20,
+        bone: 20,
+        sinew: 20,
+        feather: 30,
+        flint: 25,
+        fat: 15,
+        arrows: 40,
+        bolts: 40,
+        pistolAmmo: 30,
+        rifleAmmo: 30,
+        dynamite: 12,
+        flares: 12,
+        rawFish: 8,
+        rawMeat: 8,
+        cookedFood: 12,
+        purifiedWater: 10
+      };
+      Object.keys(sandboxMin).forEach(k => {
+        player.inventory[k] = Math.max(player.inventory[k] || 0, sandboxMin[k]);
+      });
+
+      // 3. Build both vessels (Outrigger Bamboo Raft & Keeled Sailboat) + mark all 4 boat salvage parts collected
+      campaign.raftBuilt = true;
+      if (raftState.mesh) raftState.mesh.visible = true;
+      if (raftState.poles) raftState.poles.visible = false;
+
+      campaign.boatParts.keel = true;
+      campaign.boatParts.brace = true;
+      campaign.boatParts.skin = true;
+      campaign.boatParts.sail = true;
+      if (window.archipelagoIslets) {
+        window.archipelagoIslets.forEach(isl => {
+          if (isl._marker) isl._marker.visible = false;
+        });
+      }
+      campaign.boatBuilt = true;
+      buildKeeledBoatHull();
+
+      // 4. Mark all 3 story Avionics Modules & all rare world weapon caches as collected
+      campaign.modulesFound.cockpitTransponder = true;
+      campaign.modulesFound.submergedBattery = true;
+      campaign.modulesFound.cavernRecorder = true;
+      storyCrates.forEach(crate => {
+        const u = crate.userData || {};
+        if (u.crateLight) {
+          u.crateLight.userData.disabled = true;
+          u.crateLight.intensity = 0;
+        }
+        if (crate.parent) crate.parent.remove(crate);
+        removeInteractiveTarget(crate);
+      });
+      rareWeaponCaches.forEach(cg => {
+        const u = cg.userData || {};
+        if (!u.opened) {
+          u.opened = true;
+          if (u.lid) {
+            u.lid.rotation.x = -0.75;
+            u.lid.position.y += 0.14;
+            u.lid.position.z -= 0.16;
+          }
+          if (u.glint) u.glint.visible = false;
+          removeInteractiveTarget(cg);
+        }
+      });
+
+      campaign.sandboxUnlocked = true;
+      AudioEngine.playChop();
+      updateCastawayHUD();
+      showToast('🎁 Unlocked all weapons, raft, keeled boat (Crash Cove), 3/3 avionics & full supplies!');
+    }
+    window.unlockAllWeaponsBoatsAndCollectibles = unlockAllWeaponsBoatsAndCollectibles;
+
+    const unlockPackBtn = document.getElementById('cc-act-unlock-all');
+    if (unlockPackBtn) {
+      unlockPackBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        unlockAllWeaponsBoatsAndCollectibles();
+      });
+    }
+
+    document.getElementById('cc-act-boat').addEventListener('click', () => {
+      const parts = campaign.boatParts;
+      const missing = ['keel', 'brace', 'skin', 'sail'].filter(k => !parts[k]);
+      if (missing.length) {
+        showToast('The keel is still short: ' + missing.join(', ') + '. One piece from each arc, not from a stronghold.');
+        return;
+      }
+      const dist = Math.hypot(player.pos.x - raftState.boatPos.x, player.pos.z - raftState.boatPos.z);
+      if (dist > 22) {
+        showToast('Bring the four pieces back to the keel on the home beach.');
+        return;
+      }
+      if (campaign.boatBuilt) {
+        showToast('The keeled boat is already built.');
+        return;
+      }
+      campaign.boatBuilt = true;
+      buildKeeledBoatHull();
       craftModal.style.display = 'none';
       showToast('⛵ Keeled boat finished. She is faster, and she is the only craft that crosses the trench.');
       updateCastawayHUD();
@@ -11432,6 +11534,33 @@
     if (slotPack) {
       const rations = player.inventory.cookedFood || 0;
       slotPack.innerHTML = `<span class="ico">🎒</span><span>${rations > 0 ? `Pack·${rations}` : 'Pack'}</span>`;
+    }
+    const allUnlocked = !!campaign.sandboxUnlocked || (
+      campaign.unlockedWeapons.bow &&
+      campaign.unlockedWeapons.crossbow &&
+      campaign.unlockedWeapons.pistol &&
+      campaign.unlockedWeapons.rifle &&
+      campaign.raftBuilt &&
+      campaign.boatBuilt &&
+      count >= 3
+    );
+    const dbgUnlockBtn = document.getElementById('btn-debug-unlock-all');
+    if (dbgUnlockBtn) {
+      dbgUnlockBtn.classList.toggle('active', allUnlocked);
+      dbgUnlockBtn.innerText = allUnlocked ? '✅ All Gear, Boats & Collectibles Unlocked' : '🎁 Unlock All Gear, Boats & Collectibles';
+    }
+    const worldUnlockBtn = document.getElementById('btn-world-unlock-all');
+    if (worldUnlockBtn) {
+      worldUnlockBtn.classList.toggle('active', allUnlocked);
+      worldUnlockBtn.innerText = allUnlocked ? '✅ All Weapons, Boats & Collectibles Unlocked' : '🎁 Unlock All Weapons, Boats & Collectibles';
+    }
+    const worldUnlockBadge = document.getElementById('unlock-all-badge');
+    if (worldUnlockBadge) {
+      worldUnlockBadge.innerText = allUnlocked ? 'All Unlocked' : 'Survival';
+    }
+    const packUnlockBtn = document.getElementById('cc-act-unlock-all');
+    if (packUnlockBtn) {
+      packUnlockBtn.innerText = allUnlocked ? '✅ All Unlocked (Tap to Top Up Supplies)' : '🎁 Unlock All Weapons, Boats & Collectibles';
     }
   }
 

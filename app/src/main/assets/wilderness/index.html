@@ -1523,6 +1523,15 @@
             <div class="wp-sub">Underwater kelp forest, sea-grass & coral</div>
           </button>
         </div>
+        <div class="control-row" style="margin-top:4px;margin-bottom:4px;">
+          <div class="control-label">
+            <span>🎁 Sandbox Access (All Weapons, Boats &amp; Collectibles)</span>
+            <span class="badge" id="unlock-all-badge">Survival</span>
+          </div>
+          <div class="pill-group">
+            <button class="pill-btn" id="btn-world-unlock-all">🎁 Unlock All Weapons, Boats &amp; Collectibles</button>
+          </div>
+        </div>
       </div>
 
       <!-- TAB 2: SKY & ATMOSPHERE -->
@@ -1618,6 +1627,7 @@
             <button class="pill-btn" id="btn-toggle-debug-hud">📈 Telemetry Overlay OFF</button>
             <button class="pill-btn" id="btn-debug-superspeed">🚀 Super Speed OFF</button>
             <button class="pill-btn" id="btn-debug-heal">❤️ Refill All Vitals</button>
+            <button class="pill-btn" id="btn-debug-unlock-all">🎁 Unlock All Gear, Boats &amp; Collectibles</button>
           </div>
         </div>
 
@@ -7858,33 +7868,40 @@
       }
 
       const bakeCanopyVertexAO = function(targetLeafGeo) {
-        if (targetLeafGeo && targetLeafGeo.attributes && targetLeafGeo.attributes.position && !targetLeafGeo.attributes.color) {
+        let crownCenter = new THREE.Vector3(0, 4.0, 0);
+        let crownRadius = 3.5;
+        if (targetLeafGeo && targetLeafGeo.attributes && targetLeafGeo.attributes.position) {
           targetLeafGeo.computeBoundingBox();
           const bb = targetLeafGeo.boundingBox;
           const cx = (bb.min.x + bb.max.x) * 0.5;
-          const cy = bb.min.y + (bb.max.y - bb.min.y) * 0.42;
+          const cy = bb.min.y + (bb.max.y - bb.min.y) * 0.44;
           const cz = (bb.min.z + bb.max.z) * 0.5;
           const maxR = Math.max(1.0, Math.hypot(bb.max.x - cx, bb.max.y - cy, bb.max.z - cz));
-          const posAttr = targetLeafGeo.attributes.position;
-          const colArr = new Float32Array(posAttr.count * 3);
-          for (let i = 0; i < posAttr.count; i++) {
-            const lx = posAttr.getX(i) - cx;
-            const ly = posAttr.getY(i) - cy;
-            const lz = posAttr.getZ(i) - cz;
-            const radialRatio = Math.min(1.0, Math.hypot(lx, ly, lz) / (maxR * 0.78));
-            const heightRatio = Math.max(0.0, Math.min(1.0, (posAttr.getY(i) - bb.min.y) / Math.max(1.0, bb.max.y - bb.min.y)));
-            // Richer 3D canopy shadow interior (0.68) -> vibrant sunlit outer crown tips (1.14)
-            const ao = 0.68 + 0.46 * (radialRatio * 0.60 + heightRatio * 0.40);
-            colArr[i * 3]     = ao * 1.02;
-            colArr[i * 3 + 1] = ao * 1.08;
-            colArr[i * 3 + 2] = ao * 0.94;
+          crownCenter.set(cx, cy, cz);
+          crownRadius = maxR;
+          if (!targetLeafGeo.attributes.color) {
+            const posAttr = targetLeafGeo.attributes.position;
+            const colArr = new Float32Array(posAttr.count * 3);
+            for (let i = 0; i < posAttr.count; i++) {
+              const lx = posAttr.getX(i) - cx;
+              const ly = posAttr.getY(i) - cy;
+              const lz = posAttr.getZ(i) - cz;
+              const radialRatio = Math.min(1.0, Math.hypot(lx, ly, lz) / (maxR * 0.78));
+              const heightRatio = Math.max(0.0, Math.min(1.0, (posAttr.getY(i) - bb.min.y) / Math.max(1.0, bb.max.y - bb.min.y)));
+              // Smooth spherical crown AO (0.72 deep core -> 1.02 sunlit crown tips) without over-bright clipping
+              const ao = 0.72 + 0.30 * (radialRatio * 0.60 + heightRatio * 0.40);
+              colArr[i * 3]     = ao * 1.00;
+              colArr[i * 3 + 1] = ao * 1.03;
+              colArr[i * 3 + 2] = ao * 0.96;
+            }
+            targetLeafGeo.setAttribute('color', new THREE.BufferAttribute(colArr, 3));
           }
-          targetLeafGeo.setAttribute('color', new THREE.BufferAttribute(colArr, 3));
         }
+        return { crownCenter, crownRadius };
       };
 
       // Bake 3D Spherical Canopy Ambient Occlusion into leafGeo vertex colors (0 FPS cost, lush 3D crown depth)
-      bakeCanopyVertexAO(leafGeo);
+      const lod0Bounds = bakeCanopyVertexAO(leafGeo);
       branchGeo.computeBoundingSphere();
       leafGeo.computeBoundingSphere();
 
@@ -7899,28 +7916,33 @@
       }
 
       // Create 3 shared tropical canopy tint material variants per preset with baked vertexColors AO & fast harmonic wind shader
-      const baseHex = (id === 'pine') ? 0x62ba5e : (id === 'aspen' ? 0x9cd652 : (id === 'bush' ? 0x6ebc48 : 0x74cd60));
+      const baseHex = (id === 'pine') ? 0x5eb258 : (id === 'aspen' ? 0x92cc4e : (id === 'bush' ? 0x67b344 : 0x6ac058));
       const hslOffsets = [
-        [-0.018,  0.04, -0.02],
-        [ 0.000,  0.03,  0.02],
-        [ 0.020,  0.00,  0.05]
+        [-0.016,  0.03, -0.02],
+        [ 0.000,  0.02,  0.01],
+        [ 0.018,  0.00,  0.03]
       ];
-      const applyFastLeafWindShader = function(mat) {
+      const applyFastLeafWindShader = function(mat, crownBounds) {
+        const cCenter = (crownBounds && crownBounds.crownCenter) ? crownBounds.crownCenter : new THREE.Vector3(0, 4.0, 0);
+        const cRadius = (crownBounds && crownBounds.crownRadius) ? crownBounds.crownRadius : 3.5;
         mat.onBeforeCompile = function(shader) {
           shader.uniforms.uTime = { value: 0 };
           shader.uniforms.uWindStrength = { value: new THREE.Vector3(0.45, 0, 0.45) };
           shader.uniforms.uWindFrequency = { value: 0.5 };
+          shader.uniforms.uCrownCenter = { value: cCenter.clone() };
+          shader.uniforms.uCrownRadius = { value: cRadius };
           shader.uniforms.uSunDir = window.atmUniforms.uSunDir;
           shader.uniforms.uMieColor = window.atmUniforms.uMieColor;
           shader.uniforms.uFogDensity = window.atmUniforms.uFogDensity;
           shader.uniforms.uCaveDark = window.atmUniforms.uCaveDark;
           shader.uniforms.uSunVis = window.atmUniforms.uSunVis;
           shader.uniforms.uFoliageTransColor = window.atmUniforms.uFoliageTransColor;
-          shader.vertexShader = 'uniform float uTime;\nuniform vec3 uWindStrength;\nuniform float uWindFrequency;\nvarying vec3 vLeafWPos;\nvarying vec3 vLeafWNorm;\nvarying float vCrownMask;\n' + shader.vertexShader;
-          // Blend leaf card normals upward toward the sky dome while retaining crisp sunlight-side shadow modeling
+          shader.vertexShader = 'uniform float uTime;\nuniform vec3 uWindStrength;\nuniform float uWindFrequency;\nuniform vec3 uCrownCenter;\nuniform float uCrownRadius;\nvarying vec3 vLeafWPos;\nvarying vec3 vLeafWNorm;\nvarying vec3 vCrownViewNorm;\nvarying float vCrownMask;\n' + shader.vertexShader;
+          // Compute smooth outward-and-upward 3D canopy normal to stop DoubleSide leaf-card backface inversion
           shader.vertexShader = shader.vertexShader.replace(
             '#include <defaultnormal_vertex>',
-            `objectNormal = normalize(mix(objectNormal, vec3(0.0, 1.0, 0.0), 0.48));
+            `vec3 crownObjNorm = normalize((position - uCrownCenter) + vec3(0.0001, uCrownRadius * 0.48 + 0.35, 0.0001));
+            objectNormal = normalize(mix(crownObjNorm, objectNormal, 0.22));
             #include <defaultnormal_vertex>`
           );
           shader.vertexShader = shader.vertexShader.replace(
@@ -7933,34 +7955,43 @@
               0.2 * sin(5.0 * uTime * uWindFrequency + 1.5 * windOffset)
             );
             mvPosition.xyz += windSway;
-            vec3 wLeafN = objectNormal;
+            vec3 wLeafN = crownObjNorm;
             #ifdef USE_INSTANCING
               mvPosition = instanceMatrix * mvPosition;
               wLeafN = (instanceMatrix * vec4(wLeafN, 0.0)).xyz;
             #endif
             #ifdef USE_COLOR
-              vCrownMask = clamp((color.g - 0.65) / 0.48, 0.18, 1.0);
+              vCrownMask = clamp((color.g - 0.72) / 0.32, 0.20, 1.0);
             #else
               vCrownMask = clamp(uv.y, 0.25, 1.0);
             #endif
-            vLeafWNorm = normalize((modelMatrix * vec4(wLeafN, 0.0)).xyz);
+            vec3 wCrownWorld = normalize((modelMatrix * vec4(wLeafN, 0.0)).xyz);
+            vLeafWNorm = wCrownWorld;
+            vCrownViewNorm = normalize((viewMatrix * vec4(wCrownWorld, 0.0)).xyz);
             vLeafWPos = (modelMatrix * mvPosition).xyz;
             mvPosition = modelViewMatrix * mvPosition;
             gl_Position = projectionMatrix * mvPosition;`
           );
-          shader.fragmentShader = 'uniform vec3 uSunDir;\nuniform vec3 uMieColor;\nuniform float uFogDensity;\nuniform float uCaveDark;\nuniform float uSunVis;\nuniform vec3 uFoliageTransColor;\nvarying vec3 vLeafWPos;\nvarying vec3 vLeafWNorm;\nvarying float vCrownMask;\n' + shader.fragmentShader;
+          shader.fragmentShader = 'uniform vec3 uSunDir;\nuniform vec3 uMieColor;\nuniform float uFogDensity;\nuniform float uCaveDark;\nuniform float uSunVis;\nuniform vec3 uFoliageTransColor;\nvarying vec3 vLeafWPos;\nvarying vec3 vLeafWNorm;\nvarying vec3 vCrownViewNorm;\nvarying float vCrownMask;\n' + shader.fragmentShader;
+          shader.fragmentShader = shader.fragmentShader.replace(
+            '#include <normal_fragment_begin>',
+            `#include <normal_fragment_begin>
+            // Keep smooth 3D canopy orientation regardless of DoubleSide gl_FrontFacing flip
+            normal = normalize(mix(normalize(vCrownViewNorm), normal, 0.14));
+            `
+          );
           shader.fragmentShader = shader.fragmentShader.replace(
             '#include <emissivemap_fragment>',
             `#include <emissivemap_fragment>
             {
               vec3 lViewDir = normalize(vLeafWPos - cameraPosition + vec3(0.0, 0.001, 0.0));
               vec3 lSunN = normalize(uSunDir);
-              // Forward solar subsurface scattering through backlit canopy foliage + cross-lit wrap fill
+              // Forward solar subsurface scattering through backlit canopy foliage + soft sky wrap fill
               float sunBehindLeaf = pow(clamp(dot(lViewDir, lSunN), 0.0, 1.0), 2.4);
               float skyLeafWrap = clamp(dot(normalize(vLeafWNorm), lSunN) * 0.45 + 0.55, 0.0, 1.0);
-              float outerCrown = clamp(vCrownMask, 0.18, 1.0);
-              float leafTrans = (sunBehindLeaf * 0.88 + skyLeafWrap * 0.20) * outerCrown * uSunVis * (1.0 - uCaveDark);
-              totalEmissiveRadiance += diffuseColor.rgb * uFoliageTransColor * leafTrans * 0.86;
+              float outerCrown = clamp(vCrownMask, 0.20, 1.0);
+              float leafTrans = (sunBehindLeaf * 0.68 + skyLeafWrap * 0.14) * outerCrown * uSunVis * (1.0 - uCaveDark);
+              totalEmissiveRadiance += diffuseColor.rgb * uFoliageTransColor * leafTrans * 0.62;
             }
             `
           );
@@ -7984,14 +8015,17 @@
       };
       const leafMats = hslOffsets.map(([dh, ds, dl], idx) => {
         const m = idx === 0 ? baseLeafMat : baseLeafMat.clone();
-        applyFastLeafWindShader(m);
+        applyFastLeafWindShader(m, lod0Bounds);
         m.vertexColors = true;
         const c = new THREE.Color(baseHex);
         c.offsetHSL(dh, ds, dl);
         if (m.color) m.color.copy(c);
+        // Replace harsh default MeshPhong grey specular glare (0x111111, shininess 30) with soft waxy leaf sheen
+        if (m.specular) m.specular.setHex(0x0a1406);
+        m.shininess = 4;
         if (m.emissive) {
-          m.emissive.setHex(0x0d1c09);
-          m.emissiveIntensity = 0.05;
+          m.emissive.setHex(0x14260c);
+          m.emissiveIntensity = 0.09;
         }
         m.needsUpdate = true;
         return m;
@@ -7999,6 +8033,7 @@
 
       let lod1BranchGeo = branchGeo;
       let lod1LeafGeo = leafGeo;
+      let lod1Bounds = lod0Bounds;
       if (id !== 'bush') {
         const lodTree = new ezTreeModule.Tree();
         lodTree.loadPreset(presetName);
@@ -8015,7 +8050,7 @@
         lodTree.generate();
         lod1BranchGeo = lodTree.branchesMesh.geometry;
         lod1LeafGeo = lodTree.leavesMesh.geometry;
-        bakeCanopyVertexAO(lod1LeafGeo);
+        lod1Bounds = bakeCanopyVertexAO(lod1LeafGeo);
         lod1BranchGeo.computeBoundingSphere();
         lod1LeafGeo.computeBoundingSphere();
       }
@@ -8024,14 +8059,16 @@
       const lod1LeafMats = hslOffsets.map(([dh, ds, dl]) => {
         const m = baseLeafMat.clone();
         m.name = 'leaves_lod1';
-        applyFastLeafWindShader(m);
+        applyFastLeafWindShader(m, lod1Bounds);
         m.vertexColors = true;
         const c = new THREE.Color(baseHex);
         c.offsetHSL(dh, ds, dl);
         if (m.color) m.color.copy(c);
+        if (m.specular) m.specular.setHex(0x0a1406);
+        m.shininess = 4;
         if (m.emissive) {
-          m.emissive.setHex(0x0d1c09);
-          m.emissiveIntensity = 0.05;
+          m.emissive.setHex(0x14260c);
+          m.emissiveIntensity = 0.09;
         }
         m.dithering = true;
         m.needsUpdate = true;
@@ -17171,6 +17208,19 @@
         showToast("❤️ All Survivor Vitals Refilled & +10 Timber/Stone Added!");
       });
     }
+
+    ['btn-debug-unlock-all', 'btn-world-unlock-all'].forEach(btnId => {
+      const unlockBtn = document.getElementById(btnId);
+      if (unlockBtn) {
+        addTapListener(unlockBtn, () => {
+          if (typeof window.unlockAllWeaponsBoatsAndCollectibles === 'function') {
+            window.unlockAllWeaponsBoatsAndCollectibles();
+          } else {
+            showToast("⏳ World still loading — try again in a moment.");
+          }
+        });
+      }
+    });
 
     const btnToggleUwFlora = document.getElementById('btn-toggle-uw-flora');
     if (btnToggleUwFlora) {
