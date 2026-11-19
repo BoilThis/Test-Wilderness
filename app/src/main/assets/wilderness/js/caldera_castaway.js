@@ -2402,19 +2402,38 @@
       bowl.position.y = 1.05;
       brazierGroup.add(bowl);
 
-      const emberCore = new THREE.Mesh(
-        new THREE.DodecahedronGeometry(0.46, 1),
-        new THREE.MeshStandardMaterial({ color: 0xff5722, emissive: 0xff3d00, emissiveIntensity: 0.45, roughness: 0.4 })
-      );
+      const brazierVfx = window.getCampfireVFXAssets ? window.getCampfireVFXAssets() : null;
+      const emberCoreMat = new THREE.MeshStandardMaterial({
+        map: brazierVfx ? brazierVfx.sharedCoalTex : null,
+        color: brazierVfx ? 0xffffff : 0x2c160c,
+        emissive: 0xff4500,
+        emissiveMap: brazierVfx ? brazierVfx.sharedCoalEmissiveTex : null,
+        emissiveIntensity: 0.22,
+        roughness: 0.88
+      });
+      const emberCore = new THREE.Mesh(new THREE.DodecahedronGeometry(0.46, 1), emberCoreMat);
       emberCore.scale.set(1.1, 0.55, 1.1);
       emberCore.position.y = 1.28;
       brazierGroup.add(emberCore);
 
-      const brazierFlame = new THREE.Mesh(
-        new THREE.ConeGeometry(0.42, 1.35, 7),
-        new THREE.MeshBasicMaterial({ color: 0xffab00 })
-      );
-      brazierFlame.position.y = 1.85;
+      let brazierFlame;
+      if (brazierVfx && brazierVfx.buildVolumetricFlameCluster) {
+        brazierFlame = brazierVfx.buildVolumetricFlameCluster({
+          width: 1.10,
+          height: 1.55,
+          wrapRadius: 0.24,
+          upMix: 0.10,
+          haloOpacity: 0.28,
+          isTorch: false
+        });
+        brazierFlame.position.y = 1.24;
+      } else {
+        brazierFlame = new THREE.Mesh(
+          new THREE.ConeGeometry(0.42, 1.35, 7),
+          new THREE.MeshBasicMaterial({ color: 0xffab00 })
+        );
+        brazierFlame.position.y = 1.85;
+      }
       brazierFlame.visible = false;
       brazierGroup.add(brazierFlame);
 
@@ -3525,78 +3544,68 @@
       g.add(rib);
     }
 
-    // 3. Incandescent Pitch-Soaked Burlap & Pine-Resin Coal Core (Emissive Fissures)
-    const emberCoreGeo = new THREE.DodecahedronGeometry(0.048, 2);
-    emberCoreGeo.scale(0.95, 1.32, 0.95);
+    // 3. Cracked Pitch-Soaked Burlap & Charred Pine-Resin Coal Core (Glow Inside Fissures Only)
+    const emberCoreGeo = new THREE.DodecahedronGeometry(0.041, 2);
+    emberCoreGeo.scale(0.92, 1.25, 0.92);
     const emberCoreMat = new THREE.MeshStandardMaterial({
-      color: 0x1a0c06,
-      emissive: 0xff4500,
-      emissiveIntensity: 2.35,
+      map: (vfx && vfx.sharedCoalTex) ? vfx.sharedCoalTex : null,
+      color: (vfx && vfx.sharedCoalTex) ? 0xffffff : 0x1a0c06,
+      emissive: 0xff4e0c,
+      emissiveMap: (vfx && vfx.sharedCoalEmissiveTex) ? vfx.sharedCoalEmissiveTex : null,
+      emissiveIntensity: 1.85,
       normalMap: aaaSurfacePBRAssets.thatchNormTex,
-      normalScale: new THREE.Vector2(1.2, 1.2),
-      roughness: 0.78
+      normalScale: new THREE.Vector2(1.0, 1.0),
+      roughness: 0.86
     });
     const emberCore = new THREE.Mesh(emberCoreGeo, emberCoreMat);
     emberCore.position.y = 0.33;
     g.add(emberCore);
 
-    // 4. Multi-Ribbon 3D Volumetric FBM Blackbody Shader Flames (Identical to Campfire Shader!)
-    const flameGroup = new THREE.Group();
-    flameGroup.position.y = 0.34;
-    if (vfx && vfx.sharedFlameMat) {
-      const numTongues = 5;
-      for (let t = 0; t < numTongues; t++) {
-        const w = 0.145 - (t % 2) * 0.025;
-        const h = 0.32 + (t % 3) * 0.045;
-        const fGeo = new THREE.PlaneGeometry(w, h, 8, 16);
-        fGeo.translate(0, h * 0.45, 0);
-        const fPos = fGeo.attributes.position;
-        const seeds = new Float32Array(fPos.count);
-        const seedVal = t * 1.47 + 0.6;
-        for (let k = 0; k < fPos.count; k++) {
-          const vx = fPos.getX(k), vy = fPos.getY(k);
-          const arch = Math.cos((vx / (w * 0.5)) * Math.PI * 0.5) * 0.024 * (1.0 - vy / h);
-          fPos.setZ(k, arch);
-          seeds[k] = seedVal;
-        }
-        fGeo.setAttribute('aFlameSeed', new THREE.BufferAttribute(seeds, 1));
-        const fMesh = new THREE.Mesh(fGeo, vfx.sharedFlameMat);
-        fMesh.rotation.y = (t / numTongues) * Math.PI + (t * 0.35);
-        flameGroup.add(fMesh);
-      }
+    // 4. Cylindrical-Billboard Volumetric FBM Torch Flame Cluster (Buoyant Sky-Up Curve & Inertia Drag)
+    let flameGroup;
+    if (vfx && vfx.buildVolumetricFlameCluster) {
+      flameGroup = vfx.buildVolumetricFlameCluster({
+        width: 0.165,
+        height: 0.295,
+        wrapRadius: 0.036,
+        upMix: 0.52,
+        haloOpacity: 0.20,
+        isTorch: true
+      });
+      flameGroup.position.y = 0.285;
     } else {
+      flameGroup = new THREE.Group();
+      flameGroup.position.y = 0.32;
       const fbMat = new THREE.MeshBasicMaterial({
-        color: 0xff7a1a, transparent: true, opacity: 0.45,
+        color: 0xff7a1a, transparent: true, opacity: 0.55,
         blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
       });
-      for (let t = 0; t < 2; t++) {
-        const fbRibbon = new THREE.Mesh(new THREE.PlaneGeometry(0.11, 0.24, 2, 4), fbMat);
-        fbRibbon.position.y = 0.11;
-        fbRibbon.rotation.y = (t * Math.PI) * 0.5;
-        flameGroup.add(fbRibbon);
-      }
+      const fbRibbon = new THREE.Mesh(new THREE.PlaneGeometry(0.11, 0.24, 2, 4), fbMat);
+      fbRibbon.position.y = 0.11;
+      flameGroup.add(fbRibbon);
     }
     g.add(flameGroup);
     g.userData.flame = flameGroup;
     g.userData.emberCore = emberCore;
+    g.userData.vfx = vfx;
 
-    // 5. Buoyant Helical Rising Ember Sparks (20 Glowing Local Particles) & 5 Drifting Smoke Wisps
+    // 5. Crisp Rising Ember Sparks (20 Local Particles) & Subtle Warm Smoke Wisps
     if (vfx && vfx.sharedSparkTex && vfx.sharedSmokeTex) {
       const sparkCount = 20;
       const sparkGeo = new THREE.BufferGeometry();
       const sparkPositions = new Float32Array(sparkCount * 3);
       const sparkSeeds = new Float32Array(sparkCount);
       for (let s = 0; s < sparkCount; s++) {
-        sparkSeeds[s] = Math.random();
-        sparkPositions[s * 3 + 1] = 0.36 + sparkSeeds[s] * 0.48;
+        sparkSeeds[s] = (s / sparkCount) + Math.random() * 0.08;
+        sparkPositions[s * 3 + 1] = 0.35 + sparkSeeds[s] * 0.44;
       }
       sparkGeo.setAttribute('position', new THREE.BufferAttribute(sparkPositions, 3));
       const sparkMat = new THREE.PointsMaterial({
         map: vfx.sharedSparkTex,
-        color: 0xffab40,
-        size: 0.048,
+        color: 0xffb347,
+        size: 0.036,
         transparent: true,
-        opacity: 0.95,
+        opacity: 0.92,
         blending: THREE.AdditiveBlending,
         depthWrite: false
       });
@@ -3609,9 +3618,9 @@
       for (let sm = 0; sm < 5; sm++) {
         const smMat = new THREE.SpriteMaterial({
           map: vfx.sharedSmokeTex,
-          color: 0x9098a0,
+          color: 0x7c7874,
           transparent: true,
-          opacity: 0.24,
+          opacity: 0.10,
           depthWrite: false
         });
         const sprite = new THREE.Sprite(smMat);
@@ -9468,7 +9477,7 @@
         if (!u.lit) {
           u.lit = true;
           if (u.flame) u.flame.visible = true;
-          if (u.ember && u.ember.material) u.ember.material.emissiveIntensity = 1.35;
+          if (u.ember && u.ember.material) u.ember.material.emissiveIntensity = 1.85;
           player.inventory.obsidian = (player.inventory.obsidian || 0) + 3;
           player.inventory.flares = (player.inventory.flares || 0) + 2;
           player.vitals.temp = 37.4;
@@ -11499,6 +11508,8 @@
   // 13. ZERO-FIDELITY-LOSS 60 FPS FRAME UPDATE LOOP + SPATIAL CULLER
   // ============================================================================
   let frameCounter = 0;
+  let _torchPrevPx = null, _torchPrevPz = null, _torchPrevYaw = null;
+  const _torchSway = new THREE.Vector3(0, 0, 0);
 
   window.updateCalderaCastaway = function (dt, timeSec, wish) {
     frameCounter++;
@@ -11689,24 +11700,71 @@
       }
 
       if (campaign.activeTool === 'torch' && activeMesh.userData.flame) {
-        const fScale = 0.94 + Math.sin(timeSec * 17.0) * 0.10;
-        activeMesh.userData.flame.scale.set(fScale, 0.95 + Math.cos(timeSec * 21.0) * 0.14, fScale);
+        const safeDt = Math.max(0.004, Math.min(0.1, dt));
+        if (_torchPrevPx === null) {
+          _torchPrevPx = px;
+          _torchPrevPz = pz;
+          _torchPrevYaw = player.yaw;
+        }
+        const vx = (px - _torchPrevPx) / safeDt;
+        const vz = (pz - _torchPrevPz) / safeDt;
+        let dYaw = player.yaw - _torchPrevYaw;
+        while (dYaw > Math.PI) dYaw -= Math.PI * 2;
+        while (dYaw < -Math.PI) dYaw += Math.PI * 2;
+        const yawVel = dYaw / safeDt;
+        _torchPrevPx = px;
+        _torchPrevPz = pz;
+        _torchPrevYaw = player.yaw;
+
+        const fwdX = -Math.sin(player.yaw), fwdZ = -Math.cos(player.yaw);
+        const rightX = Math.cos(player.yaw), rightZ = -Math.sin(player.yaw);
+        const fwdSpeed = vx * fwdX + vz * fwdZ;
+        const rightSpeed = vx * rightX + vz * rightZ;
+        const swingThrust = Math.sin(campaign.toolSwing * Math.PI);
+
+        // Aerodynamic drag pulls torch flame tips gently opposite player movement & yaw sweep
+        const targetSwayX = Math.max(-0.085, Math.min(0.085,
+          -rightSpeed * 0.0075 + yawVel * 0.022 + Math.sin(timeSec * 1.9) * 0.008));
+        const targetSwayZ = Math.max(-0.065, Math.min(0.095,
+          fwdSpeed * 0.0085 + swingThrust * 0.065 + Math.cos(timeSec * 1.4) * 0.006));
+        const targetSwayY = -0.25 * (Math.abs(targetSwayX) + Math.abs(targetSwayZ));
+        const swayLerp = 1.0 - Math.exp(-10.0 * safeDt);
+        _torchSway.x += (targetSwayX - _torchSway.x) * swayLerp;
+        _torchSway.y += (targetSwayY - _torchSway.y) * swayLerp;
+        _torchSway.z += (targetSwayZ - _torchSway.z) * swayLerp;
+
+        const tvfx = activeMesh.userData.vfx;
+        if (tvfx && tvfx.torchFlameMat && tvfx.torchFlameMat.uniforms.uMotionSway) {
+          tvfx.torchFlameMat.uniforms.uMotionSway.value.copy(_torchSway);
+        }
+        if (activeMesh.userData.flame.userData && activeMesh.userData.flame.userData.halo) {
+          activeMesh.userData.flame.userData.halo.material.opacity = 0.17 + Math.sin(timeSec * 9.3) * 0.035;
+        }
+        if (activeMesh.userData.emberCore && activeMesh.userData.emberCore.material) {
+          activeMesh.userData.emberCore.material.emissiveIntensity = 1.65 + Math.sin(timeSec * 6.7) * 0.25;
+        }
+
         const cDark = window.caveDarknessFactor || 0.0;
         const caveTorchBoost = cDark * 3.85;
-        playerTorchLight.intensity = 3.25 + caveTorchBoost + Math.sin(timeSec * 15.0) * 0.34 + Math.cos(timeSec * 23.0) * 0.16;
+        playerTorchLight.intensity = 3.25 + caveTorchBoost
+          + Math.sin(timeSec * 11.4) * 0.26
+          + Math.cos(timeSec * 19.3) * 0.14
+          + Math.sin(timeSec * 29.7) * 0.08;
 
-        // Animate rising helical ember sparks & billowing smoke wisps on the Pitch Torch
+        // Animate crisp rising ember sparks & subtle trailing smoke wisps on the Pitch Torch
         const spPts = activeMesh.userData.sparkPoints;
         const spSeeds = activeMesh.userData.sparkSeeds;
         if (spPts && spSeeds) {
           const posArr = spPts.geometry.attributes.position.array;
           for (let s = 0; s < spSeeds.length; s++) {
-            const life = (timeSec * 1.45 + spSeeds[s]) % 1.0;
-            const ang = life * 8.5 + spSeeds[s] * 6.28;
-            const rad = 0.018 + life * 0.055;
-            posArr[s * 3]     = Math.cos(ang) * rad;
-            posArr[s * 3 + 1] = 0.35 + life * 0.46;
-            posArr[s * 3 + 2] = Math.sin(ang) * rad;
+            const seed = spSeeds[s];
+            const rate = 1.15 + (s % 4) * 0.22;
+            const life = (timeSec * rate + seed) % 1.0;
+            const ang = life * (5.5 + (s % 3) * 1.4) + seed * 6.28;
+            const rad = 0.012 + Math.pow(life, 0.85) * 0.048;
+            posArr[s * 3]     = Math.cos(ang) * rad + _torchSway.x * life * 0.85;
+            posArr[s * 3 + 1] = 0.34 + life * 0.44;
+            posArr[s * 3 + 2] = Math.sin(ang) * rad + _torchSway.z * life * 0.85;
           }
           spPts.geometry.attributes.position.needsUpdate = true;
         }
@@ -11714,15 +11772,15 @@
         if (wisps) {
           for (let w = 0; w < wisps.length; w++) {
             const wisp = wisps[w];
-            const wLife = (timeSec * 0.65 + wisp.userData.phase) % 1.0;
+            const wLife = (timeSec * 0.58 + wisp.userData.phase) % 1.0;
             wisp.position.set(
-              Math.sin(wLife * 5.0 + w) * 0.045 * wLife,
-              0.52 + wLife * 0.42,
-              Math.cos(wLife * 4.5 + w) * 0.045 * wLife
+              Math.sin(wLife * 4.5 + w) * 0.032 * wLife + _torchSway.x * (0.4 + wLife * 0.9),
+              0.50 + wLife * 0.38,
+              Math.cos(wLife * 4.0 + w) * 0.032 * wLife + _torchSway.z * (0.4 + wLife * 0.9)
             );
-            const wScale = 0.09 + wLife * 0.18;
+            const wScale = 0.065 + wLife * 0.14;
             wisp.scale.set(wScale, wScale, 1);
-            wisp.material.opacity = Math.sin(wLife * Math.PI) * 0.22;
+            wisp.material.opacity = Math.sin(wLife * Math.PI) * 0.10;
           }
         }
       }

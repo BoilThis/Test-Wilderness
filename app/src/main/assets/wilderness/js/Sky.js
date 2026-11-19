@@ -151,6 +151,14 @@
 				vec3 texColor = ( Lin + L0 ) * 0.04 + vec3( 0.0, 0.0004, 0.0009 );
 				vec3 retColor = pow( max( texColor, vec3( 0.0 ) ), vec3( 1.0 / ( 1.2 + ( 1.2 * vSunfade ) ) ) );
 
+				// Warm solar aureole & ACES filmic shoulder prevents upper-sky #FFFFFF blowout while keeping rich azure gradients
+				float sunHalo = pow( max( 0.0, cosTheta ), 16.0 ) * 0.22 + pow( max( 0.0, cosTheta ), 140.0 ) * 0.45;
+				retColor += vec3( 1.0, 0.91, 0.70 ) * sunHalo * ( 1.0 - stormMix * 0.85 ) * ( 1.0 - nightMix ) * vSunfade;
+				vec3 mapped = ( retColor * ( 2.51 * retColor + 0.03 ) ) / ( retColor * ( 2.43 * retColor + 0.59 ) + 0.14 );
+				float zenithT = clamp( direction.y, 0.0, 1.0 );
+				retColor = mix( mapped, mapped * vec3( 0.86, 0.96, 1.09 ), zenithT * 0.34 * ( 1.0 - nightMix ) * ( 1.0 - stormMix ) );
+				retColor = clamp( retColor, 0.0, 1.0 );
+
 				// Storm slate overcast damping
 				vec3 stormSky = mix( vec3( 0.24, 0.30, 0.36 ), vec3( 0.11, 0.15, 0.20 ), clamp( direction.y, 0.0, 1.0 ) );
 				retColor = mix( retColor, stormSky, stormMix * 0.78 );
@@ -348,12 +356,16 @@
 						if ( alpha < 0.004 ) discard;
 
 						vec3 sunN = normalize( uSunDir );
-						float sunForward = pow( max( 0.0, dot( dir, sunN ) ), 9.0 );
-						float rimGlow = pow( max( 0.0, dot( dir, sunN ) ), 3.0 ) * ( 1.0 - cumAlpha * 0.55 );
-						float selfShadow = mix( 0.42, 1.0, s1.g ) * mix( 0.68, 1.0, cumulus );
-						float lit = clamp( selfShadow * 0.82 + sunForward * 0.42 + ( 1.0 - cumAlpha ) * 0.18, 0.0, 1.0 );
-						vec3 col = mix( uCloudShadow, uCloudLight, lit );
-						col += uCloudLight * ( sunForward * 0.26 + rimGlow * 0.10 ) * ( 1.0 - alpha * 0.45 );
+						float sunCos = max( 0.0, dot( dir, sunN ) );
+						float sunForward = pow( sunCos, 9.0 );
+						float silverLining = pow( sunCos, 12.0 ) * smoothstep( 0.04, 0.42, cumAlpha ) * ( 1.0 - smoothstep( 0.42, 0.92, cumAlpha ) );
+						float rimGlow = pow( sunCos, 3.0 ) * ( 1.0 - cumAlpha * 0.55 );
+						float selfShadow = mix( 0.44, 1.0, s1.g ) * mix( 0.70, 1.0, cumulus );
+						float lit = clamp( selfShadow * 0.80 + sunForward * 0.38 + ( 1.0 - cumAlpha ) * 0.18, 0.0, 1.0 );
+						vec3 coolShadow = uCloudShadow * mix( vec3( 1.0 ), vec3( 0.94, 1.02, 1.08 ), ( 1.0 - s1.g ) * 0.55 );
+						vec3 col = mix( coolShadow, uCloudLight, lit );
+						col += uCloudLight * ( sunForward * 0.20 + rimGlow * 0.09 + silverLining * 0.42 ) * ( 1.0 - alpha * 0.38 );
+						col = col / ( 1.0 + col * 0.14 );
 
 						gl_FragColor = vec4( col, alpha );
 					}

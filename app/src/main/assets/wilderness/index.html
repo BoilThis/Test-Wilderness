@@ -2421,7 +2421,7 @@
     renderer.shadowMap.autoUpdate = false;
     renderer.shadowMap.needsUpdate = true;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 0.94;
+    renderer.toneMappingExposure = 0.92;
     container.appendChild(renderer.domElement);
     renderer.domElement.addEventListener('webglcontextlost', function(e) {
       e.preventDefault();
@@ -2475,10 +2475,10 @@
     const sky = new THREE.Sky();
     scene.add(sky);
     const skyUniforms = sky.material.uniforms;
-    skyUniforms['turbidity'].value = 2.6;
-    skyUniforms['rayleigh'].value = 1.55;
-    skyUniforms['mieCoefficient'].value = 0.0045;
-    skyUniforms['mieDirectionalG'].value = 0.82;
+    skyUniforms['turbidity'].value = 2.2;
+    skyUniforms['rayleigh'].value = 1.58;
+    skyUniforms['mieCoefficient'].value = 0.0032;
+    skyUniforms['mieDirectionalG'].value = 0.80;
     skyUniforms['sunPosition'].value.set(45, 75, -50).normalize().multiplyScalar(400000);
 
     let cloudDome = null;
@@ -2534,14 +2534,29 @@
       skyCubeFaces.push(c);
     }
     const skyEnvCubeTex = new THREE.CubeTexture(skyCubeFaces);
-    function refreshEnvironmentIBL() {
+    function refreshEnvironmentIBL(sunVec = null) {
       const topHex = skyPalette.top;
       const horHex = skyPalette.horizon;
       const lagoonBounceHex = '#1f5a52';
       const deepGndHex = '#1a3622';
+      const sDir = sunVec ? sunVec.clone().normalize() : new THREE.Vector3(45, 75, -50).normalize();
+      const sElev = Math.max(-1.0, Math.min(1.0, sDir.y));
+      const warmAlpha = sElev > 0.02 ? (0.45 + 0.35 * Math.min(1.0, sElev * 2.0)) : 0.14;
+      const sunColRgb = sElev < 0.25 && sElev > -0.05 ? '255, 206, 138' : '255, 248, 224';
+
+      // Cubemap face basis vectors matching OpenGL/Three.js CubeTexture face orientation (+X, -X, +Y, -Y, +Z, -Z)
+      const faceAxes = [
+        { n: [1, 0, 0],  u: [0, 0, -1], v: [0, -1, 0] }, // 0: +X
+        { n: [-1, 0, 0], u: [0, 0, 1],  v: [0, -1, 0] }, // 1: -X
+        { n: [0, 1, 0],  u: [1, 0, 0],  v: [0, 0, 1] },  // 2: +Y
+        { n: [0, -1, 0], u: [1, 0, 0],  v: [0, 0, -1] }, // 3: -Y
+        { n: [0, 0, 1],  u: [1, 0, 0],  v: [0, -1, 0] }, // 4: +Z
+        { n: [0, 0, -1], u: [-1, 0, 0], v: [0, -1, 0] }  // 5: -Z
+      ];
+
       for (let f = 0; f < 6; f++) {
         const ctx = skyCubeFaces[f].getContext('2d');
-        if (f === 2) { // +Y zenith dome with soft atmospheric crown
+        if (f === 2) { // +Y zenith dome
           const zGr = ctx.createRadialGradient(32, 32, 2, 32, 32, 45);
           zGr.addColorStop(0.0, topHex);
           zGr.addColorStop(1.0, horHex);
@@ -2556,21 +2571,34 @@
         } else {
           const gr = ctx.createLinearGradient(0, 0, 0, 64);
           gr.addColorStop(0.0, topHex);
-          gr.addColorStop(0.46, horHex);
-          gr.addColorStop(0.54, '#fff8e7'); // Crisp bright horizon scattering band for metallic specular glints
-          gr.addColorStop(0.66, lagoonBounceHex);
+          gr.addColorStop(0.45, horHex);
+          gr.addColorStop(0.53, lagoonBounceHex);
           gr.addColorStop(1.0, deepGndHex);
           ctx.fillStyle = gr;
           ctx.fillRect(0, 0, 64, 64);
-          // Warm directional solar corona bloom on sun-facing cubemap faces (f === 0 +X, f === 5 -Z)
-          if (f === 0 || f === 5) {
-            const sunGr = ctx.createRadialGradient(f === 0 ? 44 : 22, 22, 1, f === 0 ? 44 : 22, 22, 26);
-            sunGr.addColorStop(0.0, 'rgba(255, 252, 232, 0.92)');
-            sunGr.addColorStop(0.4, 'rgba(255, 236, 179, 0.35)');
-            sunGr.addColorStop(1.0, 'rgba(255, 236, 179, 0.0)');
-            ctx.fillStyle = sunGr;
-            ctx.fillRect(0, 0, 64, 64);
-          }
+          // Soft horizon scatter (avoids harsh white metallic reflection bands on tools)
+          const hzGr = ctx.createLinearGradient(0, 26, 0, 38);
+          hzGr.addColorStop(0.0, 'rgba(255, 248, 232, 0.0)');
+          hzGr.addColorStop(0.5, `rgba(${sunColRgb}, ${(warmAlpha * 0.42).toFixed(2)})`);
+          hzGr.addColorStop(1.0, 'rgba(255, 248, 232, 0.0)');
+          ctx.fillStyle = hzGr;
+          ctx.fillRect(0, 26, 64, 12);
+        }
+
+        // Project active solar corona onto whichever cubemap face(s) align with sDir
+        const ax = faceAxes[f];
+        const dotN = sDir.x * ax.n[0] + sDir.y * ax.n[1] + sDir.z * ax.n[2];
+        if (dotN > 0.16 && sElev > -0.05) {
+          const dotU = (sDir.x * ax.u[0] + sDir.y * ax.u[1] + sDir.z * ax.u[2]) / dotN;
+          const dotV = (sDir.x * ax.v[0] + sDir.y * ax.v[1] + sDir.z * ax.v[2]) / dotN;
+          const px = Math.max(-12, Math.min(76, (dotU * 0.5 + 0.5) * 64));
+          const py = Math.max(-12, Math.min(76, (dotV * 0.5 + 0.5) * 64));
+          const sunGr = ctx.createRadialGradient(px, py, 1, px, py, 24);
+          sunGr.addColorStop(0.0, `rgba(${sunColRgb}, ${(warmAlpha * 0.92).toFixed(2)})`);
+          sunGr.addColorStop(0.45, `rgba(${sunColRgb}, ${(warmAlpha * 0.30).toFixed(2)})`);
+          sunGr.addColorStop(1.0, `rgba(${sunColRgb}, 0.0)`);
+          ctx.fillStyle = sunGr;
+          ctx.fillRect(0, 0, 64, 64);
         }
       }
       skyEnvCubeTex.needsUpdate = true;
@@ -2585,14 +2613,16 @@
       uMieColor: { value: new THREE.Color(0xffe0a3) },
       uSkyFogColor: { value: new THREE.Color(0x88c8ea) },
       uFogDensity: { value: 0.00145 },
-      uCaveDark: window.uCaveDarkness
+      uCaveDark: window.uCaveDarkness,
+      uSunVis: { value: 1.0 },
+      uFoliageTransColor: { value: new THREE.Color(0xa6e848) }
     };
 
-    const hemiLight = new THREE.HemisphereLight(0x94d4ff, 0x1e361c, 0.58);
+    const hemiLight = new THREE.HemisphereLight(0x9ad8ff, 0x243f22, 0.62);
     scene.add(hemiLight);
     window._surfaceHemiInt = hemiLight.intensity;
 
-    const sunLight = new THREE.DirectionalLight(0xfff1d2, 2.25);
+    const sunLight = new THREE.DirectionalLight(0xfff1d2, 2.20);
     window._surfaceSunInt = sunLight.intensity;
     window.caveDarknessFactor = 0.0;
     sunLight.position.set(45, 75, -50);
@@ -2601,8 +2631,8 @@
     sunLight.shadow.mapSize.height = 1536;
     sunLight.shadow.camera.near = 2.0;
     sunLight.shadow.camera.far = 220;
-    sunLight.shadow.bias = -0.00028;
-    sunLight.shadow.normalBias = 0.045;
+    sunLight.shadow.bias = -0.00022;
+    sunLight.shadow.normalBias = 0.036;
     // Tight 68m x 68m shadow frustum centered on player: crisp high-density near-camera shadow modeling
     const d = 34;
     sunLight.shadow.camera.left = -d;
@@ -2746,67 +2776,68 @@
       return { canvas: c, tex: tex };
     }
 
-    // 2. Procedural Terraced Volcanic-Basalt & Weathered Limestone Rock Texture (512x512)
+    // 2. Procedural Weathered Volcanic-Basalt & Stratified Limestone Rock Texture (512x512)
     function createCliffRockCanvas() {
       const c = document.createElement('canvas');
       c.width = 512;
       c.height = 512;
       const ctx = c.getContext('2d');
 
-      ctx.fillStyle = '#474c50';
+      ctx.fillStyle = '#505352';
       ctx.fillRect(0, 0, 512, 512);
 
-      // Layer 1: Strong stepped coastal rock strata banding
-      const strataTones = ['#363b40', '#54595e', '#2d3136', '#666b6d', '#43484c', '#73746d'];
-      let y = 0;
-      while (y < 512) {
-        const bandH = 4 + Math.floor(Math.random() * 14);
-        ctx.fillStyle = strataTones[Math.floor(Math.random() * strataTones.length)];
-        ctx.fillRect(0, y, 512, bandH);
-        y += bandH;
+      // Layer 1: Soft multi-scale mottled stone variation (no hard horizontal stripes)
+      const rockTones = [
+        'rgba(62, 65, 64, 0.32)', 'rgba(88, 88, 82, 0.28)',
+        'rgba(52, 54, 56, 0.30)', 'rgba(104, 98, 88, 0.24)',
+        'rgba(74, 72, 68, 0.30)'
+      ];
+      for (let i = 0; i < 240; i++) {
+        ctx.fillStyle = rockTones[Math.floor(Math.random() * rockTones.length)];
+        ctx.save();
+        ctx.translate(Math.random() * 512, Math.random() * 512);
+        ctx.rotate((Math.random() - 0.5) * 0.5);
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 18 + Math.random() * 56, 7 + Math.random() * 20, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
       }
 
-      // Layer 2: Vertical coastal erosion fractures & dark joints
-      ctx.strokeStyle = '#1b1f23';
-      for (let i = 0; i < 180; i++) {
-        ctx.lineWidth = 1.0 + Math.random() * 2.2;
+      // Layer 2: Subtle organic wavy geological bedding seams
+      for (let i = 0; i < 36; i++) {
+        const baseY = Math.random() * 512;
+        ctx.strokeStyle = i % 2 === 0 ? 'rgba(34, 36, 38, 0.22)' : 'rgba(132, 126, 114, 0.16)';
+        ctx.lineWidth = 1.2 + Math.random() * 2.6;
+        ctx.beginPath();
+        for (let x = 0; x <= 512; x += 16) {
+          const yOff = Math.sin(x * 0.025 + i * 1.3) * 7.0 + Math.cos(x * 0.06 - i) * 3.0;
+          if (x === 0) ctx.moveTo(x, baseY + yOff);
+          else ctx.lineTo(x, baseY + yOff);
+        }
+        ctx.stroke();
+      }
+
+      // Layer 3: Natural irregular rock fracture cracks
+      ctx.strokeStyle = 'rgba(26, 28, 30, 0.42)';
+      for (let i = 0; i < 160; i++) {
+        ctx.lineWidth = 0.8 + Math.random() * 1.6;
         let cx = Math.random() * 512;
         let cy = Math.random() * 512;
         ctx.beginPath();
         ctx.moveTo(cx, cy);
         for (let s = 0; s < 4; s++) {
-          cx += (Math.random() - 0.5) * 35;
-          cy += (Math.random() - 0.1) * 28;
+          cx += (Math.random() - 0.5) * 38;
+          cy += (Math.random() - 0.3) * 30;
           ctx.lineTo(cx, cy);
         }
         ctx.stroke();
       }
 
-      // Layer 3: Sunlit calcite/quartz mineral veins
-      ctx.strokeStyle = 'rgba(225, 224, 210, 0.55)';
-      for (let i = 0; i < 32; i++) {
-        ctx.lineWidth = 0.8 + Math.random() * 1.5;
-        let cx = Math.random() * 512;
-        let cy = Math.random() * 512;
+      // Layer 4: Fine mineral flecks & weathered lichen dust
+      for (let i = 0; i < 180; i++) {
+        ctx.fillStyle = i % 3 === 0 ? 'rgba(138, 134, 122, 0.16)' : 'rgba(66, 74, 56, 0.14)';
         ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        for (let s = 0; s < 5; s++) {
-          cx += (Math.random() - 0.5) * 60;
-          cy += (Math.random() - 0.5) * 22;
-          ctx.lineTo(cx, cy);
-        }
-        ctx.stroke();
-      }
-
-      // Layer 4: Tropical cliff moss & coastal lichen
-      const mossTones = ['rgba(74, 128, 56, 0.45)', 'rgba(92, 146, 68, 0.4)', 'rgba(62, 108, 48, 0.5)'];
-      for (let i = 0; i < 130; i++) {
-        const lx = Math.random() * 512;
-        const ly = Math.random() * 512;
-        const lr = 6 + Math.random() * 18;
-        ctx.fillStyle = mossTones[Math.floor(Math.random() * mossTones.length)];
-        ctx.beginPath();
-        ctx.arc(lx, ly, lr, 0, Math.PI * 2);
+        ctx.ellipse(Math.random() * 512, Math.random() * 512, 3 + Math.random() * 9, 2 + Math.random() * 6, Math.random() * Math.PI, 0, Math.PI * 2);
         ctx.fill();
       }
 
@@ -2912,19 +2943,19 @@
     async function initProceduralTerrainTextures(yieldFn) {
       const groundObj = createForestGroundCanvas();
       groundTex = window.applyMaxAnisotropy(groundObj.tex);
-      groundNormTex = window.applyMaxAnisotropy(createNormalMapFromCanvas(groundObj.canvas, 3.1));
+      groundNormTex = window.applyMaxAnisotropy(createNormalMapFromCanvas(groundObj.canvas, 1.7));
       terrainMat.map = groundTex;
       terrainMat.needsUpdate = true;
       if (yieldFn) await yieldFn();
 
       const cliffObj = createCliffRockCanvas();
       cliffTex = window.applyMaxAnisotropy(cliffObj.tex);
-      cliffNormTex = window.applyMaxAnisotropy(createNormalMapFromCanvas(cliffObj.canvas, 4.4));
+      cliffNormTex = window.applyMaxAnisotropy(createNormalMapFromCanvas(cliffObj.canvas, 1.9));
       if (yieldFn) await yieldFn();
 
       const sandObj = createSandGravelCanvas();
       sandTex = window.applyMaxAnisotropy(sandObj.tex);
-      sandNormTex = window.applyMaxAnisotropy(createNormalMapFromCanvas(sandObj.canvas, 2.4));
+      sandNormTex = window.applyMaxAnisotropy(createNormalMapFromCanvas(sandObj.canvas, 2.0));
       if (yieldFn) await yieldFn();
     }
 
@@ -5443,13 +5474,14 @@
     // SLOPE-AWARE, ANTI-TILING TRIPLANAR TROPICAL TERRAIN MATERIAL WITH SMOOTH LITTORAL SHORELINES, CAUSTICS & CAVE PORTALS
     const terrainMat = new THREE.MeshStandardMaterial({
       map: groundTex,
-      roughness: 0.85,
-      metalness: 0.04
+      roughness: 0.90,
+      metalness: 0.02,
+      envMapIntensity: 0.20
     });
 
     window.wfShaderTime = { value: 0.0 };
     window.terrainUniforms = {
-      uCliffThreshold: { value: 0.74 },
+      uCliffThreshold: { value: 0.62 },
       uShoreHeight: { value: 1.65 },
       uTime: window.wfShaderTime
     };
@@ -5593,14 +5625,15 @@
         float relWaterH = vWorldPos.y - localWaterY;
 
         float slope = clamp(dot(vWorldNormal, vec3(0.0, 1.0, 0.0)), 0.0, 1.0);
-        float rockHeightBias = (cliffCol.r - 0.48) * 0.42;
-        float rawCliff = clamp((uCliffThreshold - slope + rockHeightBias * 0.35) * 4.6, 0.0, 1.0);
-        float cliffFactor = smoothstep(0.15, 0.85, rawCliff);
+        float cliffBreakup = sin(vWorldPos.x * 0.11 + vWorldPos.z * 0.08) * cos(vWorldPos.z * 0.13 - vWorldPos.x * 0.07) * 0.07
+                           + (cliffCol.r - 0.35) * 0.24;
+        float rawCliff = clamp((uCliffThreshold - slope + cliffBreakup) * 3.8, 0.0, 1.0);
+        float cliffFactor = smoothstep(0.18, 0.88, rawCliff);
 
         // Convex ridge & slope-shoulder soil/gravel exposure
-        float convexRidge = clamp(-vConcavity * 2.4, 0.0, 1.0);
-        float soilFactor = clamp((1.0 - abs(slope - 0.72) * 6.0) + convexRidge * 0.55, 0.0, 1.0) * smoothstep(1.3, 3.8, relWaterH);
-        soilFactor = smoothstep(0.22, 0.82, soilFactor + (sMicro.r - 0.5) * 0.35);
+        float convexRidge = clamp(-vConcavity * 2.1, 0.0, 1.0);
+        float soilFactor = clamp((1.0 - abs(slope - 0.68) * 5.2) + convexRidge * 0.48, 0.0, 1.0) * smoothstep(1.3, 3.8, relWaterH);
+        soilFactor = smoothstep(0.28, 0.86, soilFactor + (sMicro.r - 0.5) * 0.30);
 
         // Smooth Littoral Beach & Shoreline Band around ALL water bodies (sea, river, ponds, and high alpine lakes!)
         float shoreNoise = sin(vWorldPos.x * 0.14 + vWorldPos.z * 0.11) * 0.25 + (sMacro.r - 0.5) * 0.35;
@@ -5611,8 +5644,8 @@
         float canopyMask = clamp(vCanopyAO, 0.0, 1.0);
 
         float elev = vWorldPos.y;
-        float highFactor = clamp((elev - 44.0) / 30.0, 0.0, 1.0) * clamp((0.90 - slope) * 3.2, 0.0, 1.0);
-        float rockBlend = max(cliffFactor, highFactor * 0.68) * (1.0 - shoreFactor * 0.55);
+        float highFactor = clamp((elev - 48.0) / 32.0, 0.0, 1.0) * clamp((0.86 - slope) * 3.0, 0.0, 1.0);
+        float rockBlend = max(cliffFactor, highFactor * 0.65) * (1.0 - shoreFactor * 0.55);
 
         // Smooth Biome Transition Weighting Across 6 >=100m-Separated Biomes + Outer Archipelago Biomes
         float bElder = 1.0 - smoothstep(45.0, 135.0, length(vWorldPos.xz - vec2(-165.0, 72.0)));
@@ -5633,31 +5666,31 @@
                          + cos(vWorldPos.x * 0.19 - vWorldPos.z * 0.16) * 0.15;
         macroNoise = macroNoise * 0.5 + 0.5;
 
-        vec3 sunlitMeadow = grassCol.rgb * vec3(1.10, 1.15, 0.76);
-        vec3 deepClover   = grassCol.rgb * vec3(0.68, 0.90, 0.74);
-        grassCol.rgb = mix(deepClover, sunlitMeadow, smoothstep(0.24, 0.76, macroNoise + (gMid.g - 0.5) * 0.38));
-        grassCol.rgb = mix(grassCol.rgb, grassCol.rgb * vec3(0.66, 0.86, 0.74), bElder * 0.58);
-        grassCol.rgb = mix(grassCol.rgb, grassCol.rgb * vec3(1.14, 1.04, 0.74), bMeadow * 0.45);
+        vec3 sunlitMeadow = grassCol.rgb * vec3(0.96, 1.02, 0.72);
+        vec3 deepClover   = grassCol.rgb * vec3(0.66, 0.84, 0.68);
+        grassCol.rgb = mix(deepClover, sunlitMeadow, smoothstep(0.24, 0.76, macroNoise + (gMid.g - 0.5) * 0.35));
+        grassCol.rgb = mix(grassCol.rgb, grassCol.rgb * vec3(0.68, 0.84, 0.72), bElder * 0.55);
+        grassCol.rgb = mix(grassCol.rgb, grassCol.rgb * vec3(1.06, 0.98, 0.74), bMeadow * 0.40);
         grassCol.rgb = mix(grassCol.rgb, grassCol.rgb * vec3(0.84, 0.80, 0.68), bKarst * 0.42);
 
-        // Layer blend: Sand/Littoral Pebbles -> Pebbly Terracotta Soil -> Multi-Tone Meadow -> Stratified Sedimentary/Basalt Cliffs
+        // Layer blend: Sand/Littoral Pebbles -> Pebbly Tropical Soil -> Multi-Tone Meadow -> Weathered Stratified Rock
         vec4 baseTerrain = mix(grassCol, sandCol, shoreFactor);
-        vec3 tropicalSoil = mix(vec3(0.32, 0.22, 0.14), vec3(0.45, 0.33, 0.22), sMicro.r) * (0.82 + 0.35 * gMicro.g);
-        baseTerrain.rgb = mix(baseTerrain.rgb, tropicalSoil, soilFactor * 0.70 * (1.0 - shoreFactor));
+        vec3 tropicalSoil = mix(vec3(0.28, 0.21, 0.14), vec3(0.40, 0.31, 0.21), sMicro.r) * (0.84 + 0.28 * gMicro.g);
+        baseTerrain.rgb = mix(baseTerrain.rgb, tropicalSoil, soilFactor * 0.48 * (1.0 - shoreFactor));
 
-        // Horizontal Canyon Sedimentary Rock Strata + Water-Seepage Streaks on Cliff Faces
-        float strataCoord = vWorldPos.y * 0.92 + sin(vWorldPos.x * 0.038 + vWorldPos.z * 0.031) * 1.45;
-        float strataWave = sin(strataCoord * 2.4) * 0.5 + 0.5;
-        float strataFine = sin(strataCoord * 7.8 + cX.r * 2.5) * 0.5 + 0.5;
-        vec3 limestoneBand = mix(vec3(0.60, 0.52, 0.42), vec3(0.32, 0.30, 0.28), strataWave * 0.7 + strataFine * 0.3);
-        float strataMix = clamp(bKarst * 0.78 + smoothstep(3.0, 28.0, elev) * 0.44, 0.0, 0.86);
-        vec3 cliffSurface = mix(cliffCol.rgb, cliffCol.rgb * limestoneBand * 1.65, strataMix);
-        cliffSurface = mix(cliffSurface, cliffCol.rgb * vec3(0.36, 0.32, 0.31), bCaldera * 0.80);
+        // Subtle organic cliff strata & moisture streaks without exaggerated bright banding
+        float strataCoord = vWorldPos.y * 0.65 + sin(vWorldPos.x * 0.05 + vWorldPos.z * 0.04) * 1.6;
+        float strataWave = sin(strataCoord * 1.8) * 0.5 + 0.5;
+        float strataFine = sin(strataCoord * 5.2 + cX.r * 2.2) * 0.5 + 0.5;
+        vec3 limestoneBand = mix(vec3(0.54, 0.50, 0.44), vec3(0.36, 0.34, 0.32), strataWave * 0.68 + strataFine * 0.32);
+        float strataMix = clamp(bKarst * 0.65 + smoothstep(4.0, 32.0, elev) * 0.38, 0.0, 0.78);
+        vec3 cliffSurface = mix(cliffCol.rgb * 0.86, cliffCol.rgb * limestoneBand * 1.18, strataMix);
+        cliffSurface = mix(cliffSurface, cliffCol.rgb * vec3(0.40, 0.36, 0.35), bCaldera * 0.78);
 
-        float seepStreak = pow(clamp(sin(vWorldPos.x * 0.45 + vWorldPos.z * 0.38 + cX.r * 3.0) * 0.5 + 0.5, 0.0, 1.0), 4.0);
-        vec3 detailedCliff = cliffSurface * (1.0 - seepStreak * 0.32 * rockBlend);
-        float ledgeMoss = smoothstep(0.56, 0.82, slope + (gMicro.g - 0.45) * 0.35) * rockBlend * (1.0 - bCaldera * 0.92);
-        detailedCliff = mix(detailedCliff, vec3(0.18, 0.36, 0.14) * (0.8 + 0.4 * gMicro.g), ledgeMoss * 0.65);
+        float seepStreak = pow(clamp(sin(vWorldPos.x * 0.38 + vWorldPos.z * 0.31 + cX.r * 2.8) * 0.5 + 0.5, 0.0, 1.0), 4.0);
+        vec3 detailedCliff = cliffSurface * (1.0 - seepStreak * 0.22 * rockBlend);
+        float ledgeMoss = smoothstep(0.48, 0.76, slope + (gMicro.g - 0.45) * 0.30) * rockBlend * (1.0 - bCaldera * 0.92);
+        detailedCliff = mix(detailedCliff, vec3(0.22, 0.33, 0.17) * (0.82 + 0.34 * gMicro.g), ledgeMoss * 0.52);
         baseTerrain.rgb = mix(baseTerrain.rgb, detailedCliff, rockBlend);
 
         // Dark scoria crest & steep interior cauldron cliff walls with organic fragment-level scree breakup (eliminates 3.3m polygon seams)
@@ -5730,10 +5763,10 @@
         '#include <roughnessmap_fragment>',
         `
         #include <roughnessmap_fragment>
-        float tRough = mix(0.84, 0.60, rockBlend);
-        tRough = mix(tRough, 0.42, mossMask * 0.70);
-        tRough = mix(tRough, 0.14, wetBand * 0.40);
-        tRough = mix(tRough, 0.10, channelMask * 0.94);
+        float tRough = mix(0.93, 0.87, rockBlend);
+        tRough = mix(tRough, 0.78, mossMask * 0.55);
+        tRough = mix(tRough, 0.42, wetBand * 0.65);
+        tRough = mix(tRough, 0.18, channelMask * 0.90);
         roughnessFactor = tRough;
         `
       ).replace(
@@ -5741,32 +5774,27 @@
         `
         #include <normal_fragment_begin>
         float camDistTerrain = length(cameraPosition - vWorldPos);
-        float nearNormFade = 1.0 - smoothstep(75.0, 185.0, camDistTerrain);
+        float nearNormFade = 1.0 - smoothstep(65.0, 165.0, camDistTerrain);
         if (nearNormFade > 0.01) {
-          vec2 gN = (texture2D(uGroundNorm, microUV).xy * 2.0 - 1.0) * 1.05
-                  + (texture2D(uGroundNorm, midUV).xy * 2.0 - 1.0) * 0.55;
-          vec2 sN = (texture2D(uSandNorm, microUV * 0.75).xy * 2.0 - 1.0) * 1.15;
+          vec2 gN = (sampleAntiTile(uGroundNorm, microUV).xy * 2.0 - 1.0) * 0.62
+                  + (sampleAntiTile(uGroundNorm, midUV).xy * 2.0 - 1.0) * 0.32;
+          vec2 sN = (sampleAntiTile(uSandNorm, microUV * 0.75).xy * 2.0 - 1.0) * 0.70;
           vec3 topPerturb = mix(vec3(gN.x, 0.0, -gN.y), vec3(sN.x, 0.0, -sN.y), shoreFactor);
 
           vec3 rockPerturb = vec3(0.0);
-          float rockNormWeight = clamp(rockBlend + channelMask * 0.85, 0.0, 1.0);
+          float rockNormWeight = clamp(rockBlend + channelMask * 0.75, 0.0, 1.0);
           if (rockNormWeight > 0.02) {
-            vec2 cNX = texture2D(uCliffNorm, sideMicro_X).xy * 2.0 - 1.0;
-            vec2 cNZ = texture2D(uCliffNorm, sideMicro_Z).xy * 2.0 - 1.0;
-            vec2 cNY = texture2D(uCliffNorm, microUV * 0.95).xy * 2.0 - 1.0;
+            vec2 cNX = sampleAntiTile(uCliffNorm, sideMicro_X * 0.72).xy * 2.0 - 1.0;
+            vec2 cNZ = sampleAntiTile(uCliffNorm, sideMicro_Z * 0.72).xy * 2.0 - 1.0;
+            vec2 cNY = sampleAntiTile(uCliffNorm, microUV * 0.68).xy * 2.0 - 1.0;
             rockPerturb = vec3(0.0, -cNX.y, cNX.x) * blendWeights.x
                         + vec3(cNY.x, 0.0, -cNY.y) * blendWeights.y
                         + vec3(cNZ.x, -cNZ.y, 0.0) * blendWeights.z;
           }
 
-          // Multi-frequency analytical strata/hillside micro-normal breaks up 3.3m polygon facets smoothly on slopes
-          float pGx = cos(vWorldPos.x * 1.7 + vWorldPos.z * 0.9) * 0.24 + cos(vWorldPos.x * 4.3 - vWorldPos.z * 2.7) * 0.14;
-          float pGz = sin(vWorldPos.z * 1.8 - vWorldPos.x * 1.1) * 0.24 + sin(vWorldPos.z * 4.1 + vWorldPos.x * 2.5) * 0.14;
-          vec3 macroSlopeBreak = vec3(pGx, 0.0, pGz) * (0.45 + rockNormWeight * 0.75);
-
-          vec3 worldPerturb = mix(topPerturb, rockPerturb * 1.45, rockNormWeight) + macroSlopeBreak;
+          vec3 worldPerturb = mix(topPerturb, rockPerturb * 0.82, rockNormWeight);
           vec3 viewPerturb = (viewMatrix * vec4(worldPerturb, 0.0)).xyz;
-          normal = normalize(normal + viewPerturb * (0.74 * nearNormFade));
+          normal = normalize(normal + viewPerturb * (0.48 * nearNormFade));
         }
         `
       ).replace(
@@ -5775,10 +5803,11 @@
         #ifdef USE_FOG
           {
             float mieDist = length(vWorldPos - cameraPosition);
-            float mieExt = clamp(1.0 - exp(-pow(uFogDensity * mieDist, 2.0)), 0.0, 0.85);
+            float altClear = mix(1.0, exp(-max(0.0, vWorldPos.y - 8.0) * 0.0075), 0.55);
+            float mieExt = clamp(1.0 - exp(-pow(uFogDensity * mieDist * altClear, 2.0)), 0.0, 0.85);
             vec3 mieRay = (vWorldPos - cameraPosition) / max(0.001, mieDist);
             float mieAlign = pow(max(0.0, dot(mieRay, normalize(uSunDir))), 5.5);
-            gl_FragColor.rgb = mix(gl_FragColor.rgb, uMieColor, mieExt * mieAlign * (1.0 - uCaveDark) * 0.45);
+            gl_FragColor.rgb = mix(gl_FragColor.rgb, uMieColor, mieExt * mieAlign * (1.0 - uCaveDark) * 0.48);
           }
         #endif
         `
@@ -6033,10 +6062,11 @@
           `#include <fog_fragment>
           #ifdef USE_FOG
             if (uIsCave < 0.5) {
-              float rExt = clamp(1.0 - exp(-pow(uFogDensity * rockCamDist, 2.0)), 0.0, 0.85);
+              float rAltClear = mix(1.0, exp(-max(0.0, vRockWPos.y - 8.0) * 0.0075), 0.55);
+              float rExt = clamp(1.0 - exp(-pow(uFogDensity * rockCamDist * rAltClear, 2.0)), 0.0, 0.85);
               vec3 rRay = (vRockWPos - cameraPosition) / max(0.001, rockCamDist);
               float rMie = pow(max(0.0, dot(rRay, normalize(uSunDir))), 5.5);
-              gl_FragColor.rgb = mix(gl_FragColor.rgb, uMieColor, rExt * rMie * (1.0 - uCaveDark) * 0.45);
+              gl_FragColor.rgb = mix(gl_FragColor.rgb, uMieColor, rExt * rMie * (1.0 - uCaveDark) * 0.48);
             }
           #endif
           `
@@ -7884,7 +7914,9 @@
           shader.uniforms.uMieColor = window.atmUniforms.uMieColor;
           shader.uniforms.uFogDensity = window.atmUniforms.uFogDensity;
           shader.uniforms.uCaveDark = window.atmUniforms.uCaveDark;
-          shader.vertexShader = 'uniform float uTime;\nuniform vec3 uWindStrength;\nuniform float uWindFrequency;\nvarying vec3 vLeafWPos;\n' + shader.vertexShader;
+          shader.uniforms.uSunVis = window.atmUniforms.uSunVis;
+          shader.uniforms.uFoliageTransColor = window.atmUniforms.uFoliageTransColor;
+          shader.vertexShader = 'uniform float uTime;\nuniform vec3 uWindStrength;\nuniform float uWindFrequency;\nvarying vec3 vLeafWPos;\nvarying vec3 vLeafWNorm;\nvarying float vCrownMask;\n' + shader.vertexShader;
           // Blend leaf card normals upward toward the sky dome while retaining crisp sunlight-side shadow modeling
           shader.vertexShader = shader.vertexShader.replace(
             '#include <defaultnormal_vertex>',
@@ -7901,24 +7933,48 @@
               0.2 * sin(5.0 * uTime * uWindFrequency + 1.5 * windOffset)
             );
             mvPosition.xyz += windSway;
+            vec3 wLeafN = objectNormal;
             #ifdef USE_INSTANCING
               mvPosition = instanceMatrix * mvPosition;
+              wLeafN = (instanceMatrix * vec4(wLeafN, 0.0)).xyz;
             #endif
+            #ifdef USE_COLOR
+              vCrownMask = clamp((color.g - 0.65) / 0.48, 0.18, 1.0);
+            #else
+              vCrownMask = clamp(uv.y, 0.25, 1.0);
+            #endif
+            vLeafWNorm = normalize((modelMatrix * vec4(wLeafN, 0.0)).xyz);
             vLeafWPos = (modelMatrix * mvPosition).xyz;
             mvPosition = modelViewMatrix * mvPosition;
             gl_Position = projectionMatrix * mvPosition;`
           );
-          shader.fragmentShader = 'uniform vec3 uSunDir;\nuniform vec3 uMieColor;\nuniform float uFogDensity;\nuniform float uCaveDark;\nvarying vec3 vLeafWPos;\n' + shader.fragmentShader;
+          shader.fragmentShader = 'uniform vec3 uSunDir;\nuniform vec3 uMieColor;\nuniform float uFogDensity;\nuniform float uCaveDark;\nuniform float uSunVis;\nuniform vec3 uFoliageTransColor;\nvarying vec3 vLeafWPos;\nvarying vec3 vLeafWNorm;\nvarying float vCrownMask;\n' + shader.fragmentShader;
+          shader.fragmentShader = shader.fragmentShader.replace(
+            '#include <emissivemap_fragment>',
+            `#include <emissivemap_fragment>
+            {
+              vec3 lViewDir = normalize(vLeafWPos - cameraPosition + vec3(0.0, 0.001, 0.0));
+              vec3 lSunN = normalize(uSunDir);
+              // Forward solar subsurface scattering through backlit canopy foliage + cross-lit wrap fill
+              float sunBehindLeaf = pow(clamp(dot(lViewDir, lSunN), 0.0, 1.0), 2.4);
+              float skyLeafWrap = clamp(dot(normalize(vLeafWNorm), lSunN) * 0.45 + 0.55, 0.0, 1.0);
+              float outerCrown = clamp(vCrownMask, 0.18, 1.0);
+              float leafTrans = (sunBehindLeaf * 0.88 + skyLeafWrap * 0.20) * outerCrown * uSunVis * (1.0 - uCaveDark);
+              totalEmissiveRadiance += diffuseColor.rgb * uFoliageTransColor * leafTrans * 0.86;
+            }
+            `
+          );
           shader.fragmentShader = shader.fragmentShader.replace(
             '#include <fog_fragment>',
             `#include <fog_fragment>
             #ifdef USE_FOG
               {
                 float lDist = length(vLeafWPos - cameraPosition);
-                float lExt = clamp(1.0 - exp(-pow(uFogDensity * lDist, 2.0)), 0.0, 0.85);
+                float lAltClear = mix(1.0, exp(-max(0.0, vLeafWPos.y - 8.0) * 0.0075), 0.55);
+                float lExt = clamp(1.0 - exp(-pow(uFogDensity * lDist * lAltClear, 2.0)), 0.0, 0.85);
                 vec3 lRay = (vLeafWPos - cameraPosition) / max(0.001, lDist);
                 float lMie = pow(max(0.0, dot(lRay, normalize(uSunDir))), 5.5);
-                gl_FragColor.rgb = mix(gl_FragColor.rgb, uMieColor, lExt * lMie * (1.0 - uCaveDark) * 0.45);
+                gl_FragColor.rgb = mix(gl_FragColor.rgb, uMieColor, lExt * lMie * (1.0 - uCaveDark) * 0.48);
               }
             #endif
             `
@@ -7934,8 +7990,8 @@
         c.offsetHSL(dh, ds, dl);
         if (m.color) m.color.copy(c);
         if (m.emissive) {
-          m.emissive.setHex(0x14280e);
-          m.emissiveIntensity = 0.16;
+          m.emissive.setHex(0x0d1c09);
+          m.emissiveIntensity = 0.05;
         }
         m.needsUpdate = true;
         return m;
@@ -7974,8 +8030,8 @@
         c.offsetHSL(dh, ds, dl);
         if (m.color) m.color.copy(c);
         if (m.emissive) {
-          m.emissive.setHex(0x14280e);
-          m.emissiveIntensity = 0.16;
+          m.emissive.setHex(0x0d1c09);
+          m.emissiveIntensity = 0.05;
         }
         m.dithering = true;
         m.needsUpdate = true;
@@ -8848,122 +8904,201 @@
       return logGroup;
     }
 
-    // 7. AAA Campfire System: Sculpted Stone Ring, Split Firewood, 3D Shader Flames, Billowing Smoke & Floating Sparks
+    // 7. AAA Campfire System: Sculpted Stone Ring, Split Firewood, Volumetric Cylindrical-Billboard FBM Flames, Cracked Coals, Smoke & Embers
     window.activeCampfires = [];
     window.fireShaderTime = { value: 0.0 };
     let sharedFlameMat = null;
+    let torchFlameMat = null;
     let sharedSmokeTex = null;
     let sharedSparkTex = null;
+    let sharedFlameHaloTex = null;
+    let sharedCoalTex = null;
+    let sharedCoalEmissiveTex = null;
+
+    function createFireShaderMaterial(isTorch) {
+      return new THREE.ShaderMaterial({
+        uniforms: {
+          uTime: window.fireShaderTime,
+          uMotionSway: { value: new THREE.Vector3(0.0, 0.0, 0.0) },
+          uIsTorch: { value: isTorch ? 1.0 : 0.0 }
+        },
+        vertexShader: `
+          uniform float uTime;
+          uniform vec3 uMotionSway;
+          uniform float uIsTorch;
+          attribute vec4 aFlameSpec; // x: seed, y: sideShift, z: forwardWrap, w: role (0=mantle, 0.35=flank, 1.0=core)
+          attribute float aUpMix;    // blend from local Y toward true sky-up buoyancy
+          attribute float aHeightRef;
+          varying vec2 vUv;
+          varying float vSeed;
+          varying float vRole;
+
+          void main() {
+            vUv = uv;
+            vSeed = aFlameSpec.x;
+            vRole = aFlameSpec.w;
+
+            float h = clamp(uv.y, 0.0, 1.0);
+            float nx = (uv.x - 0.5) * 2.0;
+
+            vec3 anchorMV = (modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+            vec3 rawLocalUpMV = (modelViewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz;
+            float objScale = max(0.001, length(rawLocalUpMV));
+            vec3 localUpMV = rawLocalUpMV / objScale;
+            vec3 worldUpMV = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
+            vec3 midUp = normalize(mix(localUpMV, worldUpMV, aUpMix * 0.45));
+
+            vec3 toCam = normalize(-anchorMV);
+            vec3 rawRight = cross(midUp, toCam);
+            float rLen = length(rawRight);
+            vec3 rightAxis = rLen > 0.001 ? (rawRight / rLen) : vec3(1.0, 0.0, 0.0);
+
+            // Subtle per-tongue breathing without rigid uniform scaling
+            float breath = 1.0 + sin(uTime * 6.4 + vSeed * 4.3) * 0.055 + cos(uTime * 11.7 + vSeed * 2.1) * 0.032;
+            float hRef = max(0.05, aHeightRef * objScale);
+            float xLocal = position.x * objScale;
+            float yLocal = position.y * objScale * breath;
+
+            // Proportional S-curve flame lick & tip whip
+            float whipPhase = h * 5.2 - uTime * (8.2 + vRole * 1.4) + vSeed * 6.2831;
+            float whip = (sin(whipPhase) * 0.11 + cos(h * 9.4 - uTime * 13.5 + vSeed * 3.7) * 0.05) * hRef * pow(h, 1.3);
+
+            // Buoyant sky-up curve (stronger toward flame tips while base stays locked in logs/iron basket)
+            float tipFactor = pow(h, 1.28);
+            vec3 buoyancyShift = (worldUpMV - localUpMV) * (yLocal * aUpMix * 0.88 * tipFactor);
+
+            // Outdoor trade-wind lean for world fires, or player-inertia trail for torch
+            vec3 worldWindMV = (viewMatrix * vec4(0.11, 0.0, 0.05, 0.0)).xyz;
+            vec3 dragShift = mix(worldWindMV * (hRef * 0.38), uMotionSway, uIsTorch) * tipFactor;
+
+            // Wrap base smoothly around outside of fuel knot/logs while aligning tips centrally
+            float wrapDist = aFlameSpec.z * objScale * (1.0 - smoothstep(0.18, 0.78, h)) * cos(nx * 1.05);
+
+            vec3 mvPos = anchorMV
+              + rightAxis * (xLocal + aFlameSpec.y * objScale + whip)
+              + localUpMV * yLocal
+              + buoyancyShift
+              + dragShift
+              + toCam * wrapDist;
+
+            gl_Position = projectionMatrix * vec4(mvPos, 1.0);
+          }
+        `,
+        fragmentShader: `
+          uniform float uTime;
+          varying vec2 vUv;
+          varying float vSeed;
+          varying float vRole;
+
+          float hash21(vec2 p) {
+            p = fract(p * vec2(127.1, 311.7));
+            p += dot(p, p + 34.23);
+            return fract(p.x * p.y);
+          }
+          float noise2D(vec2 p) {
+            vec2 i = floor(p);
+            vec2 f = fract(p);
+            f = f * f * (3.0 - 2.0 * f);
+            float a = hash21(i);
+            float b = hash21(i + vec2(1.0, 0.0));
+            float c = hash21(i + vec2(0.0, 1.0));
+            float d = hash21(i + vec2(1.0, 1.0));
+            return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+          }
+          float fbmFire(vec2 p) {
+            float v = 0.0;
+            v += 0.54 * noise2D(p); p *= 2.07;
+            v += 0.30 * noise2D(p); p *= 2.13;
+            v += 0.16 * noise2D(p);
+            return v;
+          }
+
+          void main() {
+            float h = clamp(vUv.y, 0.0, 1.0);
+            float nx = (vUv.x - 0.5) * 2.0;
+
+            float flowSpeed = mix(2.75, 3.85, vRole);
+            vec2 wUv = vec2(nx * 1.45 + vSeed * 2.13, h * 1.70 - uTime * (flowSpeed * 0.64));
+            float w1 = noise2D(wUv) - 0.5;
+            float w2 = noise2D(wUv * 2.15 + vec2(3.7, -uTime * 0.85)) - 0.5;
+            float warpX = (w1 * 0.68 + w2 * 0.32) * (0.24 + h * 0.86);
+
+            vec2 fUv = vec2((nx + warpX * 0.88) * 2.40 + vSeed * 4.17, h * 3.35 - uTime * flowSpeed + w1 * 0.42);
+            float turb = fbmFire(fUv);
+
+            // Natural combustion envelope: broad rounded fuel hug -> slim sinuous waist -> detached snapping licks
+            float widthProfile = mix(0.86, 0.26, pow(h, 0.76)) + sin(h * 3.14159265) * 0.08;
+            widthProfile *= mix(1.0, 0.66, clamp(vRole, 0.0, 1.0));
+
+            float distX = abs(nx + warpX * 0.56) / max(0.14, widthProfile);
+            float coreField = clamp(1.0 - distX * distX, 0.0, 1.0);
+
+            float quadSafetyX = 1.0 - smoothstep(0.76, 0.99, abs(nx));
+            float quadSafetyY = (1.0 - smoothstep(0.90, 1.0, h)) * smoothstep(0.0, 0.08, h);
+            float topEnvelope = 1.0 - smoothstep(0.48, 0.99, h);
+
+            float baseField = coreField * (1.14 - h * 0.44) * quadSafetyX * quadSafetyY;
+            float detail = (turb - 0.44) * mix(0.60, 1.24, h);
+            float density = smoothstep(0.17, 0.76, baseField * topEnvelope + detail * coreField);
+            density *= quadSafetyX * quadSafetyY;
+
+            if (density < 0.025) discard;
+
+            // Blackbody & hydrocarbon combustion ramp with warm crimson-soot cooling rim
+            float temp = clamp(density * (0.96 - h * 0.46) + (1.0 - h) * 0.14 + vRole * 0.14, 0.0, 1.0);
+            vec3 cSootRim = vec3(0.24, 0.035, 0.008);
+            vec3 cCrimson = vec3(0.86, 0.12, 0.012);
+            vec3 cOrange  = vec3(1.00, 0.42, 0.03);
+            vec3 cGold    = vec3(1.00, 0.78, 0.20);
+            vec3 cCore    = vec3(1.00, 0.97, 0.84);
+            vec3 cBlueGas = vec3(0.22, 0.56, 1.00);
+
+            vec3 col = mix(cSootRim, cCrimson, smoothstep(0.02, 0.22, temp));
+            col = mix(col, cOrange, smoothstep(0.20, 0.48, temp));
+            col = mix(col, cGold, smoothstep(0.46, 0.76, temp));
+            col = mix(col, cCore, smoothstep(0.75, 0.95, temp));
+
+            // Faint blue-cyan pyrolysis reaction collar right at fuel-wick ignition base
+            float blueSkirt = smoothstep(0.18, 0.04, h) * smoothstep(0.01, 0.06, h) * (1.0 - smoothstep(0.50, 0.90, density)) * 0.36;
+            col = mix(col, cBlueGas, blueSkirt);
+
+            float alpha = clamp(density * mix(0.84, 0.96, vRole), 0.0, 0.95);
+            if (alpha < 0.02) discard;
+            gl_FragColor = vec4(col, alpha);
+          }
+        `,
+        transparent: true,
+        blending: THREE.NormalBlending,
+        depthWrite: false,
+        fog: false,
+        side: THREE.DoubleSide
+      });
+    }
 
     function getCampfireVFXAssets() {
       if (!sharedFlameMat) {
-        sharedFlameMat = new THREE.ShaderMaterial({
-          uniforms: {
-            uTime: window.fireShaderTime
-          },
-          vertexShader: `
-            uniform float uTime;
-            attribute float aFlameSeed;
-            varying vec2 vUv;
-            varying float vSeed;
-            void main() {
-              vUv = uv;
-              vSeed = aFlameSeed;
-              vec3 pos = position;
-              float h = clamp(uv.y, 0.0, 1.0);
-              // Organic upward flame tongue licking & wind dance
-              float waveX = sin(h * 7.5 - uTime * 9.5 + aFlameSeed * 6.28) * 0.14 * pow(h, 1.25)
-                          + cos(h * 13.0 - uTime * 14.0 + aFlameSeed * 3.1) * 0.06 * h;
-              float waveZ = cos(h * 6.8 - uTime * 8.8 + aFlameSeed * 4.7) * 0.14 * pow(h, 1.25)
-                          + sin(h * 11.5 - uTime * 13.2) * 0.06 * h;
-              // Taper gently to flickering flame tips so 5 overlapping ribbons read as tongues, never a solid cone
-              float pinch = mix(1.0 + sin(uTime * 7.0 + aFlameSeed) * 0.08, 0.24, pow(h, 0.95));
-              pos.x = pos.x * pinch + waveX;
-              pos.z = pos.z * pinch + waveZ;
-              pos.y *= (0.92 + sin(uTime * 8.2 + aFlameSeed * 5.0) * 0.12);
-              gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
-            }
-          `,
-          fragmentShader: `
-            uniform float uTime;
-            varying vec2 vUv;
-            varying float vSeed;
-
-            float hash21(vec2 p) {
-              p = fract(p * vec2(123.34, 456.21));
-              p += dot(p, p + 45.32);
-              return fract(p.x * p.y);
-            }
-            float noise2D(vec2 p) {
-              vec2 i = floor(p);
-              vec2 f = fract(p);
-              f = f * f * (3.0 - 2.0 * f);
-              float a = hash21(i);
-              float b = hash21(i + vec2(1.0, 0.0));
-              float c = hash21(i + vec2(0.0, 1.0));
-              float d = hash21(i + vec2(1.0, 1.0));
-              return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
-            }
-            float fbmFire(vec2 p) {
-              float v = 0.0;
-              v += 0.52 * noise2D(p); p *= 2.12;
-              v += 0.30 * noise2D(p); p *= 2.15;
-              v += 0.18 * noise2D(p);
-              return v;
-            }
-
-            void main() {
-              float h = clamp(vUv.y, 0.0, 1.0);
-              float edge = pow(sin(clamp(vUv.x, 0.0, 1.0) * 3.14159265), 1.55);
-              vec2 nUv = vec2(vUv.x * 3.4 + vSeed * 2.7, h * 3.8 - uTime * 3.15);
-              float n = fbmFire(nUv);
-              float n2 = fbmFire(vec2(vUv.x * 5.8 - vSeed * 1.9, h * 6.0 - uTime * 4.5));
-              float turb = n * 0.62 + n2 * 0.38;
-
-              // Shape eroded dancing flame tongues without over-saturating multi-plane additive stacking
-              float shape = edge * (1.0 - pow(h, 0.92)) * 1.24;
-              float intensity = smoothstep(0.30, 0.88, shape + (turb - 0.46) * 0.96);
-              if (intensity < 0.025) discard;
-
-              // Blackbody temperature gradient: warm ivory-gold core -> amber -> fiery orange -> crimson tip
-              vec3 cCore   = vec3(1.00, 0.92, 0.68);
-              vec3 cYellow = vec3(1.00, 0.66, 0.14);
-              vec3 cOrange = vec3(0.96, 0.30, 0.02);
-              vec3 cRed    = vec3(0.66, 0.06, 0.005);
-
-              float temp = clamp(intensity * (0.94 - h * 0.58) + (1.0 - h) * 0.16, 0.0, 1.0);
-              vec3 col = mix(cRed, cOrange, smoothstep(0.05, 0.40, temp));
-              col = mix(col, cYellow, smoothstep(0.40, 0.76, temp));
-              col = mix(col, cCore, smoothstep(0.76, 0.98, temp));
-
-              float alpha = clamp(intensity * smoothstep(0.0, 0.14, h) * (1.0 - smoothstep(0.78, 1.0, h)), 0.0, 0.72);
-              gl_FragColor = vec4(col * 0.58, alpha);
-            }
-          `,
-          transparent: true,
-          blending: THREE.AdditiveBlending,
-          depthWrite: false,
-          side: THREE.DoubleSide
-        });
+        sharedFlameMat = createFireShaderMaterial(false);
+      }
+      if (!torchFlameMat) {
+        torchFlameMat = createFireShaderMaterial(true);
       }
 
       if (!sharedSmokeTex) {
         const sc = document.createElement('canvas');
         sc.width = 128; sc.height = 128;
         const sCtx = sc.getContext('2d');
-        // Multi-lobe soft billowing smoke puff texture
         const lobes = [
-          [64, 64, 56, 0.46],
-          [48, 54, 38, 0.32],
-          [80, 58, 36, 0.30],
-          [58, 78, 38, 0.30],
-          [74, 46, 32, 0.26]
+          [64, 64, 56, 0.42],
+          [48, 54, 38, 0.28],
+          [80, 58, 36, 0.26],
+          [58, 78, 38, 0.26],
+          [74, 46, 32, 0.22]
         ];
         lobes.forEach(([x, y, r, a]) => {
           const g = sCtx.createRadialGradient(x, y, 2, x, y, r);
-          g.addColorStop(0.0, `rgba(220, 224, 230, ${a})`);
-          g.addColorStop(0.55, `rgba(175, 182, 192, ${(a * 0.48).toFixed(2)})`);
-          g.addColorStop(1.0, 'rgba(140, 148, 158, 0.0)');
+          g.addColorStop(0.0, `rgba(218, 222, 228, ${a})`);
+          g.addColorStop(0.55, `rgba(170, 176, 185, ${(a * 0.46).toFixed(2)})`);
+          g.addColorStop(1.0, 'rgba(135, 142, 152, 0.0)');
           sCtx.fillStyle = g;
           sCtx.fillRect(0, 0, 128, 128);
         });
@@ -8974,22 +9109,179 @@
         const pc = document.createElement('canvas');
         pc.width = 64; pc.height = 64;
         const pCtx = pc.getContext('2d');
-        const pGrad = pCtx.createRadialGradient(32, 32, 1, 32, 32, 30);
-        pGrad.addColorStop(0.0, 'rgba(255, 255, 230, 1.0)');
-        pGrad.addColorStop(0.28, 'rgba(255, 175, 45, 0.92)');
-        pGrad.addColorStop(0.65, 'rgba(255, 72, 8, 0.42)');
+        const pGrad = pCtx.createRadialGradient(32, 32, 0.5, 32, 32, 28);
+        pGrad.addColorStop(0.0, 'rgba(255, 255, 240, 1.0)');
+        pGrad.addColorStop(0.18, 'rgba(255, 220, 110, 0.96)');
+        pGrad.addColorStop(0.42, 'rgba(255, 120, 18, 0.48)');
         pGrad.addColorStop(1.0, 'rgba(255, 30, 0, 0.0)');
         pCtx.fillStyle = pGrad;
         pCtx.fillRect(0, 0, 64, 64);
         sharedSparkTex = new THREE.CanvasTexture(pc);
       }
 
-      return { sharedFlameMat, sharedSmokeTex, sharedSparkTex };
+      if (!sharedFlameHaloTex) {
+        const hc = document.createElement('canvas');
+        hc.width = 128; hc.height = 128;
+        const hCtx = hc.getContext('2d');
+        const hGrad = hCtx.createRadialGradient(64, 64, 2, 64, 64, 62);
+        hGrad.addColorStop(0.0, 'rgba(255, 190, 85, 0.90)');
+        hGrad.addColorStop(0.32, 'rgba(255, 112, 20, 0.42)');
+        hGrad.addColorStop(0.68, 'rgba(210, 50, 5, 0.12)');
+        hGrad.addColorStop(1.0, 'rgba(120, 20, 0, 0.0)');
+        hCtx.fillStyle = hGrad;
+        hCtx.fillRect(0, 0, 128, 128);
+        sharedFlameHaloTex = new THREE.CanvasTexture(hc);
+      }
+
+      if (!sharedCoalTex || !sharedCoalEmissiveTex) {
+        const cc = document.createElement('canvas');
+        cc.width = 128; cc.height = 128;
+        const cCtx = cc.getContext('2d');
+        const ec = document.createElement('canvas');
+        ec.width = 128; ec.height = 128;
+        const eCtx = ec.getContext('2d');
+
+        // Dark charcoal crust base
+        cCtx.fillStyle = '#171311';
+        cCtx.fillRect(0, 0, 128, 128);
+        eCtx.fillStyle = '#000000';
+        eCtx.fillRect(0, 0, 128, 128);
+
+        let rng = 1337;
+        const rand = () => { rng = (rng * 16807) % 2147483647; return (rng - 1) / 2147483646; };
+
+        // Ashy gray-charcoal mottling
+        for (let i = 0; i < 85; i++) {
+          const rx = rand() * 128, ry = rand() * 128, rr = 4 + rand() * 14;
+          const g = cCtx.createRadialGradient(rx, ry, 1, rx, ry, rr);
+          const v = Math.floor(28 + rand() * 34);
+          g.addColorStop(0, `rgba(${v + 8}, ${v + 4}, ${v}, 0.55)`);
+          g.addColorStop(1, 'rgba(20, 16, 14, 0)');
+          cCtx.fillStyle = g;
+          cCtx.fillRect(0, 0, 128, 128);
+        }
+
+        // Deep jagged glowing coal fissures (only cracks glow in emissiveMap)
+        for (let f = 0; f < 28; f++) {
+          let x = rand() * 128, y = rand() * 128;
+          const steps = 4 + Math.floor(rand() * 4);
+          eCtx.beginPath();
+          eCtx.moveTo(x, y);
+          cCtx.beginPath();
+          cCtx.moveTo(x, y);
+          for (let s = 0; s < steps; s++) {
+            x += (rand() - 0.5) * 26;
+            y += (rand() - 0.5) * 26;
+            eCtx.lineTo(x, y);
+            cCtx.lineTo(x, y);
+          }
+          eCtx.lineCap = 'round';
+          eCtx.lineJoin = 'round';
+          eCtx.strokeStyle = 'rgba(255, 72, 8, 0.55)';
+          eCtx.lineWidth = 4.2 + rand() * 2.5;
+          eCtx.stroke();
+          eCtx.strokeStyle = 'rgba(255, 195, 75, 0.95)';
+          eCtx.lineWidth = 1.4 + rand() * 1.1;
+          eCtx.stroke();
+
+          cCtx.lineCap = 'round';
+          cCtx.strokeStyle = 'rgba(90, 26, 8, 0.55)';
+          cCtx.lineWidth = 2.6;
+          cCtx.stroke();
+        }
+
+        sharedCoalTex = new THREE.CanvasTexture(cc);
+        sharedCoalTex.wrapS = THREE.RepeatWrapping;
+        sharedCoalTex.wrapT = THREE.RepeatWrapping;
+        sharedCoalEmissiveTex = new THREE.CanvasTexture(ec);
+        sharedCoalEmissiveTex.wrapS = THREE.RepeatWrapping;
+        sharedCoalEmissiveTex.wrapT = THREE.RepeatWrapping;
+      }
+
+      function buildVolumetricFlameCluster(opts = {}) {
+        const width = opts.width || 0.44;
+        const height = opts.height || 0.52;
+        const wrapRadius = opts.wrapRadius !== undefined ? opts.wrapRadius : 0.085;
+        const upMix = opts.upMix !== undefined ? opts.upMix : 0.08;
+        const mat = opts.isTorch ? torchFlameMat : sharedFlameMat;
+        const cluster = new THREE.Group();
+
+        const layers = [
+          { w: width * 0.90, h: height * 0.94, side: -width * 0.13, wrap: -wrapRadius * 0.30, seed: 0.31, role: 0.00, order: 4 },
+          { w: width * 0.88, h: height * 0.90, side:  width * 0.14, wrap: -wrapRadius * 0.12, seed: 1.73, role: 0.25, order: 4 },
+          { w: width * 1.04, h: height * 1.04, side:  0.0,          wrap:  wrapRadius * 0.88, seed: 3.19, role: 0.55, order: 5 },
+          { w: width * 0.68, h: height * 0.72, side:  0.0,          wrap:  wrapRadius * 1.08, seed: 4.67, role: 1.00, order: 6 }
+        ];
+
+        layers.forEach(l => {
+          const geo = new THREE.PlaneGeometry(l.w, l.h, 6, 16);
+          geo.translate(0, l.h * 0.5, 0);
+          const count = geo.attributes.position.count;
+          const specArr = new Float32Array(count * 4);
+          const upArr = new Float32Array(count);
+          const hRefArr = new Float32Array(count);
+          for (let i = 0; i < count; i++) {
+            const i4 = i * 4;
+            specArr[i4]     = l.seed;
+            specArr[i4 + 1] = l.side;
+            specArr[i4 + 2] = l.wrap;
+            specArr[i4 + 3] = l.role;
+            upArr[i] = upMix;
+            hRefArr[i] = l.h;
+          }
+          geo.setAttribute('aFlameSpec', new THREE.BufferAttribute(specArr, 4));
+          geo.setAttribute('aUpMix', new THREE.BufferAttribute(upArr, 1));
+          geo.setAttribute('aHeightRef', new THREE.BufferAttribute(hRefArr, 1));
+
+          const mesh = new THREE.Mesh(geo, mat);
+          mesh.renderOrder = l.order;
+          mesh.frustumCulled = false;
+          mesh.raycast = () => {};
+          cluster.add(mesh);
+        });
+
+        // Subtle warm optical heat halo (single low-alpha additive sprite)
+        const haloMat = new THREE.SpriteMaterial({
+          map: sharedFlameHaloTex,
+          color: 0xff8a2b,
+          transparent: true,
+          opacity: opts.haloOpacity !== undefined ? opts.haloOpacity : 0.22,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          fog: false
+        });
+        const halo = new THREE.Sprite(haloMat);
+        halo.position.set(0, height * 0.34, 0);
+        halo.scale.set(width * 1.45, height * 1.25, 1.0);
+        halo.renderOrder = 3;
+        halo.raycast = () => {};
+        cluster.add(halo);
+        cluster.userData.halo = halo;
+
+        return cluster;
+      }
+
+      return {
+        sharedFlameMat,
+        torchFlameMat,
+        sharedSmokeTex,
+        sharedSparkTex,
+        sharedFlameHaloTex,
+        sharedCoalTex,
+        sharedCoalEmissiveTex,
+        buildVolumetricFlameCluster
+      };
     }
 
     function createCampfire(customLight = null) {
       const group = new THREE.Group();
-      const { sharedFlameMat, sharedSmokeTex, sharedSparkTex } = getCampfireVFXAssets();
+      const {
+        sharedSmokeTex,
+        sharedSparkTex,
+        sharedCoalTex,
+        sharedCoalEmissiveTex,
+        buildVolumetricFlameCluster
+      } = getCampfireVFXAssets();
       const { woodBarkTex, woodRingsTex } = getWoodTextures();
 
       // 1. Grounded Compact Blackened Ash Pit (0.65m diameter)
@@ -9023,7 +9315,7 @@
         group.add(s);
       }
 
-      // 3. Compact Crossed Split-Log Cradle + Subtle Glowing Tips
+      // 3. Compact Crossed Split-Log Cradle + Cracked Glowing Charcoal Tips
       const fireLogMat = new THREE.MeshStandardMaterial({
         map: woodBarkTex,
         color: 0x3b281a,
@@ -9035,10 +9327,12 @@
         roughness: 0.80
       });
       const charredTipMat = new THREE.MeshStandardMaterial({
-        color: 0x1a100c,
-        emissive: 0xff4500,
-        emissiveIntensity: 0.95,
-        roughness: 0.72
+        map: sharedCoalTex,
+        color: 0xffffff,
+        emissive: 0xff5a12,
+        emissiveMap: sharedCoalEmissiveTex,
+        emissiveIntensity: 1.45,
+        roughness: 0.88
       });
 
       const logAngles = [0.25, 1.48, 2.75, 4.02, 5.28];
@@ -9057,12 +9351,14 @@
         group.add(logMesh);
       });
 
-      // 4. Subtle Glowing Charcoal Bed (emissiveIntensity ~ 0.90-1.25)
+      // 4. Cracked Charcoal Coal Bed with Incandescent Interior Fissures
       const emberMat = new THREE.MeshStandardMaterial({
-        color: 0xe65100,
-        emissive: 0xff3d00,
-        emissiveIntensity: 1.05,
-        roughness: 0.48
+        map: sharedCoalTex,
+        color: 0xffffff,
+        emissive: 0xff4d0a,
+        emissiveMap: sharedCoalEmissiveTex,
+        emissiveIntensity: 1.65,
+        roughness: 0.86
       });
       const emberGroup = new THREE.Group();
       const emberOffsets = [
@@ -9082,42 +9378,19 @@
       });
       group.add(emberGroup);
 
-      // 5. Realistic Compact Multi-Tongue Flame Planes (0.20-0.28m width, 0.24-0.38m height)
-      const flameGroup = new THREE.Group();
-      flameGroup.position.y = 0.045;
-
-      function buildFlameSheet(width, height, bendRadius, rotY, seedVal) {
-        const fGeo = new THREE.PlaneGeometry(width, height, 6, 12);
-        fGeo.translate(0, height * 0.5, 0);
-        const fPos = fGeo.attributes.position;
-        const seeds = new Float32Array(fPos.count);
-        for (let i = 0; i < fPos.count; i++) {
-          const lx = fPos.getX(i);
-          const ly = fPos.getY(i);
-          const curveZ = Math.cos((lx / (width * 0.5)) * Math.PI * 0.5) * bendRadius;
-          fPos.setXYZ(i, lx, ly, curveZ);
-          seeds[i] = seedVal;
-        }
-        fGeo.setAttribute('aFlameSeed', new THREE.BufferAttribute(seeds, 1));
-        fGeo.computeVertexNormals();
-        const mesh = new THREE.Mesh(fGeo, sharedFlameMat);
-        mesh.rotation.y = rotY;
-        mesh.raycast = () => {};
-        return mesh;
-      }
-
-      const flameConfigs = [
-        { w: 0.27, h: 0.37, bend: 0.035, rot: 0.0,  seed: 0.15 },
-        { w: 0.24, h: 0.33, bend: 0.032, rot: 0.85, seed: 1.45 },
-        { w: 0.25, h: 0.35, bend: 0.034, rot: 1.72, seed: 2.85 },
-        { w: 0.21, h: 0.26, bend: 0.028, rot: 2.55, seed: 4.10 }
-      ];
-      flameConfigs.forEach(fc => {
-        flameGroup.add(buildFlameSheet(fc.w, fc.h, fc.bend, fc.rot, fc.seed));
+      // 5. Cylindrical-Billboard Volumetric FBM Flames (Zero Edge-On Seams, Natural Licking Tips)
+      const flameGroup = buildVolumetricFlameCluster({
+        width: 0.46,
+        height: 0.54,
+        wrapRadius: 0.095,
+        upMix: 0.08,
+        haloOpacity: 0.22,
+        isTorch: false
       });
+      flameGroup.position.y = 0.042;
       group.add(flameGroup);
 
-      // 6. Subtle Low-Alpha Rising Woodsmoke Wisps (12 wisps, <= 0.14 opacity)
+      // 6. Subtle Low-Alpha Rising Woodsmoke Wisps (12 wisps, <= 0.13 opacity)
       const smokeGroup = new THREE.Group();
       const smokePuffs = [];
       const smokeCount = 12;
@@ -9145,7 +9418,7 @@
       }
       group.add(smokeGroup);
 
-      // 7. Short-Lived Low-Rising Embers (24 embers rising < 1.4m)
+      // 7. Crisp Short-Lived Rising Embers (24 embers rising < 1.4m, properly scaled in meters)
       const sparkCount = 24;
       const sparkPos = new Float32Array(sparkCount * 3);
       const sparkData = new Array(sparkCount);
@@ -9154,7 +9427,7 @@
         const rad = 0.02 + Math.random() * 0.12;
         const maxLife = 0.75 + Math.random() * 0.85;
         const age = initial ? Math.random() * maxLife : 0.0;
-        const vy = 0.55 + Math.random() * 0.55;
+        const vy = 0.58 + Math.random() * 0.58;
         const vx = Math.cos(ang) * (0.02 + Math.random() * 0.06);
         const vz = Math.sin(ang) * (0.02 + Math.random() * 0.06);
         const swirlAmp = 0.09 + Math.random() * 0.12;
@@ -9174,10 +9447,10 @@
       const sparkMat = new THREE.PointsMaterial({
         map: sharedSparkTex,
         color: 0xffb74d,
-        size: 1.9,
+        size: 0.062,
         sizeAttenuation: true,
         transparent: true,
-        opacity: 0.82,
+        opacity: 0.90,
         blending: THREE.AdditiveBlending,
         depthWrite: false
       });
@@ -11198,7 +11471,7 @@
         const normScale = targetHeight / rawH;
         const baseYOffset = -box.min.y * normScale;
 
-        // Add subtle breeze vertex sway to GLB wildflowers & grass clumps synchronized with grassMat
+        // Add breeze sway, root contact AO & warm solar translucency to GLB wildflowers & grass clumps
         if (category === 'flowers' || category === 'grass') {
           template.traverse(child => {
             if (child.isMesh && child.material) {
@@ -11206,6 +11479,10 @@
               child.material.onBeforeCompile = function (shader) {
                 shader.uniforms.uGrassTime = window.grassUniforms.uGrassTime;
                 shader.uniforms.uGrassWind = window.grassUniforms.uGrassWind;
+                shader.uniforms.uSunDir = window.atmUniforms.uSunDir;
+                shader.uniforms.uSunVis = window.atmUniforms.uSunVis;
+                shader.uniforms.uCaveDark = window.atmUniforms.uCaveDark;
+                shader.uniforms.uFoliageTransColor = window.atmUniforms.uFoliageTransColor;
                 shader.uniforms.uLocalMinY = { value: box.min.y };
                 shader.uniforms.uLocalH = { value: rawH };
                 shader.vertexShader = shader.vertexShader.replace(
@@ -11215,6 +11492,8 @@
                   uniform float uGrassWind;
                   uniform float uLocalMinY;
                   uniform float uLocalH;
+                  varying float vGlbTip;
+                  varying vec3 vGlbWPos;
                   `
                 ).replace(
                   '#include <begin_vertex>',
@@ -11225,6 +11504,27 @@
                   float bend = (sin(ph) * 0.08 + sin(ph * 2.2 + 0.9) * 0.035) * uLocalH * uGrassWind * (lfY * lfY);
                   transformed.x += bend;
                   transformed.z += bend * 0.55;
+                  vGlbTip = lfY;
+                  vGlbWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
+                  `
+                );
+                shader.fragmentShader = shader.fragmentShader.replace(
+                  '#include <common>',
+                  `#include <common>
+                  uniform vec3 uSunDir;
+                  uniform float uSunVis;
+                  uniform float uCaveDark;
+                  uniform vec3 uFoliageTransColor;
+                  varying float vGlbTip;
+                  varying vec3 vGlbWPos;
+                  `
+                ).replace(
+                  '#include <emissivemap_fragment>',
+                  `#include <emissivemap_fragment>
+                  vec3 flView = normalize(vGlbWPos - cameraPosition + vec3(0.0, 0.001, 0.0));
+                  float flBack = pow(clamp(dot(flView, normalize(uSunDir)), 0.0, 1.0), 2.5);
+                  float flRim = (flBack * 0.85 + 0.15) * vGlbTip * uSunVis * (1.0 - uCaveDark);
+                  totalEmissiveRadiance += diffuseColor.rgb * uFoliageTransColor * flRim * 0.42;
                   `
                 );
               };
@@ -11355,7 +11655,10 @@
       grassMat.onBeforeCompile = function (shader) {
         shader.uniforms.uGrassTime = window.grassUniforms.uGrassTime;
         shader.uniforms.uGrassWind = window.grassUniforms.uGrassWind;
-        shader.uniforms.uSunDir = window.grassUniforms.uSunDir;
+        shader.uniforms.uSunDir = window.atmUniforms.uSunDir;
+        shader.uniforms.uSunVis = window.atmUniforms.uSunVis;
+        shader.uniforms.uCaveDark = window.atmUniforms.uCaveDark;
+        shader.uniforms.uFoliageTransColor = window.atmUniforms.uFoliageTransColor;
         shader.uniforms.uLodBias = window.grassUniforms.uLodBias;
         shader.vertexShader = shader.vertexShader.replace(
           '#include <common>',
@@ -11397,6 +11700,9 @@
           '#include <common>',
           `#include <common>
           uniform vec3 uSunDir;
+          uniform float uSunVis;
+          uniform float uCaveDark;
+          uniform vec3 uFoliageTransColor;
           varying float vTipWeight;
           varying vec3 vGrassWorldPos;
           `
@@ -11411,8 +11717,11 @@
           '#include <emissivemap_fragment>',
           `#include <emissivemap_fragment>
           vec3 gViewDir = normalize(vGrassWorldPos - cameraPosition + vec3(0.0, 0.001, 0.0));
-          float backlit = pow(clamp(dot(gViewDir, uSunDir), 0.0, 1.0), 3.0) * vTipWeight;
-          totalEmissiveRadiance += vec3(0.28, 0.40, 0.09) * backlit * 0.44;
+          float gDot = dot(gViewDir, normalize(uSunDir));
+          float backlit = pow(clamp(gDot, 0.0, 1.0), 2.4);
+          float graze = pow(clamp(1.0 - abs(gDot), 0.0, 1.0), 2.0) * 0.22;
+          float gTrans = (backlit * 0.90 + graze) * vTipWeight * uSunVis * (1.0 - uCaveDark);
+          totalEmissiveRadiance += diffuseColor.rgb * uFoliageTransColor * gTrans * 0.68;
           `
         );
       };
@@ -11795,7 +12104,10 @@
       reedMat.onBeforeCompile = function (shader) {
         shader.uniforms.uGrassTime = window.grassUniforms.uGrassTime;
         shader.uniforms.uGrassWind = window.grassUniforms.uGrassWind;
-        shader.uniforms.uSunDir = window.grassUniforms.uSunDir;
+        shader.uniforms.uSunDir = window.atmUniforms.uSunDir;
+        shader.uniforms.uSunVis = window.atmUniforms.uSunVis;
+        shader.uniforms.uCaveDark = window.atmUniforms.uCaveDark;
+        shader.uniforms.uFoliageTransColor = window.atmUniforms.uFoliageTransColor;
         shader.uniforms.uLodBias = window.grassUniforms.uLodBias;
         shader.vertexShader = shader.vertexShader.replace(
           '#include <common>',
@@ -11837,6 +12149,9 @@
           '#include <common>',
           `#include <common>
           uniform vec3 uSunDir;
+          uniform float uSunVis;
+          uniform float uCaveDark;
+          uniform vec3 uFoliageTransColor;
           varying float vTipWeight;
           varying vec3 vGrassWorldPos;
           `
@@ -11844,8 +12159,11 @@
           '#include <emissivemap_fragment>',
           `#include <emissivemap_fragment>
           vec3 gViewDir = normalize(vGrassWorldPos - cameraPosition + vec3(0.0, 0.001, 0.0));
-          float backlit = pow(clamp(dot(gViewDir, uSunDir), 0.0, 1.0), 3.0) * vTipWeight;
-          totalEmissiveRadiance += vec3(0.46, 0.60, 0.16) * backlit * 0.75;
+          float rDot = dot(gViewDir, normalize(uSunDir));
+          float backlit = pow(clamp(rDot, 0.0, 1.0), 2.4);
+          float rGraze = pow(clamp(1.0 - abs(rDot), 0.0, 1.0), 2.0) * 0.20;
+          float rTrans = (backlit * 0.92 + rGraze) * vTipWeight * uSunVis * (1.0 - uCaveDark);
+          totalEmissiveRadiance += diffuseColor.rgb * uFoliageTransColor * rTrans * 0.78;
           `
         );
       };
@@ -11985,7 +12303,10 @@
       fernMat.onBeforeCompile = function (shader) {
         shader.uniforms.uGrassTime = window.grassUniforms.uGrassTime;
         shader.uniforms.uGrassWind = window.grassUniforms.uGrassWind;
-        shader.uniforms.uSunDir = window.grassUniforms.uSunDir;
+        shader.uniforms.uSunDir = window.atmUniforms.uSunDir;
+        shader.uniforms.uSunVis = window.atmUniforms.uSunVis;
+        shader.uniforms.uCaveDark = window.atmUniforms.uCaveDark;
+        shader.uniforms.uFoliageTransColor = window.atmUniforms.uFoliageTransColor;
         shader.uniforms.uLodBias = window.grassUniforms.uLodBias;
         shader.vertexShader = shader.vertexShader.replace(
           '#include <common>',
@@ -12026,15 +12347,27 @@
           '#include <common>',
           `#include <common>
           uniform vec3 uSunDir;
+          uniform float uSunVis;
+          uniform float uCaveDark;
+          uniform vec3 uFoliageTransColor;
           varying float vFernTip;
           varying vec3 vFernWorldPos;
+          `
+        ).replace(
+          '#include <color_fragment>',
+          `#include <color_fragment>
+          // Rosette root contact AO anchors ferns naturally into damp soil
+          diffuseColor.rgb *= mix(0.54, 1.02, smoothstep(0.0, 0.45, vFernTip));
           `
         ).replace(
           '#include <emissivemap_fragment>',
           `#include <emissivemap_fragment>
           vec3 fView = normalize(vFernWorldPos - cameraPosition + vec3(0.0, 0.001, 0.0));
-          float fBacklit = pow(clamp(dot(fView, uSunDir), 0.0, 1.0), 3.2) * vFernTip;
-          totalEmissiveRadiance += vec3(0.22, 0.42, 0.09) * fBacklit * 0.45;
+          float fDot = dot(fView, normalize(uSunDir));
+          float fBacklit = pow(clamp(fDot, 0.0, 1.0), 2.5);
+          float fGraze = pow(clamp(1.0 - abs(fDot), 0.0, 1.0), 2.0) * 0.18;
+          float fTrans = (fBacklit * 0.90 + fGraze) * vFernTip * uSunVis * (1.0 - uCaveDark);
+          totalEmissiveRadiance += diffuseColor.rgb * uFoliageTransColor * fTrans * 0.82;
           `
         );
       };
@@ -17142,13 +17475,14 @@
         btn.classList.add('active');
         const w = btn.dataset.weather;
         if (w === 'clear') {
-          updateSun(12);
+          window._weatherMode = 'clear';
+          updateSun(12, true);
           sliderTime.value = 12;
           timeVal.innerText = "12:00";
-          skyUniforms['turbidity'].value = 2.6;
-          skyUniforms['rayleigh'].value = 1.55;
-          skyUniforms['mieCoefficient'].value = 0.0045;
-          skyUniforms['mieDirectionalG'].value = 0.82;
+          skyUniforms['turbidity'].value = 2.2;
+          skyUniforms['rayleigh'].value = 1.58;
+          skyUniforms['mieCoefficient'].value = 0.0032;
+          skyUniforms['mieDirectionalG'].value = 0.80;
           skyUniforms['stormMix'].value = 0.0;
           skyUniforms['nightMix'].value = 0.0;
           cloudUniforms['uCloudCover'].value = 0.44;
@@ -17179,15 +17513,16 @@
             sliderFoam.value = 0.85;
             foamVal.innerText = "0.85";
           }
-          refreshEnvironmentIBL();
+          refreshEnvironmentIBL(sunLight.position);
         } else if (w === 'sunset') {
-          updateSun(18.5);
+          window._weatherMode = 'sunset';
+          updateSun(18.5, true);
           sliderTime.value = 18.5;
           timeVal.innerText = "18:30";
           skyUniforms['turbidity'].value = 7.5;
           skyUniforms['rayleigh'].value = 3.1;
-          skyUniforms['mieCoefficient'].value = 0.008;
-          skyUniforms['mieDirectionalG'].value = 0.88;
+          skyUniforms['mieCoefficient'].value = 0.0068;
+          skyUniforms['mieDirectionalG'].value = 0.86;
           skyUniforms['stormMix'].value = 0.0;
           skyUniforms['nightMix'].value = 0.05;
           cloudUniforms['uCloudCover'].value = 0.56;
@@ -17218,14 +17553,15 @@
             sliderFoam.value = 0.55;
             foamVal.innerText = "0.55";
           }
-          refreshEnvironmentIBL();
+          refreshEnvironmentIBL(sunLight.position);
         } else if (w === 'storm') {
-          updateSun(14);
+          window._weatherMode = 'storm';
+          updateSun(14, true);
           sliderTime.value = 14;
           timeVal.innerText = "14:00";
           skyUniforms['turbidity'].value = 12.0;
           skyUniforms['rayleigh'].value = 0.7;
-          skyUniforms['mieCoefficient'].value = 0.018;
+          skyUniforms['mieCoefficient'].value = 0.015;
           skyUniforms['mieDirectionalG'].value = 0.75;
           skyUniforms['stormMix'].value = 1.0;
           skyUniforms['nightMix'].value = 0.0;
@@ -17257,9 +17593,10 @@
             sliderFoam.value = 1.4;
             foamVal.innerText = "1.40";
           }
-          refreshEnvironmentIBL();
+          refreshEnvironmentIBL(sunLight.position);
         } else if (w === 'night') {
-          updateSun(23);
+          window._weatherMode = 'night';
+          updateSun(23, true);
           sliderTime.value = 23;
           timeVal.innerText = "23:00";
           skyUniforms['turbidity'].value = 1.2;
@@ -17296,12 +17633,13 @@
             sliderFoam.value = 0.3;
             foamVal.innerText = "0.30";
           }
-          refreshEnvironmentIBL();
+          refreshEnvironmentIBL(sunLight.position);
         }
       });
     });
 
-    function updateSun(hour) {
+    let _lastIBLSunHour = 12;
+    function updateSun(hour, skipIBL = false) {
       const angle = ((hour - 6) / 12) * Math.PI;
       const y = Math.sin(angle) * 75;
       const x = Math.cos(angle) * 65;
@@ -17310,26 +17648,47 @@
       window._sunOffsetY = Math.max(-10, y);
       window._sunOffsetZ = -50;
       sunLight.position.set(x, Math.max(-10, y), -50);
-      const baseSunInt = Math.max(0.08, sunElev * 2.25);
-      const baseHemiInt = Math.max(0.18, sunElev * 0.58);
+      const baseSunInt = Math.max(0.08, sunElev * 2.20);
+      const baseHemiInt = Math.max(0.20, sunElev * 0.62);
       window._surfaceSunInt = baseSunInt;
       window._surfaceHemiInt = baseHemiInt;
       const dFac = window.caveDarknessFactor || 0.0;
       sunLight.intensity = baseSunInt * (1.0 - 0.996 * dFac);
       hemiLight.intensity = baseHemiInt * (1.0 - 0.992 * dFac);
+      const isStorm = window._weatherMode === 'storm';
       // Dynamic tropical sun warmth: golden amber near horizon -> crisp tropical warm ivory near noon -> cool silver moonlit key
       if (sunElev > 0.05) {
         const lowSun = Math.max(0.0, Math.min(1.0, (0.48 - sunElev) / 0.43));
         sunLight.color.setRGB(1.0, 0.945 - lowSun * 0.19, 0.824 - lowSun * 0.44);
-        hemiLight.color.setRGB(0.58 - lowSun * 0.08, 0.83 - lowSun * 0.18, 1.0 - lowSun * 0.14);
+        hemiLight.color.setRGB(0.60 - lowSun * 0.08, 0.85 - lowSun * 0.18, 1.0 - lowSun * 0.14);
         if (window.atmUniforms && window.atmUniforms.uMieColor) {
           window.atmUniforms.uMieColor.value.setRGB(1.0, 0.88 - lowSun * 0.24, 0.64 - lowSun * 0.36);
+        }
+        if (window.atmUniforms && window.atmUniforms.uSunVis) {
+          window.atmUniforms.uSunVis.value = (isStorm ? 0.24 : 1.0) * Math.min(1.0, (sunElev - 0.04) * 3.2);
+        }
+        if (window.atmUniforms && window.atmUniforms.uFoliageTransColor) {
+          if (isStorm) {
+            window.atmUniforms.uFoliageTransColor.value.setRGB(0.28, 0.46, 0.34);
+          } else {
+            window.atmUniforms.uFoliageTransColor.value.setRGB(
+              0.65 + lowSun * 0.35,
+              0.92 - lowSun * 0.24,
+              0.28 - lowSun * 0.18
+            );
+          }
         }
       } else {
         sunLight.color.setHex(0x8bb6e6);
         hemiLight.color.setHex(0x1f3652);
         if (window.atmUniforms && window.atmUniforms.uMieColor) {
           window.atmUniforms.uMieColor.value.setHex(0x284060);
+        }
+        if (window.atmUniforms && window.atmUniforms.uSunVis) {
+          window.atmUniforms.uSunVis.value = 0.04;
+        }
+        if (window.atmUniforms && window.atmUniforms.uFoliageTransColor) {
+          window.atmUniforms.uFoliageTransColor.value.setHex(0x1c3844);
         }
       }
       if (sliderSunInt && sunIntVal) {
@@ -17353,6 +17712,10 @@
       }
       if (water && water.material && water.material.uniforms['sunDirection']) {
         water.material.uniforms['sunDirection'].value.copy(sunDir);
+      }
+      if (!skipIBL && Math.abs(hour - _lastIBLSunHour) > 0.35) {
+        _lastIBLSunHour = hour;
+        refreshEnvironmentIBL(sunDir);
       }
       if (renderer && renderer.shadowMap) renderer.shadowMap.needsUpdate = true;
     }
@@ -17851,7 +18214,8 @@
 
           if (lit) {
             const flicker = 1.38 + Math.sin(timeSec * 5.2 + c * 2.1) * 0.14
-                          + Math.cos(timeSec * 9.1 + c) * 0.08;
+                          + Math.cos(timeSec * 9.1 + c) * 0.08
+                          + Math.sin(timeSec * 14.3 + c * 4.7) * 0.06;
             if (cf.light) {
               cf.light._baseInt = flicker;
               cf.light.intensity = flicker;
@@ -17863,11 +18227,14 @@
                 );
               }
             }
+            if (cf.flameGroup && cf.flameGroup.userData && cf.flameGroup.userData.halo) {
+              cf.flameGroup.userData.halo.material.opacity = 0.19 + Math.sin(timeSec * 8.4 + c * 1.9) * 0.04;
+            }
             if (cf.emberMat) {
-              cf.emberMat.emissiveIntensity = 1.05 + Math.sin(timeSec * 4.4 + c) * 0.18;
+              cf.emberMat.emissiveIntensity = 1.55 + Math.sin(timeSec * 4.4 + c) * 0.25;
             }
             if (cf.tipCoalMat) {
-              cf.tipCoalMat.emissiveIntensity = 0.92 + Math.cos(timeSec * 5.1 + c) * 0.14;
+              cf.tipCoalMat.emissiveIntensity = 1.35 + Math.cos(timeSec * 5.1 + c) * 0.20;
             }
 
             // Update tactile cooking slots mounted over coals
@@ -18082,9 +18449,9 @@
         const shadSnapStep = gov ? gov.shadowSnapStep : 1.5;
         const shadStride = gov ? gov.shadowStride : 14;
         if (Math.hypot(player.pos.x - animate.lastSunX, player.pos.z - animate.lastSunZ) > shadSnapStep && animate._framesSinceShadow >= shadStride) {
-          // Snap anchor to discrete world-space grid aligned with frustum width/height so shadows remain rock-steady
+          // Snap anchor to exact 1536x1536 shadow-map texel grid so shadows never crawl or stair-step
           const frustumW = 68.0;
-          const texelStep = frustumW / 512.0;
+          const texelStep = frustumW / 1536.0;
           const snapX = Math.round(player.pos.x / texelStep) * texelStep;
           const snapY = Math.round(player.pos.y / texelStep) * texelStep;
           const snapZ = Math.round(player.pos.z / texelStep) * texelStep;
