@@ -1621,6 +1621,16 @@
           </div>
         </div>
 
+        <div class="debug-section-header">📸 Showcase Tour &amp; Landmark Gallery</div>
+        <div class="control-row">
+          <div class="control-label"><span>Camera Showcase</span><span class="badge" id="cc-tour-label">Ready</span></div>
+          <div class="pill-group">
+            <button class="pill-btn" id="btn-dbg-tour-prev">◀ Prev</button>
+            <button class="pill-btn" id="btn-dbg-tour-next">▶ Next</button>
+            <button class="pill-btn" id="btn-dbg-tour-gallery">🖼️ 12 Shots</button>
+          </div>
+        </div>
+
         <div class="debug-section-header">🌊 Hydrodynamic Water Shader Uniforms</div>
         <div class="control-row">
           <div class="control-label"><span>Wave Amplitude & Distortion</span><span class="badge" id="wave-val">3.7x</span></div>
@@ -2115,6 +2125,236 @@
         osc.start(now);
         osc.stop(now + 0.38);
       },
+      _ensureNoiseBuffer() {
+        if (!this.ctx) return null;
+        if (!this._noiseBuffer) {
+          const sr = this.ctx.sampleRate;
+          const len = Math.floor(sr * 0.6);
+          this._noiseBuffer = this.ctx.createBuffer(1, len, sr);
+          const d = this._noiseBuffer.getChannelData(0);
+          for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+        }
+        return this._noiseBuffer;
+      },
+      playHitmarker(isVital = false, isKill = false) {
+        try { if (!this.ctx) this.init(); } catch (err) {}
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        osc.type = isKill ? 'triangle' : 'sine';
+        osc.frequency.setValueAtTime(isVital ? 2050 : 1620, now);
+        osc.frequency.exponentialRampToValueAtTime(isVital ? 1320 : 920, now + 0.045);
+        g.gain.setValueAtTime(isKill ? 0.24 : (isVital ? 0.20 : 0.14), now);
+        g.gain.exponentialRampToValueAtTime(0.002, now + 0.055);
+        osc.connect(g);
+        g.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.06);
+
+        if (isVital || isKill) {
+          const chime = this.ctx.createOscillator();
+          const gc = this.ctx.createGain();
+          chime.type = 'sine';
+          chime.frequency.setValueAtTime(isKill ? 2480 : 2280, now + 0.025);
+          chime.frequency.exponentialRampToValueAtTime(isKill ? 1860 : 1720, now + 0.095);
+          gc.gain.setValueAtTime(0.11, now + 0.025);
+          gc.gain.exponentialRampToValueAtTime(0.002, now + 0.105);
+          chime.connect(gc);
+          gc.connect(this.ctx.destination);
+          chime.start(now + 0.025);
+          chime.stop(now + 0.11);
+        }
+        if (isKill) {
+          const thud = this.ctx.createOscillator();
+          const gt = this.ctx.createGain();
+          thud.type = 'sine';
+          thud.frequency.setValueAtTime(165, now);
+          thud.frequency.exponentialRampToValueAtTime(64, now + 0.11);
+          gt.gain.setValueAtTime(0.24, now);
+          gt.gain.exponentialRampToValueAtTime(0.003, now + 0.12);
+          thud.connect(gt);
+          gt.connect(this.ctx.destination);
+          thud.start(now);
+          thud.stop(now + 0.13);
+        }
+      },
+      playDryFire() {
+        try { if (!this.ctx) this.init(); } catch (err) {}
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(520, now);
+        osc.frequency.exponentialRampToValueAtTime(175, now + 0.028);
+        g.gain.setValueAtTime(0.11, now);
+        g.gain.exponentialRampToValueAtTime(0.002, now + 0.032);
+        osc.connect(g);
+        g.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.035);
+
+        const nb = this._ensureNoiseBuffer();
+        if (nb) {
+          const n = this.ctx.createBufferSource();
+          n.buffer = nb;
+          const bp = this.ctx.createBiquadFilter();
+          bp.type = 'bandpass';
+          bp.frequency.setValueAtTime(2500, now);
+          bp.Q.value = 3.2;
+          const gn = this.ctx.createGain();
+          gn.gain.setValueAtTime(0.14, now);
+          gn.gain.exponentialRampToValueAtTime(0.002, now + 0.024);
+          n.connect(bp);
+          bp.connect(gn);
+          gn.connect(this.ctx.destination);
+          n.start(now);
+          n.stop(now + 0.028);
+        }
+      },
+      playBowDrawCreak() {
+        try { if (!this.ctx) this.init(); } catch (err) {}
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const flt = this.ctx.createBiquadFilter();
+        const g = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(145, now);
+        osc.frequency.linearRampToValueAtTime(215, now + 0.22);
+        flt.type = 'bandpass';
+        flt.frequency.setValueAtTime(620, now);
+        flt.Q.value = 4.0;
+        g.gain.setValueAtTime(0.001, now);
+        g.gain.linearRampToValueAtTime(0.065, now + 0.06);
+        g.gain.exponentialRampToValueAtTime(0.002, now + 0.25);
+        osc.connect(flt);
+        flt.connect(g);
+        g.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.26);
+      },
+      playBowSteadyCue() {
+        try { if (!this.ctx) this.init(); } catch (err) {}
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(860, now);
+        osc.frequency.exponentialRampToValueAtTime(1120, now + 0.08);
+        g.gain.setValueAtTime(0.048, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.11);
+        osc.connect(g);
+        g.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.12);
+      },
+      playCrossbowReload() {
+        try { if (!this.ctx) this.init(); } catch (err) {}
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const nb = this._ensureNoiseBuffer();
+        const ratchetTimes = [0.24, 0.54, 0.86, 1.18];
+        ratchetTimes.forEach((offset, idx) => {
+          const t = now + offset;
+          const osc = this.ctx.createOscillator();
+          const g = this.ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(760 + idx * 130, t);
+          osc.frequency.exponentialRampToValueAtTime(340 + idx * 60, t + 0.032);
+          g.gain.setValueAtTime(0.11, t);
+          g.gain.exponentialRampToValueAtTime(0.002, t + 0.036);
+          osc.connect(g);
+          g.connect(this.ctx.destination);
+          osc.start(t);
+          osc.stop(t + 0.04);
+        });
+        // Final latch clack at reload completion
+        const lockT = now + 1.66;
+        const lockOsc = this.ctx.createOscillator();
+        const lockG = this.ctx.createGain();
+        lockOsc.type = 'square';
+        lockOsc.frequency.setValueAtTime(980, lockT);
+        lockOsc.frequency.exponentialRampToValueAtTime(280, lockT + 0.045);
+        lockG.gain.setValueAtTime(0.14, lockT);
+        lockG.gain.exponentialRampToValueAtTime(0.002, lockT + 0.05);
+        lockOsc.connect(lockG);
+        lockG.connect(this.ctx.destination);
+        lockOsc.start(lockT);
+        lockOsc.stop(lockT + 0.055);
+        if (nb) {
+          const n = this.ctx.createBufferSource();
+          n.buffer = nb;
+          const bp = this.ctx.createBiquadFilter();
+          bp.type = 'bandpass';
+          bp.frequency.setValueAtTime(1950, lockT);
+          const gn = this.ctx.createGain();
+          gn.gain.setValueAtTime(0.12, lockT);
+          gn.gain.exponentialRampToValueAtTime(0.002, lockT + 0.04);
+          n.connect(bp);
+          bp.connect(gn);
+          gn.connect(this.ctx.destination);
+          n.start(lockT);
+          n.stop(lockT + 0.045);
+        }
+      },
+      playChamberCycle(isRifle = false) {
+        try { if (!this.ctx) this.init(); } catch (err) {}
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const clicks = isRifle ? [0.16, 0.29] : [0.08];
+        clicks.forEach((offset, idx) => {
+          const t = now + offset;
+          const osc = this.ctx.createOscillator();
+          const g = this.ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(idx === 0 ? 1320 : 1040, t);
+          osc.frequency.exponentialRampToValueAtTime(420, t + 0.025);
+          g.gain.setValueAtTime(0.09, t);
+          g.gain.exponentialRampToValueAtTime(0.002, t + 0.03);
+          osc.connect(g);
+          g.connect(this.ctx.destination);
+          osc.start(t);
+          osc.stop(t + 0.032);
+        });
+      },
+      playFlareLaunch() {
+        try { if (!this.ctx) this.init(); } catch (err) {}
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const g1 = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(175, now);
+        osc.frequency.exponentialRampToValueAtTime(54, now + 0.14);
+        g1.gain.setValueAtTime(0.32, now);
+        g1.gain.exponentialRampToValueAtTime(0.004, now + 0.16);
+        osc.connect(g1);
+        g1.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.17);
+
+        const nb = this._ensureNoiseBuffer();
+        if (nb) {
+          const n = this.ctx.createBufferSource();
+          n.buffer = nb;
+          const bp = this.ctx.createBiquadFilter();
+          bp.type = 'bandpass';
+          bp.frequency.setValueAtTime(1350, now);
+          bp.frequency.exponentialRampToValueAtTime(3400, now + 0.42);
+          bp.Q.value = 1.6;
+          const g2 = this.ctx.createGain();
+          g2.gain.setValueAtTime(0.24, now);
+          g2.gain.exponentialRampToValueAtTime(0.004, now + 0.46);
+          n.connect(bp);
+          bp.connect(g2);
+          g2.connect(this.ctx.destination);
+          n.start(now);
+          n.stop(now + 0.48);
+        }
+      },
       playSizzle(pitchMult = 1.0) {
         if (!this.ctx || !this._splashBuffer) this.init();
         if (!this.ctx || !this._splashBuffer) return;
@@ -2174,14 +2414,14 @@
       }
     }
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.35));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    // Manual interleaved shadow-map scheduling: prevents running 2048^2 shadow pass + 512^2 water reflection pass on the same frame
+    // Manual interleaved shadow-map scheduling: prevents running shadow pass + water reflection pass on the same frame
     renderer.shadowMap.autoUpdate = false;
     renderer.shadowMap.needsUpdate = true;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.02;
+    renderer.toneMappingExposure = 0.94;
     container.appendChild(renderer.domElement);
     renderer.domElement.addEventListener('webglcontextlost', function(e) {
       e.preventDefault();
@@ -2338,24 +2578,33 @@
     scene.environment = skyEnvCubeTex;
     window.skyEnvCubeTex = skyEnvCubeTex;
 
-    // --- LIGHTING ---
-    const hemiLight = new THREE.HemisphereLight(0xd8f4ff, 0x3b6331, 0.96);
+    // --- LIGHTING & SHARED ATMOSPHERE UNIFORMS ---
+    window.uCaveDarkness = window.uCaveDarkness || { value: 0.0 };
+    window.atmUniforms = {
+      uSunDir: { value: new THREE.Vector3(45, 75, -50).normalize() },
+      uMieColor: { value: new THREE.Color(0xffe0a3) },
+      uSkyFogColor: { value: new THREE.Color(0x88c8ea) },
+      uFogDensity: { value: 0.00145 },
+      uCaveDark: window.uCaveDarkness
+    };
+
+    const hemiLight = new THREE.HemisphereLight(0x94d4ff, 0x1e361c, 0.58);
     scene.add(hemiLight);
     window._surfaceHemiInt = hemiLight.intensity;
 
-    const sunLight = new THREE.DirectionalLight(0xfffae8, 1.45);
+    const sunLight = new THREE.DirectionalLight(0xfff1d2, 2.25);
     window._surfaceSunInt = sunLight.intensity;
     window.caveDarknessFactor = 0.0;
     sunLight.position.set(45, 75, -50);
     sunLight.castShadow = true;
-    sunLight.shadow.mapSize.width = 1024;
-    sunLight.shadow.mapSize.height = 1024;
-    sunLight.shadow.camera.near = 1.0;
-    sunLight.shadow.camera.far = 240;
-    sunLight.shadow.bias = -0.00035;
-    sunLight.shadow.normalBias = 0.06;
-    // Tight 84m x 84m shadow frustum centered on player: crisp near-camera shadows with 4x lower GPU shadow-pass cost
-    const d = 42;
+    sunLight.shadow.mapSize.width = 1536;
+    sunLight.shadow.mapSize.height = 1536;
+    sunLight.shadow.camera.near = 2.0;
+    sunLight.shadow.camera.far = 220;
+    sunLight.shadow.bias = -0.00028;
+    sunLight.shadow.normalBias = 0.045;
+    // Tight 68m x 68m shadow frustum centered on player: crisp high-density near-camera shadow modeling
+    const d = 34;
     sunLight.shadow.camera.left = -d;
     sunLight.shadow.camera.right = d;
     sunLight.shadow.camera.top = d;
@@ -2364,7 +2613,7 @@
     scene.add(sunLight);
     scene.add(sunLight.target);
 
-    const fireLight = new THREE.PointLight(0xff8b38, 1.38, 9.8, 2.0);
+    const fireLight = new THREE.PointLight(0xff7d2c, 1.55, 11.2, 1.9);
     fireLight.position.set(-19.5, 10.0, 21.5);
     fireLight.castShadow = false;
     scene.add(fireLight);
@@ -2432,11 +2681,11 @@
       c.height = 1024;
       const ctx = c.getContext('2d');
 
-      // Base warm tropical emerald turf
-      ctx.fillStyle = '#2d5724';
+      // Base deep organic tropical emerald turf & loamy mulch
+      ctx.fillStyle = '#254a1e';
       ctx.fillRect(0, 0, 1024, 1024);
 
-      const patchTones = ['#386b2c', '#24471d', '#437a32', '#315e26', '#4d6629'];
+      const patchTones = ['#346328', '#1c3b17', '#40732d', '#2b5422', '#4c5f24', '#39461e'];
       for (let i = 0; i < 90; i++) {
         ctx.fillStyle = patchTones[Math.floor(Math.random() * patchTones.length)];
         ctx.globalAlpha = 0.35;
@@ -2599,10 +2848,10 @@
       c.height = 512;
       const ctx = c.getContext('2d');
 
-      ctx.fillStyle = '#d3bf92';
+      ctx.fillStyle = '#b2986b';
       ctx.fillRect(0, 0, 512, 512);
 
-      const sandRGB = [[220, 203, 159], [199, 178, 132], [227, 212, 172], [188, 165, 118], [209, 189, 144]];
+      const sandRGB = [[186, 166, 124], [166, 146, 104], [196, 178, 136], [154, 132, 92], [178, 158, 114]];
       {
         const sImg = ctx.getImageData(0, 0, 512, 512);
         const sd = sImg.data;
@@ -2622,7 +2871,7 @@
       }
 
       // Tiny coral & shell flecks
-      const shellTones = ['#efe4cc', '#d8ba9e', '#c4a282', '#e8d2bf', '#b39d7c'];
+      const shellTones = ['#e2d2b4', '#c9a986', '#b28f6e', '#d9be9f', '#9b8362'];
       for (let i = 0; i < 650; i++) {
         const px = Math.random() * 512;
         const py = Math.random() * 512;
@@ -2633,10 +2882,10 @@
         ctx.fill();
       }
 
-      // Subtle wind & tidal sand ripples for crisp normal-mapped beach relief
+      // Wind & tidal sand ripples for crisp normal-mapped beach relief
       for (let i = 0; i < 64; i++) {
         const ry = (i / 64) * 512;
-        ctx.strokeStyle = (i % 2 === 0) ? 'rgba(255, 250, 236, 0.22)' : 'rgba(168, 152, 120, 0.22)';
+        ctx.strokeStyle = (i % 2 === 0) ? 'rgba(244, 232, 206, 0.28)' : 'rgba(138, 118, 86, 0.28)';
         ctx.lineWidth = 3.2;
         ctx.beginPath();
         for (let rx = 0; rx <= 512; rx += 16) {
@@ -2663,19 +2912,19 @@
     async function initProceduralTerrainTextures(yieldFn) {
       const groundObj = createForestGroundCanvas();
       groundTex = window.applyMaxAnisotropy(groundObj.tex);
-      groundNormTex = window.applyMaxAnisotropy(createNormalMapFromCanvas(groundObj.canvas, 2.5));
+      groundNormTex = window.applyMaxAnisotropy(createNormalMapFromCanvas(groundObj.canvas, 3.1));
       terrainMat.map = groundTex;
       terrainMat.needsUpdate = true;
       if (yieldFn) await yieldFn();
 
       const cliffObj = createCliffRockCanvas();
       cliffTex = window.applyMaxAnisotropy(cliffObj.tex);
-      cliffNormTex = window.applyMaxAnisotropy(createNormalMapFromCanvas(cliffObj.canvas, 3.8));
+      cliffNormTex = window.applyMaxAnisotropy(createNormalMapFromCanvas(cliffObj.canvas, 4.4));
       if (yieldFn) await yieldFn();
 
       const sandObj = createSandGravelCanvas();
       sandTex = window.applyMaxAnisotropy(sandObj.tex);
-      sandNormTex = window.applyMaxAnisotropy(createNormalMapFromCanvas(sandObj.canvas, 1.8));
+      sandNormTex = window.applyMaxAnisotropy(createNormalMapFromCanvas(sandObj.canvas, 2.4));
       if (yieldFn) await yieldFn();
     }
 
@@ -5145,17 +5394,23 @@
               }
             }
             if (carveTri) break;
-            // Check centroid AND all 3 vertices so coarse warped-grid triangles at Mount Caldera (-214.1, 68.4) never leave a diagonal wall across a portal
-            const archHalf = m.halfW + 0.70;
-            const testPts = [[cx, cz], [x0, z0], [x1, z1], [x2, z2]];
-            for (let tp = 0; tp < 4; tp++) {
+            // Check centroid, 3 vertices AND 3 edge midpoints out to dP=6.4m so coarse terrain/overburden triangles never bridge a portal
+            const archHalf = m.halfW + 0.72;
+            const testPts = [
+              [cx, cz],
+              [x0, z0], [x1, z1], [x2, z2],
+              [(x0 + x1) * 0.5, (z0 + z1) * 0.5],
+              [(x1 + x2) * 0.5, (z1 + z2) * 0.5],
+              [(x2 + x0) * 0.5, (z2 + z0) * 0.5]
+            ];
+            for (let tp = 0; tp < 7; tp++) {
               const tx = testPts[tp][0], tz = testPts[tp][1];
               const dP = (tx - cv.px) * cv.dirX + (tz - cv.pz) * cv.dirZ;
-              if (dP < -1.05 || dP > 5.25) continue;
+              if (dP < -1.20 || dP > 6.40) continue;
               const pP = Math.abs((tx - cv.px) * cv.perpX + (tz - cv.pz) * cv.perpZ);
               if (pP >= archHalf) continue;
-              const archTop = cv.baseY + (m.ceilH + 0.65) * Math.sqrt(Math.max(0.0, 1.0 - Math.pow(pP / archHalf, 2.0)));
-              if (maxY > cv.baseY + 0.18 && minY < archTop + 0.40 && (cy < archTop + 0.85 || (dP > 0.2 && minY < cv.baseY + m.ceilH * 0.85))) {
+              const archTop = cv.baseY + (m.ceilH + 0.85) * Math.sqrt(Math.max(0.0, 1.0 - Math.pow(pP / archHalf, 2.0)));
+              if (maxY > cv.baseY + 0.16 && minY < archTop + 0.65 && (cy < archTop + 1.05 || (dP > 0.15 && minY < cv.baseY + m.ceilH * 0.92))) {
                 carveTri = true;
                 break;
               }
@@ -5208,6 +5463,10 @@
       shader.uniforms.uCliffThreshold = window.terrainUniforms.uCliffThreshold;
       shader.uniforms.uShoreHeight = window.terrainUniforms.uShoreHeight;
       shader.uniforms.uTime = window.terrainUniforms.uTime;
+      shader.uniforms.uSunDir = window.atmUniforms.uSunDir;
+      shader.uniforms.uMieColor = window.atmUniforms.uMieColor;
+      shader.uniforms.uFogDensity = window.atmUniforms.uFogDensity;
+      shader.uniforms.uCaveDark = window.atmUniforms.uCaveDark;
       shader.vertexShader = shader.vertexShader.replace(
         '#include <common>',
         `#include <common>
@@ -5244,6 +5503,10 @@
         uniform float uCliffThreshold;
         uniform float uShoreHeight;
         uniform float uTime;
+        uniform vec3 uSunDir;
+        uniform vec3 uMieColor;
+        uniform float uFogDensity;
+        uniform float uCaveDark;
         varying vec3 vWorldNormal;
         varying vec3 vWorldPos;
         varying float vConcavity;
@@ -5265,22 +5528,22 @@
           vec2 d1 = vWorldPos.xz - vec2(38.0, 46.0);
           float dist1 = dot(d1, vec2(0.98338, 0.18155));
           float p1 = abs(dot(d1, vec2(-0.18155, 0.98338)));
-          float archH1 = 2.4 + 5.15 * sqrt(max(0.0, 1.0 - pow(p1 / 4.65, 2.0)));
-          if (dist1 > -0.95 && dist1 < 4.55 && p1 < 4.50 && vWorldPos.y > 2.55 && vWorldPos.y < archH1) discard;
+          float archH1 = 2.4 + 5.25 * sqrt(max(0.0, 1.0 - pow(p1 / 4.75, 2.0)));
+          if (dist1 > -1.05 && dist1 < 6.20 && p1 < 4.65 && vWorldPos.y > 2.52 && vWorldPos.y < archH1) discard;
 
           // Cave 2 Portal at (-40.0, 88.0), unit dir = (-0.96972, 0.24423), baseY = 4.2
           vec2 d2 = vWorldPos.xz - vec2(-40.0, 88.0);
           float dist2 = dot(d2, vec2(-0.96972, 0.24423));
           float p2 = abs(dot(d2, vec2(-0.24423, -0.96972)));
-          float archH2 = 4.2 + 5.05 * sqrt(max(0.0, 1.0 - pow(p2 / 4.55, 2.0)));
-          if (dist2 > -0.95 && dist2 < 4.55 && p2 < 4.40 && vWorldPos.y > 4.35 && vWorldPos.y < archH2) discard;
+          float archH2 = 4.2 + 5.15 * sqrt(max(0.0, 1.0 - pow(p2 / 4.65, 2.0)));
+          if (dist2 > -1.05 && dist2 < 6.20 && p2 < 4.55 && vWorldPos.y > 4.32 && vWorldPos.y < archH2) discard;
 
           // Cave 3 lava-tube portal on the east flank of Mount Caldera (-214.1, 68.4), dir (-0.99875, -0.04998), baseY 33
           vec2 d3 = vWorldPos.xz - vec2(-214.1, 68.4);
           float dist3 = dot(d3, vec2(-0.99875, -0.04998));
           float p3 = abs(dot(d3, vec2(0.04998, -0.99875)));
-          float archH3 = 33.0 + 4.85 * sqrt(max(0.0, 1.0 - pow(p3 / 4.55, 2.0)));
-          if (dist3 > -0.95 && dist3 < 4.55 && p3 < 4.40 && vWorldPos.y > 33.15 && vWorldPos.y < archH3) discard;
+          float archH3 = 33.0 + 4.95 * sqrt(max(0.0, 1.0 - pow(p3 / 4.65, 2.0)));
+          if (dist3 > -1.05 && dist3 < 6.20 && p3 < 4.55 && vWorldPos.y > 33.12 && vWorldPos.y < archH3) discard;
         }
 
         // 1. Multi-Frequency World Coordinates (Macro, Mid-Scale Detail, and Crisp Micro-Grain)
@@ -5341,8 +5604,8 @@
 
         // Smooth Littoral Beach & Shoreline Band around ALL water bodies (sea, river, ponds, and high alpine lakes!)
         float shoreNoise = sin(vWorldPos.x * 0.14 + vWorldPos.z * 0.11) * 0.25 + (sMacro.r - 0.5) * 0.35;
-        float shoreFactor = clamp((uShoreHeight + shoreNoise - relWaterH) * 1.45, 0.0, 1.0) * clamp((slope - 0.24) * 2.5, 0.0, 1.0);
-        float wetBand = clamp((1.25 - relWaterH) * 1.15, 0.0, 1.0) * clamp((relWaterH + 10.0) * 0.5, 0.0, 1.0);
+        float shoreFactor = clamp((uShoreHeight + shoreNoise - relWaterH) * 1.45, 0.0, 1.0) * clamp((slope - 0.22) * 2.5, 0.0, 1.0);
+        float wetBand = clamp((1.35 - relWaterH) * 1.15, 0.0, 1.0) * clamp((relWaterH + 10.0) * 0.5, 0.0, 1.0);
         float channelMask = clamp(vWaterChannel, 0.0, 1.0);
         float mossMask = clamp(vMossHalo, 0.0, 1.0);
         float canopyMask = clamp(vCanopyAO, 0.0, 1.0);
@@ -5370,84 +5633,95 @@
                          + cos(vWorldPos.x * 0.19 - vWorldPos.z * 0.16) * 0.15;
         macroNoise = macroNoise * 0.5 + 0.5;
 
-        vec3 sunlitMeadow = grassCol.rgb * vec3(1.14, 1.18, 0.78);
-        vec3 deepClover   = grassCol.rgb * vec3(0.76, 0.98, 0.82);
-        grassCol.rgb = mix(deepClover, sunlitMeadow, smoothstep(0.28, 0.74, macroNoise + (gMid.g - 0.5) * 0.35));
-        grassCol.rgb = mix(grassCol.rgb, grassCol.rgb * vec3(0.72, 0.92, 0.78), bElder * 0.52);
-        grassCol.rgb = mix(grassCol.rgb, grassCol.rgb * vec3(1.18, 1.08, 0.76), bMeadow * 0.45);
-        grassCol.rgb = mix(grassCol.rgb, grassCol.rgb * vec3(0.86, 0.84, 0.72), bKarst * 0.38);
+        vec3 sunlitMeadow = grassCol.rgb * vec3(1.10, 1.15, 0.76);
+        vec3 deepClover   = grassCol.rgb * vec3(0.68, 0.90, 0.74);
+        grassCol.rgb = mix(deepClover, sunlitMeadow, smoothstep(0.24, 0.76, macroNoise + (gMid.g - 0.5) * 0.38));
+        grassCol.rgb = mix(grassCol.rgb, grassCol.rgb * vec3(0.66, 0.86, 0.74), bElder * 0.58);
+        grassCol.rgb = mix(grassCol.rgb, grassCol.rgb * vec3(1.14, 1.04, 0.74), bMeadow * 0.45);
+        grassCol.rgb = mix(grassCol.rgb, grassCol.rgb * vec3(0.84, 0.80, 0.68), bKarst * 0.42);
 
         // Layer blend: Sand/Littoral Pebbles -> Pebbly Terracotta Soil -> Multi-Tone Meadow -> Stratified Sedimentary/Basalt Cliffs
         vec4 baseTerrain = mix(grassCol, sandCol, shoreFactor);
-        vec3 tropicalSoil = mix(vec3(0.38, 0.26, 0.16), vec3(0.48, 0.36, 0.24), sMicro.r) * (0.82 + 0.35 * gMicro.g);
-        baseTerrain.rgb = mix(baseTerrain.rgb, tropicalSoil, soilFactor * 0.66 * (1.0 - shoreFactor));
+        vec3 tropicalSoil = mix(vec3(0.32, 0.22, 0.14), vec3(0.45, 0.33, 0.22), sMicro.r) * (0.82 + 0.35 * gMicro.g);
+        baseTerrain.rgb = mix(baseTerrain.rgb, tropicalSoil, soilFactor * 0.70 * (1.0 - shoreFactor));
 
         // Horizontal Canyon Sedimentary Rock Strata + Water-Seepage Streaks on Cliff Faces
         float strataCoord = vWorldPos.y * 0.92 + sin(vWorldPos.x * 0.038 + vWorldPos.z * 0.031) * 1.45;
         float strataWave = sin(strataCoord * 2.4) * 0.5 + 0.5;
         float strataFine = sin(strataCoord * 7.8 + cX.r * 2.5) * 0.5 + 0.5;
-        vec3 limestoneBand = mix(vec3(0.62, 0.54, 0.44), vec3(0.36, 0.33, 0.31), strataWave * 0.7 + strataFine * 0.3);
-        float strataMix = clamp(bKarst * 0.78 + smoothstep(3.0, 28.0, elev) * 0.42, 0.0, 0.85);
+        vec3 limestoneBand = mix(vec3(0.60, 0.52, 0.42), vec3(0.32, 0.30, 0.28), strataWave * 0.7 + strataFine * 0.3);
+        float strataMix = clamp(bKarst * 0.78 + smoothstep(3.0, 28.0, elev) * 0.44, 0.0, 0.86);
         vec3 cliffSurface = mix(cliffCol.rgb, cliffCol.rgb * limestoneBand * 1.65, strataMix);
-        cliffSurface = mix(cliffSurface, cliffCol.rgb * vec3(0.38, 0.34, 0.33), bCaldera * 0.78);
+        cliffSurface = mix(cliffSurface, cliffCol.rgb * vec3(0.36, 0.32, 0.31), bCaldera * 0.80);
 
         float seepStreak = pow(clamp(sin(vWorldPos.x * 0.45 + vWorldPos.z * 0.38 + cX.r * 3.0) * 0.5 + 0.5, 0.0, 1.0), 4.0);
-        vec3 detailedCliff = cliffSurface * (1.0 - seepStreak * 0.28 * rockBlend);
+        vec3 detailedCliff = cliffSurface * (1.0 - seepStreak * 0.32 * rockBlend);
         float ledgeMoss = smoothstep(0.56, 0.82, slope + (gMicro.g - 0.45) * 0.35) * rockBlend * (1.0 - bCaldera * 0.92);
-        detailedCliff = mix(detailedCliff, vec3(0.20, 0.39, 0.15) * (0.8 + 0.4 * gMicro.g), ledgeMoss * 0.65);
+        detailedCliff = mix(detailedCliff, vec3(0.18, 0.36, 0.14) * (0.8 + 0.4 * gMicro.g), ledgeMoss * 0.65);
         baseTerrain.rgb = mix(baseTerrain.rgb, detailedCliff, rockBlend);
 
-        // Dark scoria crest & steep interior cauldron cliff walls with triplanar basalt rock grain and deep magma uplighting
+        // Dark scoria crest & steep interior cauldron cliff walls with organic fragment-level scree breakup (eliminates 3.3m polygon seams)
         if (bCaldera > 0.01) {
-          float rockGrain = clamp(cliffCol.r * 0.65 + sMicro.r * 0.35, 0.0, 1.0);
-          float ashBand = smoothstep(28.0, 70.0, elev) * bCaldera;
-          vec3 basaltScoria = mix(vec3(0.08, 0.078, 0.082), vec3(0.19, 0.175, 0.168), rockGrain);
-          baseTerrain.rgb = mix(baseTerrain.rgb, basaltScoria, ashBand * 0.95);
-          float innerWallMask = 1.0 - smoothstep(20.0, 38.5, calderaDist);
-          float crestBand = max(innerWallMask, smoothstep(125.0, 168.0, elev) * (1.0 - smoothstep(34.0, 82.0, calderaDist)));
-          vec3 darkLava = mix(vec3(0.038, 0.036, 0.040), vec3(0.135, 0.122, 0.118), rockGrain * 0.72 + macroNoise * 0.28);
-          baseTerrain.rgb = mix(baseTerrain.rgb, darkLava, crestBand * 0.98);
-          float sulfurRim = smoothstep(161.0, 168.0, elev) * (1.0 - smoothstep(32.0, 44.0, calderaDist));
+          float rockGrain = clamp(cliffCol.r * 0.62 + sMicro.r * 0.38, 0.0, 1.0);
+          float calderaBreakup = sin(vWorldPos.x * 0.12 + sin(vWorldPos.z * 0.10) * 1.8) * 6.8
+                               + cos(vWorldPos.z * 0.26 - vWorldPos.x * 0.19) * 3.4
+                               + (rockGrain - 0.5) * 14.0;
+          float cDistNoise = calderaDist + calderaBreakup * 0.55;
+          float cElevNoise = elev + calderaBreakup;
+          float bCalderaFuzz = 1.0 - smoothstep(38.0, 152.0, cDistNoise);
+          float ashBand = smoothstep(24.0, 68.0, cElevNoise) * bCalderaFuzz;
+          vec3 basaltScoria = mix(vec3(0.075, 0.072, 0.076), vec3(0.18, 0.165, 0.158), rockGrain);
+          baseTerrain.rgb = mix(baseTerrain.rgb, basaltScoria, ashBand * 0.94);
+          float innerWallMask = 1.0 - smoothstep(18.0, 40.0, cDistNoise);
+          float crestBand = max(innerWallMask, smoothstep(118.0, 166.0, cElevNoise) * (1.0 - smoothstep(34.0, 86.0, cDistNoise)));
+          vec3 darkLava = mix(vec3(0.036, 0.034, 0.038), vec3(0.13, 0.118, 0.112), rockGrain * 0.72 + macroNoise * 0.28);
+          baseTerrain.rgb = mix(baseTerrain.rgb, darkLava, crestBand * 0.96);
+          float sulfurRim = smoothstep(160.0, 168.0, cElevNoise) * (1.0 - smoothstep(32.0, 44.0, cDistNoise));
           vec3 sulfurStain = mix(vec3(0.18, 0.16, 0.11), vec3(0.28, 0.24, 0.14), rockGrain);
-          baseTerrain.rgb = mix(baseTerrain.rgb, sulfurStain, sulfurRim * 0.16);
-          // Warm molten magma uplighting along the interior cauldron walls right above the 155.5m lava lake
+          baseTerrain.rgb = mix(baseTerrain.rgb, sulfurStain, sulfurRim * 0.14);
           float poolGlow = (1.0 - smoothstep(22.0, 36.0, calderaDist)) * (1.0 - smoothstep(155.5, 166.5, elev)) * smoothstep(147.0, 155.0, elev);
-          baseTerrain.rgb += vec3(0.56, 0.11, 0.018) * poolGlow * (0.42 + 0.12 * sin(uTime * 1.6));
+          baseTerrain.rgb += vec3(0.54, 0.11, 0.018) * poolGlow * (0.42 + 0.12 * sin(uTime * 1.6));
         }
 
         // Tree-canopy leaf-litter humus & fallen twig mosaic beneath forest groves
-        vec3 forestHumus = mix(vec3(0.22, 0.24, 0.11), vec3(0.34, 0.23, 0.12), sMicro.g) * (0.85 + 0.3 * gMicro.g);
-        baseTerrain.rgb = mix(baseTerrain.rgb, forestHumus, canopyMask * 0.62 * (1.0 - shoreFactor));
+        vec3 forestHumus = mix(vec3(0.19, 0.21, 0.10), vec3(0.32, 0.21, 0.11), sMicro.g) * (0.84 + 0.3 * gMicro.g);
+        baseTerrain.rgb = mix(baseTerrain.rgb, forestHumus, canopyMask * 0.68 * (1.0 - shoreFactor));
 
         // Lush emerald waterfall-spray bryophyte moss & wet fern banks framing the gorges
         float mossDetail = smoothstep(0.20, 0.78, mossMask + (gMicro.g - 0.48) * 0.35);
-        vec3 sprayMoss = mix(detailedCliff, vec3(0.15, 0.42, 0.13), 0.70) * (0.82 + 0.38 * gMicro.g);
-        baseTerrain.rgb = mix(baseTerrain.rgb, sprayMoss, mossDetail * 0.82 * (1.0 - channelMask * 0.85));
+        vec3 sprayMoss = mix(detailedCliff, vec3(0.14, 0.39, 0.12), 0.72) * (0.82 + 0.38 * gMicro.g);
+        baseTerrain.rgb = mix(baseTerrain.rgb, sprayMoss, mossDetail * 0.84 * (1.0 - channelMask * 0.85));
 
         // Natural wet river pebbles & golden-slate littoral sand inside lake basins & waterfall channels
         float cobblePattern = smoothstep(0.32, 0.70, cY.r * 0.55 + sMicro.r * 0.45);
         vec3 wetStreamStone = mix(sandCol.rgb * vec3(0.52, 0.56, 0.54), cliffCol.rgb * vec3(0.46, 0.52, 0.55), cobblePattern);
-        baseTerrain.rgb = mix(baseTerrain.rgb, wetStreamStone, channelMask * 0.78);
+        baseTerrain.rgb = mix(baseTerrain.rgb, wetStreamStone, channelMask * 0.82);
 
         // Wet shoreline wave-splash darkening & soft aquatic depth tint when submerged
-        baseTerrain.rgb = mix(baseTerrain.rgb, baseTerrain.rgb * vec3(0.62, 0.72, 0.76), wetBand * 0.25);
+        baseTerrain.rgb = mix(baseTerrain.rgb, baseTerrain.rgb * vec3(0.58, 0.68, 0.72), wetBand * 0.32);
 
-        // Animated Underwater Solar Caustics on all submerged lakebeds, riverbeds & lagoon floors!
-        if (relWaterH < 0.05) {
+        // Carbonate coral sand & submerged reef cobbles + Animated Underwater Solar Caustics on ALL submerged seabeds!
+        if (relWaterH < 0.65) {
           float subDepth = max(0.0, -relWaterH);
-          float cFade = smoothstep(0.02, 0.45, subDepth) * exp(-subDepth * 0.18) * max(0.2, slope);
-          vec2 cUv1 = vWorldPos.xz * 0.42 + vec2(uTime * 0.38, -uTime * 0.29);
-          vec2 cUv2 = vWorldPos.xz * 0.56 + vec2(-uTime * 0.31, uTime * 0.44);
-          float w1 = abs(sin(cUv1.x * 3.1 + cos(cUv1.y * 2.7 + uTime)) + cos(cUv1.y * 3.4 - sin(cUv1.x * 2.9)));
-          float w2 = abs(sin(cUv2.x * 2.8 - cos(cUv2.y * 3.2 - uTime)) + cos(cUv2.y * 2.9 + sin(cUv2.x * 3.1)));
-          float causticNet = pow(clamp(1.0 - min(w1, w2) * 0.55, 0.0, 1.0), 3.2);
-          // Depth-graded aquatic absorption (turquoise shallows -> moody deep slate trench) + shimmering solar caustic web
-          baseTerrain.rgb = mix(baseTerrain.rgb, baseTerrain.rgb * vec3(0.22, 0.56, 0.66), clamp(subDepth * 0.13, 0.0, 0.80));
-          baseTerrain.rgb += vec3(0.26, 0.62, 0.68) * causticNet * cFade * 0.92;
+          float reefBedMask = smoothstep(0.65, -0.25, relWaterH) * (1.0 - rockBlend * 0.42);
+          vec3 carbonateSand = mix(sandCol.rgb * vec3(0.86, 0.88, 0.80), cliffCol.rgb * vec3(0.36, 0.42, 0.45), smoothstep(0.35, 0.78, cobblePattern) * 0.45);
+          baseTerrain.rgb = mix(baseTerrain.rgb, carbonateSand, reefBedMask * 0.94);
+
+          if (relWaterH < 0.08) {
+            float cFade = smoothstep(0.02, 0.45, subDepth) * exp(-subDepth * 0.16) * max(0.25, slope);
+            vec2 cUv1 = vWorldPos.xz * 0.44 + vec2(uTime * 0.38, -uTime * 0.29);
+            vec2 cUv2 = vWorldPos.xz * 0.58 + vec2(-uTime * 0.31, uTime * 0.44);
+            float w1 = abs(sin(cUv1.x * 3.1 + cos(cUv1.y * 2.7 + uTime)) + cos(cUv1.y * 3.4 - sin(cUv1.x * 2.9)));
+            float w2 = abs(sin(cUv2.x * 2.8 - cos(cUv2.y * 3.2 - uTime)) + cos(cUv2.y * 2.9 + sin(cUv2.x * 3.1)));
+            float causticNet = pow(clamp(1.0 - min(w1, w2) * 0.56, 0.0, 1.0), 3.6);
+            // Depth-graded aquatic absorption (deep blue-teal coastal shallows -> dark slate trench) + solar caustic web
+            baseTerrain.rgb = mix(baseTerrain.rgb, baseTerrain.rgb * vec3(0.14, 0.46, 0.60), clamp(subDepth * 0.15, 0.0, 0.85));
+            baseTerrain.rgb += vec3(0.22, 0.58, 0.68) * causticNet * cFade * 0.88;
+          }
         }
 
         // Baked crevice / cliff-base + dense canopy Ambient Occlusion
-        float aoFactor = clamp(1.0 - vConcavity * 0.54 - canopyMask * 0.30, 0.40, 1.10);
+        float aoFactor = clamp(1.0 - vConcavity * 0.58 - canopyMask * 0.34, 0.36, 1.08);
         baseTerrain.rgb *= aoFactor;
 
         diffuseColor *= baseTerrain;
@@ -5456,10 +5730,10 @@
         '#include <roughnessmap_fragment>',
         `
         #include <roughnessmap_fragment>
-        float tRough = mix(0.82, 0.60, rockBlend);
+        float tRough = mix(0.84, 0.60, rockBlend);
         tRough = mix(tRough, 0.42, mossMask * 0.70);
-        tRough = mix(tRough, 0.16, wetBand * 0.34);
-        tRough = mix(tRough, 0.11, channelMask * 0.94);
+        tRough = mix(tRough, 0.14, wetBand * 0.40);
+        tRough = mix(tRough, 0.10, channelMask * 0.94);
         roughnessFactor = tRough;
         `
       ).replace(
@@ -5467,13 +5741,11 @@
         `
         #include <normal_fragment_begin>
         float camDistTerrain = length(cameraPosition - vWorldPos);
-        float nearNormFade = 1.0 - smoothstep(42.0, 95.0, camDistTerrain);
+        float nearNormFade = 1.0 - smoothstep(75.0, 185.0, camDistTerrain);
         if (nearNormFade > 0.01) {
-          vec2 gN = (texture2D(uGroundNorm, microUV).xy * 2.0 - 1.0) * 0.95;
-          if (camDistTerrain < 48.0) {
-            gN += (texture2D(uGroundNorm, midUV).xy * 2.0 - 1.0) * 0.45;
-          }
-          vec2 sN = (texture2D(uSandNorm, microUV * 0.75).xy * 2.0 - 1.0) * 1.05;
+          vec2 gN = (texture2D(uGroundNorm, microUV).xy * 2.0 - 1.0) * 1.05
+                  + (texture2D(uGroundNorm, midUV).xy * 2.0 - 1.0) * 0.55;
+          vec2 sN = (texture2D(uSandNorm, microUV * 0.75).xy * 2.0 - 1.0) * 1.15;
           vec3 topPerturb = mix(vec3(gN.x, 0.0, -gN.y), vec3(sN.x, 0.0, -sN.y), shoreFactor);
 
           vec3 rockPerturb = vec3(0.0);
@@ -5481,16 +5753,34 @@
           if (rockNormWeight > 0.02) {
             vec2 cNX = texture2D(uCliffNorm, sideMicro_X).xy * 2.0 - 1.0;
             vec2 cNZ = texture2D(uCliffNorm, sideMicro_Z).xy * 2.0 - 1.0;
-            vec2 cNY = (camDistTerrain < 52.0) ? (texture2D(uCliffNorm, microUV * 0.95).xy * 2.0 - 1.0) : vec2(0.0);
+            vec2 cNY = texture2D(uCliffNorm, microUV * 0.95).xy * 2.0 - 1.0;
             rockPerturb = vec3(0.0, -cNX.y, cNX.x) * blendWeights.x
                         + vec3(cNY.x, 0.0, -cNY.y) * blendWeights.y
                         + vec3(cNZ.x, -cNZ.y, 0.0) * blendWeights.z;
           }
 
-          vec3 worldPerturb = mix(topPerturb, rockPerturb * 1.35, rockNormWeight);
+          // Multi-frequency analytical strata/hillside micro-normal breaks up 3.3m polygon facets smoothly on slopes
+          float pGx = cos(vWorldPos.x * 1.7 + vWorldPos.z * 0.9) * 0.24 + cos(vWorldPos.x * 4.3 - vWorldPos.z * 2.7) * 0.14;
+          float pGz = sin(vWorldPos.z * 1.8 - vWorldPos.x * 1.1) * 0.24 + sin(vWorldPos.z * 4.1 + vWorldPos.x * 2.5) * 0.14;
+          vec3 macroSlopeBreak = vec3(pGx, 0.0, pGz) * (0.45 + rockNormWeight * 0.75);
+
+          vec3 worldPerturb = mix(topPerturb, rockPerturb * 1.45, rockNormWeight) + macroSlopeBreak;
           vec3 viewPerturb = (viewMatrix * vec4(worldPerturb, 0.0)).xyz;
-          normal = normalize(normal + viewPerturb * (0.66 * nearNormFade));
+          normal = normalize(normal + viewPerturb * (0.74 * nearNormFade));
         }
+        `
+      ).replace(
+        '#include <fog_fragment>',
+        `#include <fog_fragment>
+        #ifdef USE_FOG
+          {
+            float mieDist = length(vWorldPos - cameraPosition);
+            float mieExt = clamp(1.0 - exp(-pow(uFogDensity * mieDist, 2.0)), 0.0, 0.85);
+            vec3 mieRay = (vWorldPos - cameraPosition) / max(0.001, mieDist);
+            float mieAlign = pow(max(0.0, dot(mieRay, normalize(uSunDir))), 5.5);
+            gl_FragColor.rgb = mix(gl_FragColor.rgb, uMieColor, mieExt * mieAlign * (1.0 - uCaveDark) * 0.45);
+          }
+        #endif
         `
       );
     };
@@ -5511,7 +5801,7 @@
     function applyAAARockShader(mat, isCaveInterior = false, isVolcanicLavaTube = false) {
       mat.map = cliffTex;
       mat.normalMap = cliffNormTex;
-      mat.normalScale = new THREE.Vector2(isCaveInterior ? 2.15 : 1.55, isCaveInterior ? 2.15 : 1.55);
+      mat.normalScale = new THREE.Vector2(isCaveInterior ? 2.25 : 1.65, isCaveInterior ? 2.25 : 1.65);
       mat.envMap = skyEnvCubeTex;
       mat.envMapIntensity = isCaveInterior ? 0.25 : 0.68;
       mat.onBeforeCompile = function (shader) {
@@ -5523,6 +5813,9 @@
         shader.uniforms.uCaveDark = window.uCaveDarkness;
         shader.uniforms.uMossAmount = window.rockWeatherUniforms.uMossAmount;
         shader.uniforms.uSnowAmount = window.rockWeatherUniforms.uSnowAmount;
+        shader.uniforms.uSunDir = window.atmUniforms.uSunDir;
+        shader.uniforms.uMieColor = window.atmUniforms.uMieColor;
+        shader.uniforms.uFogDensity = window.atmUniforms.uFogDensity;
         shader.vertexShader = shader.vertexShader.replace(
           '#include <common>',
           `#include <common>
@@ -5557,6 +5850,9 @@
           uniform float uCaveDark;
           uniform float uMossAmount;
           uniform float uSnowAmount;
+          uniform vec3 uSunDir;
+          uniform vec3 uMieColor;
+          uniform float uFogDensity;
           varying vec3 vRockWPos;
           varying vec3 vRockWNorm;
           varying vec3 vRockCrevice;
@@ -5570,78 +5866,69 @@
           float uvScale = (uIsCave > 0.5) ? 0.36 : 0.30;
           float rockCamDist = length(cameraPosition - vRockWPos);
           vec3 triRock;
-          if (rockCamDist < 64.0 || uIsCave > 0.5) {
+          if (rockCamDist < 68.0 || uIsCave > 0.5) {
             vec4 rX = texture2D(uRockTex, vRockWPos.zy * uvScale);
             vec4 rY = texture2D(uRockTex, vRockWPos.xz * uvScale);
             vec4 rZ = texture2D(uRockTex, vRockWPos.xy * uvScale);
             triRock = (rX.rgb * rWeights.x + rY.rgb * rWeights.y + rZ.rgb * rWeights.z);
           } else {
-            // Distance-simplified single planar rock fetch beyond 64m
             triRock = texture2D(uRockTex, (vRockWPos.xz + vec2(vRockWPos.y * 0.5)) * uvScale).rgb;
           }
 
-          // Geological cleavage strata & procedural micro-fracture veins (love-rocks style)
+          // Geological cleavage strata & procedural micro-fracture veins
           float strataBand = sin(vRockWPos.y * 5.2 + vRockWPos.x * 0.8 + triRock.r * 5.8) * 0.5 + 0.5;
           float microFissure = pow(clamp(1.0 - abs(sin(vRockWPos.x * 3.8 + vRockWPos.y * 4.6 - vRockWPos.z * 3.5 + triRock.g * 6.2)), 0.0, 1.0), 7.0);
-          float creviceDepth = clamp(vRockCrevice.x + microFissure * 0.55, 0.0, 1.0);
-          float edgeWear = clamp(vRockCrevice.y * 0.85 + smoothstep(0.64, 0.92, triRock.g) * (1.0 - creviceDepth) * 0.42, 0.0, 1.0);
+          float creviceDepth = clamp(vRockCrevice.x + microFissure * 0.58, 0.0, 1.0);
+          float edgeWear = clamp(vRockCrevice.y * 0.85 + smoothstep(0.64, 0.92, triRock.g) * (1.0 - creviceDepth) * 0.44, 0.0, 1.0);
           float shelfFlat = clamp(vRockCrevice.z, 0.0, 1.0);
 
-          vec3 darkSlate = triRock * vec3(0.46, 0.49, 0.52);
-          vec3 warmGranite = triRock * vec3(0.88, 0.85, 0.80);
+          vec3 darkSlate = triRock * vec3(0.44, 0.47, 0.50);
+          vec3 warmGranite = triRock * vec3(0.88, 0.84, 0.78);
           vec3 baseStone = mix(darkSlate, warmGranite, strataBand);
-          // Chiseled facet edge wear highlight & deep cleavage fissure darkening
-          baseStone = mix(baseStone, vec3(0.84, 0.82, 0.77), edgeWear * 0.36);
-          baseStone *= (1.0 - creviceDepth * 0.48);
+          baseStone = mix(baseStone, vec3(0.84, 0.81, 0.75), edgeWear * 0.36);
+          baseStone *= (1.0 - creviceDepth * 0.52);
 
-          vec3 mossSample = (rockCamDist < 68.0)
-            ? texture2D(uMossTex, vRockWPos.xz * 0.48).rgb * vec3(0.62, 1.02, 0.50)
-            : vec3(0.30, 0.48, 0.22);
+          vec3 mossSample = (rockCamDist < 72.0)
+            ? texture2D(uMossTex, vRockWPos.xz * 0.48).rgb * vec3(0.58, 0.96, 0.46)
+            : vec3(0.28, 0.46, 0.20);
 
           if (uIsCave > 0.5) {
             if (uIsLavaTube > 0.5) {
-              // VOLCANIC LAVA TUBE SHADER: Vitrified tachylite obsidian, vesicular basalt, oxidized hematite scoria & roped pahoehoe floor
               float scoriaBand = sin(vRockWPos.y * 3.8 + vRockWPos.x * 0.45 + triRock.r * 4.8) * 0.5 + 0.5;
               float ropeFlow = sin(vRockWPos.x * 3.6 + sin(vRockWPos.z * 1.8) * 2.4 + triRock.g * 3.2) * 0.5 + 0.5;
               float isFloorFace = smoothstep(0.30, 0.75, faceNorm.y);
-              vec3 obsidianCol = triRock * vec3(0.18, 0.17, 0.20);
-              vec3 vesicularBasalt = triRock * vec3(0.34, 0.31, 0.33);
+              vec3 obsidianCol = triRock * vec3(0.17, 0.16, 0.19);
+              vec3 vesicularBasalt = triRock * vec3(0.34, 0.30, 0.32);
               vec3 hematiteScoria = triRock * vec3(0.56, 0.25, 0.16);
               baseStone = mix(obsidianCol, vesicularBasalt, scoriaBand * 0.72);
               baseStone = mix(baseStone, hematiteScoria, smoothstep(0.58, 0.88, triRock.r * scoriaBand) * 0.52);
-              // Roped pahoehoe basalt ridges across the drained conduit floor & lateral solidification benches
               baseStone = mix(baseStone, baseStone * (0.68 + 0.56 * ropeFlow), isFloorFace * 0.80);
-              // Chiseled basalt bench rim highlight
               baseStone += vec3(0.16, 0.13, 0.12) * edgeWear;
-              float cavityAO = (0.32 + 0.68 * smoothstep(0.12, 0.84, triRock.r)) * (1.0 - creviceDepth * 0.68);
+              float cavityAO = (0.28 + 0.72 * smoothstep(0.12, 0.84, triRock.r)) * (1.0 - creviceDepth * 0.72);
               diffuseColor.rgb = diffuseColor.rgb * baseStone * cavityAO;
             } else {
-              // KARST LIMESTONE SHADER: Horizontal sedimentary dolomite bedding planes, wet calcium-carbonate flowstone curtains & manganese seepage
               float beddingStrata = sin(vRockWPos.y * 6.8 + sin(vRockWPos.x * 0.25 + vRockWPos.z * 0.25) * 2.6 + triRock.r * 3.4) * 0.5 + 0.5;
               float sharpBedding = smoothstep(0.32, 0.68, beddingStrata);
               float flowstoneCurtain = smoothstep(0.46, 0.86, sin(vRockWPos.x * 2.4 + vRockWPos.z * 2.2 + sin(vRockWPos.y * 1.4) * 1.8 + triRock.g * 3.5) * 0.5 + 0.5) * (1.0 - abs(faceNorm.y) * 0.75);
               float manganeseSeep = smoothstep(0.48, 0.84, sin(vRockWPos.x * 0.65 - vRockWPos.z * 0.58 + triRock.r * 3.2) * 0.5 + 0.5);
-              vec3 wetSlate = baseStone * vec3(0.46, 0.52, 0.56);
-              vec3 dolomiteBuff = baseStone * vec3(0.86, 0.78, 0.67);
-              vec3 travertineCream = triRock * vec3(0.96, 0.86, 0.71);
+              vec3 wetSlate = baseStone * vec3(0.44, 0.50, 0.54);
+              vec3 dolomiteBuff = baseStone * vec3(0.86, 0.78, 0.66);
+              vec3 travertineCream = triRock * vec3(0.95, 0.85, 0.70);
               baseStone = mix(wetSlate, dolomiteBuff, sharpBedding * 0.76);
               baseStone = mix(baseStone, travertineCream, flowstoneCurtain * 0.64);
-              baseStone = mix(baseStone, baseStone * vec3(0.34, 0.39, 0.43), manganeseSeep * 0.58);
-              // Sharp limestone shelf edge highlight
-              baseStone = mix(baseStone, travertineCream * 1.05, edgeWear * 0.42);
-              // Lush subterranean skylight oasis & twilight entrance moss halo
+              baseStone = mix(baseStone, baseStone * vec3(0.32, 0.37, 0.41), manganeseSeep * 0.60);
+              baseStone = mix(baseStone, travertineCream * 1.04, edgeWear * 0.40);
               float dSkylight0 = length(vRockWPos.xz - vec2(132.8, 76.2));
               float dSkylight1 = length(vRockWPos.xz - vec2(-115.6, 112.5));
               float skylightMossZone = max(1.0 - smoothstep(3.5, 11.5, dSkylight0), 1.0 - smoothstep(3.2, 10.5, dSkylight1));
               float portalMossZone = clamp(1.0 - uCaveDark * 1.25, 0.0, 1.0);
               float caveMossMask = smoothstep(0.25, 0.68, faceNorm.y + shelfFlat * 0.35 + (triRock.g - 0.45) * 0.35) * max(skylightMossZone, portalMossZone * 0.75);
-              baseStone = mix(baseStone, mossSample * vec3(0.64, 0.86, 0.52), clamp(caveMossMask * 0.82, 0.0, 0.85));
-              // Deep baked cavity & bedding crevice ambient occlusion
-              float cavityAO = (0.34 + 0.66 * smoothstep(0.14, 0.86, triRock.r)) * (1.0 - creviceDepth * 0.66);
+              baseStone = mix(baseStone, mossSample * vec3(0.60, 0.84, 0.48), clamp(caveMossMask * 0.82, 0.0, 0.85));
+              float cavityAO = (0.30 + 0.70 * smoothstep(0.14, 0.86, triRock.r)) * (1.0 - creviceDepth * 0.70);
               diffuseColor.rgb = diffuseColor.rgb * baseStone * cavityAO;
             }
           } else {
-            // 1. LOVE-ROCKS PROCEDURAL MOSS LAYER (Upward facets, stepped strata shelves, crevices & humid gorges)
+            // 1. LOVE-ROCKS PROCEDURAL MOSS LAYER
             float inGorge1 = step(17.0, vRockWPos.x) * step(vRockWPos.x, 96.0) * (1.0 - smoothstep(4.0, 14.0, abs(vRockWPos.z - 2.0)));
             float inGorge2 = step(118.0, vRockWPos.z) * step(vRockWPos.z, 172.0) * (1.0 - smoothstep(4.0, 16.0, abs(vRockWPos.x - (-15.0))));
             float inGorge = max(inGorge1, inGorge2);
@@ -5652,14 +5939,12 @@
             float mossNoise = (triRock.g - 0.48) * 0.38 + sin(vRockWPos.x * 1.7 + vRockWPos.z * 1.5) * 0.08;
             float mossSignal = faceNorm.y + shelfFlat * 0.24 + creviceDepth * 0.16 + mossNoise + inGorge * 0.18;
             float mossMask = smoothstep(0.36, 0.68, mossSignal) * clamp(uMossAmount, 0.0, 2.0) * (1.0 - volcanoHeatDry) * (0.25 + 0.75 * alpineFade);
-            // Dark damp humus border ring where moss colonies meet bare rock
             float mossBorder = smoothstep(0.28, 0.38, mossSignal) * (1.0 - smoothstep(0.38, 0.52, mossSignal)) * clamp(uMossAmount, 0.0, 1.5) * (1.0 - volcanoHeatDry);
             baseStone = mix(baseStone, baseStone * vec3(0.42, 0.46, 0.36), mossBorder * 0.55);
-            // 2-tone velvet bryophyte moss (deep emerald base -> sunlit chartreuse crown tips)
-            vec3 mossVelvet = mix(mossSample * vec3(0.58, 0.76, 0.48), mossSample * vec3(1.06, 1.18, 0.68), smoothstep(0.52, 0.88, faceNorm.y + triRock.r * 0.2));
+            vec3 mossVelvet = mix(mossSample * vec3(0.56, 0.74, 0.46), mossSample * vec3(1.04, 1.15, 0.66), smoothstep(0.52, 0.88, faceNorm.y + triRock.r * 0.2));
             baseStone = mix(baseStone, mossVelvet, clamp(mossMask * (0.72 + inGorge * 0.24), 0.0, 0.94));
 
-            // 2. LOVE-ROCKS PROCEDURAL SNOW & ALPINE FROST LAYER (High-elevation peaks & stepped rock shelves)
+            // 2. SNOW & ALPINE FROST LAYER
             float elevSnow = smoothstep(56.0, 98.0, vRockWPos.y) * (1.0 - volcanoHeatDry);
             float effSnowAmt = clamp(max(elevSnow, (uSnowAmount - 0.42) * 1.45) * (1.0 - volcanoHeatDry), 0.0, 1.0);
             if (effSnowAmt > 0.01) {
@@ -5671,7 +5956,7 @@
               baseStone = mix(baseStone, snowCol, clamp(snowCap, 0.0, 0.95));
             }
 
-            // 3. Wet dark basalt sheen near waterlines or inside cascading waterfall streams
+            // 3. Wet dark basalt sheen near waterlines or cascading waterfall streams
             float streamWet = max(
               inGorge1 * (1.0 - smoothstep(0.0, 5.2, abs(vRockWPos.z - 2.0))),
               inGorge2 * (1.0 - smoothstep(0.0, 6.2, abs(vRockWPos.x - (-15.0))))
@@ -5683,8 +5968,24 @@
             float waterRim = smoothstep(0.05, 0.35, wetFactor) * (1.0 - smoothstep(0.45, 0.85, wetFactor)) * streamWet;
             baseStone += vec3(0.32, 0.42, 0.44) * waterRim;
 
-            float bottomAO = smoothstep(-0.65, 0.18, faceNorm.y) * 0.50 + 0.50;
+            // Grounded boulder/cliff soil-contact skirt darkening
+            float skirtSoil = (1.0 - smoothstep(-0.35, 0.14, faceNorm.y)) * (1.0 - wetFactor) * (1.0 - volcanoHeatDry);
+            baseStone = mix(baseStone, vec3(0.24, 0.21, 0.14), skirtSoil * 0.38);
+            float bottomAO = smoothstep(-0.65, 0.25, faceNorm.y) * 0.56 + 0.44;
             diffuseColor.rgb = diffuseColor.rgb * baseStone * bottomAO;
+          }
+          `
+        ).replace(
+          '#include <normal_fragment_begin>',
+          `#include <normal_fragment_begin>
+          if (rockCamDist < 72.0 || uIsCave > 0.5) {
+            // World-space analytical cleavage & stratified rock micro-bump (zero UV stretching on cylindrical tunnels)
+            float rGx = cos(vRockWPos.x * 4.4 + vRockWPos.z * 2.1) * 0.26 + cos(vRockWPos.x * 9.8 - vRockWPos.y * 5.2) * 0.16;
+            float rGy = sin(vRockWPos.y * 6.8 + sin(vRockWPos.x * 0.8 + vRockWPos.z * 0.8) * 2.0) * 0.30;
+            float rGz = sin(vRockWPos.z * 4.2 - vRockWPos.x * 2.4) * 0.26 + sin(vRockWPos.z * 9.6 + vRockWPos.y * 5.4) * 0.16;
+            float bumpWeight = (uIsCave > 0.5) ? 0.52 : (0.42 * (1.0 - smoothstep(32.0, 72.0, rockCamDist)));
+            vec3 rockPerturbView = (viewMatrix * vec4(rGx, rGy, rGz, 0.0)).xyz;
+            normal = normalize(normal + rockPerturbView * bumpWeight);
           }
           `
         ).replace(
@@ -5692,11 +5993,9 @@
           `#include <roughnessmap_fragment>
           if (uIsCave > 0.5) {
             if (uIsLavaTube > 0.5) {
-              // Vitrified obsidian thermal glaze vs. porous vesicular scoria
               float obsidianGlaze = smoothstep(0.44, 0.82, sin(vRockWPos.x * 2.2 + vRockWPos.y * 3.1 - vRockWPos.z * 2.0 + diffuseColor.r * 6.0) * 0.5 + 0.5);
               roughnessFactor = mix(0.76, 0.12, obsidianGlaze);
             } else {
-              // High-contrast wet flowstone & seepage mirror sheen vs. matte breakdown limestone
               float seepStreak = smoothstep(0.38, 0.82, sin(vRockWPos.x * 2.6 + vRockWPos.z * 2.9 + sin(vRockWPos.y * 1.8) * 1.6 + diffuseColor.r * 5.0) * 0.5 + 0.5);
               roughnessFactor = mix(0.88, 0.08, seepStreak);
             }
@@ -5717,18 +6016,100 @@
           '#include <emissivemap_fragment>',
           `#include <emissivemap_fragment>
           if (uIsCave > 0.5) {
-            // Mouth bounce falls off cleanly to near-total pitch darkness past 12m
-            float mouthBounce = (1.0 - uCaveDark) * 0.07;
+            float mouthBounce = (1.0 - uCaveDark) * 0.085;
             if (uIsLavaTube > 0.5) {
-              // Subtle glowing thermal cooling cracks in deep lava floor/bench crevices
               float thermalCrack = pow(clamp(1.0 - abs(sin(vRockWPos.x * 1.9 + sin(vRockWPos.z * 1.3) * 2.2 + vRockWPos.y * 1.7)), 0.0, 1.0), 16.0);
               float crackMask = thermalCrack * smoothstep(-0.15, 0.65, vRockWNorm.y) * smoothstep(-225.0, -255.0, vRockWPos.x) * (0.65 + 0.35 * sin(uTime * 1.8 + vRockWPos.x * 0.5));
-              totalEmissiveRadiance += diffuseColor.rgb * mouthBounce + vec3(0.88, 0.22, 0.03) * (crackMask * 0.55);
+              totalEmissiveRadiance += diffuseColor.rgb * mouthBounce + vec3(0.92, 0.24, 0.03) * (crackMask * 0.62);
             } else {
               float mineralGlint = smoothstep(0.955, 0.995, sin(vRockWPos.x * 6.4 + diffuseColor.g * 9.0) * cos(vRockWPos.z * 6.2 - diffuseColor.r * 8.5));
-              vec3 faintSpec = vec3(0.04, 0.14, 0.13) * (mineralGlint * 0.045);
+              vec3 faintSpec = vec3(0.04, 0.14, 0.13) * (mineralGlint * 0.05);
               totalEmissiveRadiance += diffuseColor.rgb * mouthBounce + faintSpec;
             }
+          }
+          `
+        ).replace(
+          '#include <fog_fragment>',
+          `#include <fog_fragment>
+          #ifdef USE_FOG
+            if (uIsCave < 0.5) {
+              float rExt = clamp(1.0 - exp(-pow(uFogDensity * rockCamDist, 2.0)), 0.0, 0.85);
+              vec3 rRay = (vRockWPos - cameraPosition) / max(0.001, rockCamDist);
+              float rMie = pow(max(0.0, dot(rRay, normalize(uSunDir))), 5.5);
+              gl_FragColor.rgb = mix(gl_FragColor.rgb, uMieColor, rExt * rMie * (1.0 - uCaveDark) * 0.45);
+            }
+          #endif
+          `
+        );
+      };
+      return mat;
+    }
+
+    // Feathered organic shore meniscus + capillary ripple shader for subterranean cave cenotes, seepage halls & magma sumps
+    function applyCavePoolShader(mat, isLava = false) {
+      mat.depthWrite = false;
+      mat.onBeforeCompile = function (shader) {
+        shader.uniforms.uPoolTime = window.wfShaderTime;
+        shader.uniforms.uIsLava = { value: isLava ? 1.0 : 0.0 };
+        shader.vertexShader = shader.vertexShader.replace(
+          '#include <common>',
+          `#include <common>
+          varying vec2 vPoolUv;
+          varying vec3 vPoolWPos;
+          `
+        ).replace(
+          '#include <begin_vertex>',
+          `#include <begin_vertex>
+          vPoolUv = uv;
+          vPoolWPos = (modelMatrix * vec4(position, 1.0)).xyz;
+          `
+        );
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <common>',
+          `#include <common>
+          uniform float uPoolTime;
+          uniform float uIsLava;
+          varying vec2 vPoolUv;
+          varying vec3 vPoolWPos;
+          `
+        ).replace(
+          '#include <map_fragment>',
+          `#include <map_fragment>
+          float rNorm = length(vPoolUv - vec2(0.5)) * 2.0;
+          float edgeNoise = sin(vPoolWPos.x * 1.45 + sin(vPoolWPos.z * 1.15) * 1.6) * 0.11
+                          + cos(vPoolWPos.z * 1.65 - vPoolWPos.x * 0.95) * 0.08;
+          float rOrganic = rNorm + edgeNoise;
+          float radialAlpha = 1.0 - smoothstep(0.60, 0.96, rOrganic);
+          if (radialAlpha < 0.015) discard;
+          float rimMask = smoothstep(0.54, 0.78, rOrganic) * (1.0 - smoothstep(0.84, 0.97, rOrganic));
+          if (uIsLava > 0.5) {
+            float crust = smoothstep(0.32, 0.72, sin(vPoolWPos.x * 1.8 + uPoolTime * 0.6) * cos(vPoolWPos.z * 1.7 - uPoolTime * 0.45) * 0.5 + 0.5);
+            diffuseColor.rgb = mix(vec3(0.45, 0.10, 0.02), vec3(0.08, 0.04, 0.03), crust * 0.65 + rimMask * 0.5);
+          } else {
+            float causticRing = smoothstep(0.35, 0.85, sin(vPoolWPos.x * 2.9 + uPoolTime * 1.8) * cos(vPoolWPos.z * 2.7 - uPoolTime * 1.5) * 0.5 + 0.5);
+            vec3 shallowMineral = vec3(0.11, 0.40, 0.44);
+            vec3 deepAbyss = vec3(0.02, 0.12, 0.16);
+            diffuseColor.rgb = mix(deepAbyss, shallowMineral, smoothstep(0.35, 0.88, rOrganic));
+            diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.44, 0.62, 0.64), rimMask * 0.48);
+            diffuseColor.rgb += vec3(0.04, 0.12, 0.14) * causticRing * (1.0 - rNorm);
+          }
+          diffuseColor.a *= radialAlpha;
+          `
+        ).replace(
+          '#include <normal_fragment_begin>',
+          `#include <normal_fragment_begin>
+          float pNx = cos(vPoolWPos.x * 4.4 + uPoolTime * 2.4) * sin(vPoolWPos.z * 3.8 - uPoolTime * 1.9);
+          float pNz = sin(vPoolWPos.z * 4.6 - uPoolTime * 2.1) * cos(vPoolWPos.x * 3.9 + uPoolTime * 1.7);
+          vec3 poolRipView = (viewMatrix * vec4(pNx * 0.14, 0.0, pNz * 0.14, 0.0)).xyz;
+          normal = normalize(normal + poolRipView);
+          `
+        ).replace(
+          '#include <emissivemap_fragment>',
+          `#include <emissivemap_fragment>
+          if (uIsLava > 0.5) {
+            float pulse = 0.85 + 0.25 * sin(uPoolTime * 2.2 + vPoolWPos.x * 0.7);
+            float centerHeat = 1.0 - smoothstep(0.15, 0.86, length(vPoolUv - vec2(0.5)) * 2.0);
+            totalEmissiveRadiance *= (centerHeat * 1.35 + 0.25) * pulse;
           }
           `
         );
@@ -5845,6 +6226,10 @@
       });
       wfMat.onBeforeCompile = function (shader) {
         shader.uniforms.uWfTime = window.wfShaderTime;
+        shader.uniforms.uSunDir = window.atmUniforms.uSunDir;
+        shader.uniforms.uMieColor = window.atmUniforms.uMieColor;
+        shader.uniforms.uFogDensity = window.atmUniforms.uFogDensity;
+        shader.uniforms.uCaveDark = window.atmUniforms.uCaveDark;
         shader.vertexShader = shader.vertexShader.replace(
           '#include <common>',
           `#include <common>
@@ -5852,6 +6237,7 @@
           attribute vec4 aWfData;
           varying vec4 vWfData;
           varying vec3 vWfWorldPos;
+          varying vec3 vWfWorldNorm;
           `
         ).replace(
           '#include <begin_vertex>',
@@ -5865,14 +6251,20 @@
           float chopAmp = (0.018 + vChurn * 0.09 + vWake * 0.12) * aWfData.x * aWfData.y;
           transformed.y += (wave1 + wave2) * chopAmp;
           vWfWorldPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
+          vWfWorldNorm = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
           `
         );
         shader.fragmentShader = shader.fragmentShader.replace(
           '#include <common>',
           `#include <common>
           uniform float uWfTime;
+          uniform vec3 uSunDir;
+          uniform vec3 uMieColor;
+          uniform float uFogDensity;
+          uniform float uCaveDark;
           varying vec4 vWfData;
           varying vec3 vWfWorldPos;
+          varying vec3 vWfWorldNorm;
           `
         ).replace(
           '#include <map_fragment>',
@@ -5906,11 +6298,11 @@
           float foamLace = smoothstep(laceCutoff, laceCutoff + 0.24, rawFroth);
           foamLace = clamp(foamLace + rockWake * smoothstep(0.28, 0.62, sA.r + sC.r) * 0.68, 0.0, 1.0);
 
-          // Grounded Pacific-Northwest / volcanic gorge water palette
-          vec3 deepSlateTeal = vec3(0.03, 0.16, 0.18);
-          vec3 clearRiverAqua = vec3(0.10, 0.36, 0.38);
-          vec3 aeratedMist   = vec3(0.68, 0.84, 0.88);
-          vec3 naturalFoam   = vec3(0.91, 0.95, 0.97);
+          // Rich tropical volcanic gorge emerald-teal palette with deep clarity
+          vec3 deepSlateTeal = vec3(0.015, 0.14, 0.17);
+          vec3 clearRiverAqua = vec3(0.07, 0.36, 0.40);
+          vec3 aeratedMist   = vec3(0.68, 0.85, 0.90);
+          vec3 naturalFoam   = vec3(0.92, 0.96, 0.98);
 
           vec3 clearWaterCol = mix(deepSlateTeal, clearRiverAqua, smoothstep(0.0, 0.65, sA.g * 0.55 + churn * 0.45));
           vec3 waterCol = mix(clearWaterCol, aeratedMist, smoothstep(0.24, 0.66, foamLace));
@@ -5926,7 +6318,7 @@
         ).replace(
           '#include <roughnessmap_fragment>',
           `#include <roughnessmap_fragment>
-          roughnessFactor = mix(0.04, 0.24, clamp(vWfData.z * 0.45 + vWfData.w * 0.55, 0.0, 1.0));
+          roughnessFactor = mix(0.03, 0.22, clamp(vWfData.z * 0.45 + vWfData.w * 0.55, 0.0, 1.0));
           `
         ).replace(
           '#include <normal_fragment_begin>',
@@ -5937,6 +6329,27 @@
           vec3 wfPerturb = (viewMatrix * vec4(wN.x, 0.0, wN.y, 0.0)).xyz;
           normal = normalize(normal + wfPerturb * 0.55);
           `
+        ).replace(
+          '#include <fog_fragment>',
+          `{
+            vec3 wfViewDir = normalize(cameraPosition - vWfWorldPos);
+            vec3 wfSunN = normalize(uSunDir);
+            vec3 wfRippleN = normalize(vWfWorldNorm + vec3(wN.x * 0.48, 0.0, wN.y * 0.48));
+            vec3 wfHalf = normalize(wfSunN + wfViewDir);
+            float wfSunVis = smoothstep(-0.04, 0.14, wfSunN.y) * (1.0 - uCaveDark);
+            float wfGlint = pow(max(0.0, dot(wfRippleN, wfHalf)), 110.0) * wfSunVis;
+            gl_FragColor.rgb += uMieColor * wfGlint * 0.48;
+          }
+          #include <fog_fragment>
+          #ifdef USE_FOG
+            {
+              float wfDist = length(vWfWorldPos - cameraPosition);
+              float wfExt = clamp(1.0 - exp(-pow(uFogDensity * wfDist, 2.0)), 0.0, 0.85);
+              vec3 wfRay = (vWfWorldPos - cameraPosition) / max(0.001, wfDist);
+              float wfMie = pow(max(0.0, dot(wfRay, normalize(uSunDir))), 5.5);
+              gl_FragColor.rgb = mix(gl_FragColor.rgb, uMieColor, wfExt * wfMie * (1.0 - uCaveDark) * 0.45);
+            }
+          #endif`
         );
       };
       waterfallMaterials.push({ mat: wfMat, tex: wfTex, speed: 1.75 });
@@ -6325,6 +6738,10 @@
       });
       lakeMat.onBeforeCompile = function (shader) {
         shader.uniforms.uWfTime = window.wfShaderTime;
+        shader.uniforms.uSunDir = window.atmUniforms.uSunDir;
+        shader.uniforms.uMieColor = window.atmUniforms.uMieColor;
+        shader.uniforms.uFogDensity = window.atmUniforms.uFogDensity;
+        shader.uniforms.uCaveDark = window.atmUniforms.uCaveDark;
         shader.vertexShader = shader.vertexShader.replace(
           '#include <common>',
           `#include <common>
@@ -6347,6 +6764,10 @@
           '#include <common>',
           `#include <common>
           uniform float uWfTime;
+          uniform vec3 uSunDir;
+          uniform vec3 uMieColor;
+          uniform float uFogDensity;
+          uniform float uCaveDark;
           varying vec3 vLakeData;
           varying vec3 vLakeWPos;
           `
@@ -6359,13 +6780,14 @@
           float streak2 = cos(vLakeWPos.x * 2.8 - uWfTime * 3.4 + vLakeWPos.z * 1.1);
           float spillFoam = smoothstep(0.42, 0.86, (streak1 * 0.5 + streak2 * 0.5) * cur + cur * 0.50);
 
-          // Soft lapping shoreline foam ribbon where water depth is 0.04m .. 0.42m
+          // Soft broken lapping shoreline foam ribbon where water depth is 0.03m .. 0.44m
           float shoreWave = sin(vLakeWPos.x * 1.4 + vLakeWPos.z * 1.3 - uWfTime * 2.6) * 0.5 + 0.5;
-          float shoreFoam = smoothstep(0.02, 0.14, wDepth) * (1.0 - smoothstep(0.16, 0.52, wDepth)) * (0.28 + 0.34 * shoreWave);
+          float shoreBreak = 0.55 + 0.45 * sin(vLakeWPos.x * 3.3 - vLakeWPos.z * 2.9 + uWfTime * 1.2);
+          float shoreFoam = smoothstep(0.02, 0.14, wDepth) * (1.0 - smoothstep(0.16, 0.48, wDepth)) * (0.20 + 0.30 * shoreWave) * shoreBreak;
 
-          vec3 shallowSandAqua = vec3(0.18, 0.72, 0.74);
-          vec3 midTurquoise    = vec3(0.06, 0.54, 0.64);
-          vec3 deepSapphire    = vec3(0.015, 0.28, 0.40);
+          vec3 shallowSandAqua = vec3(0.16, 0.68, 0.70);
+          vec3 midTurquoise    = vec3(0.04, 0.48, 0.58);
+          vec3 deepSapphire    = vec3(0.010, 0.22, 0.36);
           vec3 baseLake = mix(shallowSandAqua, midTurquoise, smoothstep(0.0, 1.6, wDepth));
           baseLake = mix(baseLake, deepSapphire, smoothstep(1.6, 5.8, wDepth));
 
@@ -6380,10 +6802,33 @@
             diffuseColor.rgb = mix(baseLake, vec3(0.92, 0.98, 1.0), clamp(spillFoam * 0.84 + shoreFoam, 0.0, 1.0));
             // Zero-seam shoreline alpha feathering while keeping spillway outlet 100% full up to the waterfall lip
             float shoreFeather = clamp(smoothstep(0.0, 0.38, wDepth) + cur * 0.95, 0.0, 1.0);
-            float depthAlpha   = mix(0.48, 0.95, clamp(smoothstep(0.0, 2.2, wDepth) + cur * 0.85, 0.0, 1.0));
+            float depthAlpha   = mix(0.46, 0.95, clamp(smoothstep(0.0, 2.2, wDepth) + cur * 0.85, 0.0, 1.0));
             diffuseColor.a = vLakeData.x * shoreFeather * max(depthAlpha, spillFoam * 0.92);
           }
           `
+        ).replace(
+          '#include <fog_fragment>',
+          `if (gl_FrontFacing) {
+            vec3 lkView = normalize(cameraPosition - vLakeWPos);
+            vec3 lkSun = normalize(uSunDir);
+            float rx = cos(vLakeWPos.x * 2.9 + uWfTime * 2.1) * 0.14 + sin(vLakeWPos.z * 3.7 - uWfTime * 1.7) * 0.12;
+            float rz = sin(vLakeWPos.z * 3.1 - uWfTime * 2.3) * 0.14 + cos(vLakeWPos.x * 2.5 + uWfTime * 1.5) * 0.12;
+            vec3 lkN = normalize(vec3(rx, 1.0, rz));
+            vec3 lkH = normalize(lkSun + lkView);
+            float lkSunVis = smoothstep(-0.04, 0.14, lkSun.y) * (1.0 - uCaveDark);
+            float lkGlint = pow(max(0.0, dot(lkN, lkH)), 220.0) * lkSunVis;
+            gl_FragColor.rgb += uMieColor * lkGlint * 0.55;
+          }
+          #include <fog_fragment>
+          #ifdef USE_FOG
+            {
+              float lkDist = length(vLakeWPos - cameraPosition);
+              float lkExt = clamp(1.0 - exp(-pow(uFogDensity * lkDist, 2.0)), 0.0, 0.85);
+              vec3 lkRay = (vLakeWPos - cameraPosition) / max(0.001, lkDist);
+              float lkMie = pow(max(0.0, dot(lkRay, normalize(uSunDir))), 5.5);
+              gl_FragColor.rgb = mix(gl_FragColor.rgb, uMieColor, lkExt * lkMie * (1.0 - uCaveDark) * 0.45);
+            }
+          #endif`
         );
       };
 
@@ -7398,8 +7843,8 @@
             const lz = posAttr.getZ(i) - cz;
             const radialRatio = Math.min(1.0, Math.hypot(lx, ly, lz) / (maxR * 0.78));
             const heightRatio = Math.max(0.0, Math.min(1.0, (posAttr.getY(i) - bb.min.y) / Math.max(1.0, bb.max.y - bb.min.y)));
-            // Bright, sunlit interior foliage (0.85) -> vibrant sunlit outer crown tips (1.16)
-            const ao = 0.85 + 0.31 * (radialRatio * 0.60 + heightRatio * 0.40);
+            // Richer 3D canopy shadow interior (0.68) -> vibrant sunlit outer crown tips (1.14)
+            const ao = 0.68 + 0.46 * (radialRatio * 0.60 + heightRatio * 0.40);
             colArr[i * 3]     = ao * 1.02;
             colArr[i * 3 + 1] = ao * 1.08;
             colArr[i * 3 + 2] = ao * 0.94;
@@ -7413,32 +7858,87 @@
       branchGeo.computeBoundingSphere();
       leafGeo.computeBoundingSphere();
 
-      // Warm up & brighten tree trunk/branch bark so trunks look naturally sunlit up close
+      // Natural warm sunlit bark contrast without washing out branch crevices
       if (branchMat) {
-        if (branchMat.color) branchMat.color.setHex(0xdcc8ae);
+        if (branchMat.color) branchMat.color.setHex(0xd4bc9e);
         if (branchMat.emissive) {
           branchMat.emissive.setHex(0x140f0a);
-          branchMat.emissiveIntensity = 0.38;
+          branchMat.emissiveIntensity = 0.14;
         }
         branchMat.needsUpdate = true;
       }
 
       // Create 3 shared tropical canopy tint material variants per preset with baked vertexColors AO & fast harmonic wind shader
-      const baseHex = (id === 'pine') ? 0x68bf64 : (id === 'aspen' ? 0xa4e058 : (id === 'bush' ? 0x76c64e : 0x7cd666));
-      // Build a clean static MeshPhongMaterial for LOD1 instanced leaves (no non-instanced ez-tree wind onBeforeCompile!)
-      const lod1Col = new THREE.Color(baseHex);
-      lod1Col.offsetHSL(0.0, 0.03, 0.03);
-      const lod1LeafMat = new THREE.MeshPhongMaterial({
-        name: 'leaves_lod1',
-        map: baseLeafMat.map,
-        color: lod1Col,
-        emissive: new THREE.Color(0x183012),
-        emissiveIntensity: 0.45,
-        shininess: 14,
-        side: THREE.DoubleSide,
-        alphaTest: baseLeafMat.alphaTest || 0.35,
-        vertexColors: true,
-        dithering: true
+      const baseHex = (id === 'pine') ? 0x62ba5e : (id === 'aspen' ? 0x9cd652 : (id === 'bush' ? 0x6ebc48 : 0x74cd60));
+      const hslOffsets = [
+        [-0.018,  0.04, -0.02],
+        [ 0.000,  0.03,  0.02],
+        [ 0.020,  0.00,  0.05]
+      ];
+      const applyFastLeafWindShader = function(mat) {
+        mat.onBeforeCompile = function(shader) {
+          shader.uniforms.uTime = { value: 0 };
+          shader.uniforms.uWindStrength = { value: new THREE.Vector3(0.45, 0, 0.45) };
+          shader.uniforms.uWindFrequency = { value: 0.5 };
+          shader.uniforms.uSunDir = window.atmUniforms.uSunDir;
+          shader.uniforms.uMieColor = window.atmUniforms.uMieColor;
+          shader.uniforms.uFogDensity = window.atmUniforms.uFogDensity;
+          shader.uniforms.uCaveDark = window.atmUniforms.uCaveDark;
+          shader.vertexShader = 'uniform float uTime;\nuniform vec3 uWindStrength;\nuniform float uWindFrequency;\nvarying vec3 vLeafWPos;\n' + shader.vertexShader;
+          // Blend leaf card normals upward toward the sky dome while retaining crisp sunlight-side shadow modeling
+          shader.vertexShader = shader.vertexShader.replace(
+            '#include <defaultnormal_vertex>',
+            `objectNormal = normalize(mix(objectNormal, vec3(0.0, 1.0, 0.0), 0.48));
+            #include <defaultnormal_vertex>`
+          );
+          shader.vertexShader = shader.vertexShader.replace(
+            '#include <project_vertex>',
+            `vec4 mvPosition = vec4(transformed, 1.0);
+            float windOffset = dot(mvPosition.xyz, vec3(0.09, 0.07, 0.11)) + sin(mvPosition.x * 0.17 + mvPosition.z * 0.13) * 1.8;
+            vec3 windSway = uv.y * uWindStrength * (
+              0.5 * sin(uTime * uWindFrequency + windOffset) +
+              0.3 * sin(2.0 * uTime * uWindFrequency + 1.3 * windOffset) +
+              0.2 * sin(5.0 * uTime * uWindFrequency + 1.5 * windOffset)
+            );
+            mvPosition.xyz += windSway;
+            #ifdef USE_INSTANCING
+              mvPosition = instanceMatrix * mvPosition;
+            #endif
+            vLeafWPos = (modelMatrix * mvPosition).xyz;
+            mvPosition = modelViewMatrix * mvPosition;
+            gl_Position = projectionMatrix * mvPosition;`
+          );
+          shader.fragmentShader = 'uniform vec3 uSunDir;\nuniform vec3 uMieColor;\nuniform float uFogDensity;\nuniform float uCaveDark;\nvarying vec3 vLeafWPos;\n' + shader.fragmentShader;
+          shader.fragmentShader = shader.fragmentShader.replace(
+            '#include <fog_fragment>',
+            `#include <fog_fragment>
+            #ifdef USE_FOG
+              {
+                float lDist = length(vLeafWPos - cameraPosition);
+                float lExt = clamp(1.0 - exp(-pow(uFogDensity * lDist, 2.0)), 0.0, 0.85);
+                vec3 lRay = (vLeafWPos - cameraPosition) / max(0.001, lDist);
+                float lMie = pow(max(0.0, dot(lRay, normalize(uSunDir))), 5.5);
+                gl_FragColor.rgb = mix(gl_FragColor.rgb, uMieColor, lExt * lMie * (1.0 - uCaveDark) * 0.45);
+              }
+            #endif
+            `
+          );
+          mat.userData.shader = shader;
+        };
+      };
+      const leafMats = hslOffsets.map(([dh, ds, dl], idx) => {
+        const m = idx === 0 ? baseLeafMat : baseLeafMat.clone();
+        applyFastLeafWindShader(m);
+        m.vertexColors = true;
+        const c = new THREE.Color(baseHex);
+        c.offsetHSL(dh, ds, dl);
+        if (m.color) m.color.copy(c);
+        if (m.emissive) {
+          m.emissive.setHex(0x14280e);
+          m.emissiveIntensity = 0.16;
+        }
+        m.needsUpdate = true;
+        return m;
       });
 
       let lod1BranchGeo = branchGeo;
@@ -7464,56 +7964,24 @@
         lod1LeafGeo.computeBoundingSphere();
       }
 
-      const hslOffsets = [
-        [-0.018,  0.04, -0.01],
-        [ 0.000,  0.03,  0.03],
-        [ 0.020,  0.00,  0.06]
-      ];
-      const applyFastLeafWindShader = function(mat) {
-        mat.onBeforeCompile = function(shader) {
-          shader.uniforms.uTime = { value: 0 };
-          shader.uniforms.uWindStrength = { value: new THREE.Vector3(0.45, 0, 0.45) };
-          shader.uniforms.uWindFrequency = { value: 0.5 };
-          shader.vertexShader = 'uniform float uTime;\nuniform vec3 uWindStrength;\nuniform float uWindFrequency;\n' + shader.vertexShader;
-          // Blend leaf card normals upward toward the sky dome so double-sided foliage cards catch warm overhead sunlight instead of turning dark up close
-          shader.vertexShader = shader.vertexShader.replace(
-            '#include <defaultnormal_vertex>',
-            `objectNormal = normalize(mix(objectNormal, vec3(0.0, 1.0, 0.0), 0.58));
-            #include <defaultnormal_vertex>`
-          );
-          shader.vertexShader = shader.vertexShader.replace(
-            '#include <project_vertex>',
-            `vec4 mvPosition = vec4(transformed, 1.0);
-            float windOffset = dot(mvPosition.xyz, vec3(0.09, 0.07, 0.11)) + sin(mvPosition.x * 0.17 + mvPosition.z * 0.13) * 1.8;
-            vec3 windSway = uv.y * uWindStrength * (
-              0.5 * sin(uTime * uWindFrequency + windOffset) +
-              0.3 * sin(2.0 * uTime * uWindFrequency + 1.3 * windOffset) +
-              0.2 * sin(5.0 * uTime * uWindFrequency + 1.5 * windOffset)
-            );
-            mvPosition.xyz += windSway;
-            #ifdef USE_INSTANCING
-              mvPosition = instanceMatrix * mvPosition;
-            #endif
-            mvPosition = modelViewMatrix * mvPosition;
-            gl_Position = projectionMatrix * mvPosition;`
-          );
-          mat.userData.shader = shader;
-        };
-      };
-      const leafMats = hslOffsets.map(([dh, ds, dl], idx) => {
-        const m = idx === 0 ? baseLeafMat : baseLeafMat.clone();
+      // Match LOD1 leaves visually and kinematically to LOD0 (3 HSL tints + sky-normal lighting + synchronized wind shader)
+      const lod1LeafMats = hslOffsets.map(([dh, ds, dl]) => {
+        const m = baseLeafMat.clone();
+        m.name = 'leaves_lod1';
         applyFastLeafWindShader(m);
         m.vertexColors = true;
         const c = new THREE.Color(baseHex);
         c.offsetHSL(dh, ds, dl);
         if (m.color) m.color.copy(c);
         if (m.emissive) {
-          m.emissive.setHex(0x183012);
-          m.emissiveIntensity = 0.45;
+          m.emissive.setHex(0x14280e);
+          m.emissiveIntensity = 0.16;
         }
+        m.dithering = true;
         m.needsUpdate = true;
         return m;
       });
+      const lod1LeafMat = lod1LeafMats[1];
 
       const entry = {
         presetName,
@@ -7525,7 +7993,8 @@
         leafMats,
         lod1BranchGeo,
         lod1LeafGeo,
-        lod1LeafMat
+        lod1LeafMat,
+        lod1LeafMats
       };
       ezTreePrototypeCache[presetName] = entry;
       window.ezTreePrototypes.push(entry);
@@ -7617,7 +8086,7 @@
 
     // --- PRESET-BATCHED GPU-INSTANCED EZ-TREE LOD SYSTEM (O(1) Dense Swap-Remove Compaction: 0 Degenerate Zero-Scale Triangles) ---
     window.treeImpostorSystem = (function() {
-      const MAX_PER_PRESET = 260;
+      const MAX_PER_PRESET = 380;
       const batches = new Map();
       const nearBatches = new Map();
 
@@ -7668,28 +8137,36 @@
       function getOrCreateBatch(presetName, proto) {
         if (batches.has(presetName)) return batches.get(presetName);
         const branchInst = new THREE.InstancedMesh(proto.lod1BranchGeo, proto.branchMat, MAX_PER_PRESET);
-        const leafInst = new THREE.InstancedMesh(proto.lod1LeafGeo, proto.lod1LeafMat, MAX_PER_PRESET);
         branchInst.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-        leafInst.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
         branchInst.castShadow = false;
         branchInst.receiveShadow = false;
-        leafInst.castShadow = false;
-        leafInst.receiveShadow = false;
         branchInst.frustumCulled = false;
-        leafInst.frustumCulled = false;
-        // Skip planar water reflection for distant alpha-tested leaves while keeping Layer 1 enabled on main camera
-        leafInst.layers.set(1);
-
         branchInst.count = 0;
-        leafInst.count = 0;
         scene.add(branchInst);
-        scene.add(leafInst);
+
+        const leafMatsList = (proto.lod1LeafMats && proto.lod1LeafMats.length >= 3)
+          ? proto.lod1LeafMats
+          : [proto.lod1LeafMat];
+        const leafInsts = leafMatsList.map(mat => {
+          const leafInst = new THREE.InstancedMesh(proto.lod1LeafGeo, mat, MAX_PER_PRESET);
+          leafInst.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+          leafInst.castShadow = false;
+          leafInst.receiveShadow = false;
+          leafInst.frustumCulled = false;
+          // Skip planar water reflection for distant alpha-tested leaves while keeping Layer 1 enabled on main camera
+          leafInst.layers.set(1);
+          leafInst.count = 0;
+          scene.add(leafInst);
+          return leafInst;
+        });
 
         const batch = {
           branchInst,
-          leafInst,
+          leafInst: leafInsts[0],
+          leafInsts,
           branchPool: createCompactPool(branchInst),
-          leafPool: createCompactPool(leafInst),
+          leafPool: createCompactPool(leafInsts[0]),
+          leafPools: leafInsts.map(inst => createCompactPool(inst)),
           count: 0
         };
         batches.set(presetName, batch);
@@ -7758,13 +8235,14 @@
           if (tree.userData.isImpostorActive === active) return;
           tree.userData.isImpostorActive = active;
           const batch = tree.userData.impostorBatch;
+          const tintIdx = Math.min(batch.leafPools.length - 1, tree.userData.leafTint || 0);
           if (active) {
             const m = tree.userData.impostorMat;
             batch.branchPool.add(tree, m);
-            batch.leafPool.add(tree, m);
+            batch.leafPools[tintIdx].add(tree, m);
           } else {
             batch.branchPool.remove(tree);
-            batch.leafPool.remove(tree);
+            batch.leafPools[tintIdx].remove(tree);
           }
         },
         setNearState(tree, state) {
@@ -8398,8 +8876,8 @@
                           + cos(h * 13.0 - uTime * 14.0 + aFlameSeed * 3.1) * 0.06 * h;
               float waveZ = cos(h * 6.8 - uTime * 8.8 + aFlameSeed * 4.7) * 0.14 * pow(h, 1.25)
                           + sin(h * 11.5 - uTime * 13.2) * 0.06 * h;
-              // Taper to dancing flame tips while breathing at the base
-              float pinch = mix(1.0 + sin(uTime * 7.0 + aFlameSeed) * 0.08, 0.12, pow(h, 1.35));
+              // Taper gently to flickering flame tips so 5 overlapping ribbons read as tongues, never a solid cone
+              float pinch = mix(1.0 + sin(uTime * 7.0 + aFlameSeed) * 0.08, 0.24, pow(h, 0.95));
               pos.x = pos.x * pinch + waveX;
               pos.z = pos.z * pinch + waveZ;
               pos.y *= (0.92 + sin(uTime * 8.2 + aFlameSeed * 5.0) * 0.12);
@@ -8436,30 +8914,30 @@
 
             void main() {
               float h = clamp(vUv.y, 0.0, 1.0);
-              float edge = sin(clamp(vUv.x, 0.0, 1.0) * 3.14159265);
-              vec2 nUv = vec2(vUv.x * 3.2 + vSeed * 2.7, h * 3.6 - uTime * 2.85);
+              float edge = pow(sin(clamp(vUv.x, 0.0, 1.0) * 3.14159265), 1.55);
+              vec2 nUv = vec2(vUv.x * 3.4 + vSeed * 2.7, h * 3.8 - uTime * 3.15);
               float n = fbmFire(nUv);
-              float n2 = fbmFire(vec2(vUv.x * 5.5 - vSeed * 1.9, h * 5.8 - uTime * 4.2));
-              float turb = n * 0.65 + n2 * 0.35;
+              float n2 = fbmFire(vec2(vUv.x * 5.8 - vSeed * 1.9, h * 6.0 - uTime * 4.5));
+              float turb = n * 0.62 + n2 * 0.38;
 
-              // Shape eroded dancing flame tongues
-              float shape = edge * (1.0 - pow(h, 1.15)) * 1.45;
-              float intensity = smoothstep(0.24, 0.86, shape + (turb - 0.45) * 0.92);
-              if (intensity < 0.02) discard;
+              // Shape eroded dancing flame tongues without over-saturating multi-plane additive stacking
+              float shape = edge * (1.0 - pow(h, 0.92)) * 1.24;
+              float intensity = smoothstep(0.30, 0.88, shape + (turb - 0.46) * 0.96);
+              if (intensity < 0.025) discard;
 
-              // Blackbody temperature color gradient: white-hot core -> golden yellow -> fiery orange -> crimson tip
-              vec3 cCore   = vec3(1.00, 0.98, 0.84);
-              vec3 cYellow = vec3(1.00, 0.78, 0.22);
-              vec3 cOrange = vec3(1.00, 0.38, 0.04);
-              vec3 cRed    = vec3(0.78, 0.09, 0.01);
+              // Blackbody temperature gradient: warm ivory-gold core -> amber -> fiery orange -> crimson tip
+              vec3 cCore   = vec3(1.00, 0.92, 0.68);
+              vec3 cYellow = vec3(1.00, 0.66, 0.14);
+              vec3 cOrange = vec3(0.96, 0.30, 0.02);
+              vec3 cRed    = vec3(0.66, 0.06, 0.005);
 
-              float temp = clamp(intensity * (1.12 - h * 0.62) + (1.0 - h) * 0.28, 0.0, 1.0);
+              float temp = clamp(intensity * (0.94 - h * 0.58) + (1.0 - h) * 0.16, 0.0, 1.0);
               vec3 col = mix(cRed, cOrange, smoothstep(0.05, 0.40, temp));
-              col = mix(col, cYellow, smoothstep(0.38, 0.74, temp));
-              col = mix(col, cCore, smoothstep(0.72, 0.96, temp));
+              col = mix(col, cYellow, smoothstep(0.40, 0.76, temp));
+              col = mix(col, cCore, smoothstep(0.76, 0.98, temp));
 
-              float alpha = clamp(intensity * smoothstep(0.0, 0.12, h) * (1.0 - smoothstep(0.84, 1.0, h)), 0.0, 0.95);
-              gl_FragColor = vec4(col * 1.35, alpha);
+              float alpha = clamp(intensity * smoothstep(0.0, 0.14, h) * (1.0 - smoothstep(0.78, 1.0, h)), 0.0, 0.72);
+              gl_FragColor = vec4(col * 0.58, alpha);
             }
           `,
           transparent: true,
@@ -9937,8 +10415,8 @@
 
     // Streaming Chunk Manager for Outer 23 Islands (Main-Island Fidelity: Triplanar terrainMat, 6-Blade Grass, 7-Frond Ferns, 5-Petal Wildflowers, Reeds, Pebbles, Mushrooms, Boulders & Trees)
     const ArchipelagoChunkManager = (function () {
-      const HYDRATE_DIST = 390.0;
-      const UNLOAD_DIST = 440.0;
+      const HYDRATE_DIST = 520.0;
+      const UNLOAD_DIST = 580.0;
       const hydratedMap = new Map();
       const colliderRegisteredIslands = new Set();
       const hullGroup = new THREE.Group();
@@ -10759,6 +11237,8 @@
           const mult = s || 1.0;
           const finalS = normScale * mult;
           clone.scale.set(finalS, finalS, finalS);
+          clone.userData.baseScale = finalS;
+          clone.userData._lodScale = 1.0;
           const y = getTerrainHeight(x, z);
           const sink = (category === 'rocks') ? -0.14 : -0.02;
           clone.position.set(x, y + baseYOffset * mult + sink, z);
@@ -10871,7 +11351,7 @@
         side: THREE.DoubleSide
       });
 
-      // Procedural wind wave, sunlit grass tip translucency & distance height-collapse LOD shader
+      // Procedural wind wave, grounded root contact AO, sunlit blade translucency & distance collapse LOD shader
       grassMat.onBeforeCompile = function (shader) {
         shader.uniforms.uGrassTime = window.grassUniforms.uGrassTime;
         shader.uniforms.uGrassWind = window.grassUniforms.uGrassWind;
@@ -10897,9 +11377,10 @@
             float wPhase = position.x * 0.24 + uGrassTime * 2.5;
           #endif
           float distToCam = length(cameraPosition.xz - instWorldOrigin.xz);
-          float distScale = 1.0 - smoothstep(68.0 * uLodBias, 118.0 * uLodBias, distToCam);
+          float distScale = 1.0 - smoothstep(105.0 * uLodBias, 175.0 * uLodBias, distToCam);
           if (distScale <= 0.001) {
             transformed = vec3(0.0);
+            vTipWeight = 0.0;
           } else {
             float tipWeight = clamp(position.y / 0.45, 0.0, 1.0);
             tipWeight = tipWeight * tipWeight;
@@ -10920,11 +11401,18 @@
           varying vec3 vGrassWorldPos;
           `
         ).replace(
+          '#include <color_fragment>',
+          `#include <color_fragment>
+          // Grounded soil-level contact AO: roots seat darkly into turf while tips catch sunlit sky
+          float grassRootAO = mix(0.42, 0.98, smoothstep(0.0, 0.45, vTipWeight));
+          diffuseColor.rgb *= grassRootAO;
+          `
+        ).replace(
           '#include <emissivemap_fragment>',
           `#include <emissivemap_fragment>
           vec3 gViewDir = normalize(vGrassWorldPos - cameraPosition + vec3(0.0, 0.001, 0.0));
           float backlit = pow(clamp(dot(gViewDir, uSunDir), 0.0, 1.0), 3.0) * vTipWeight;
-          totalEmissiveRadiance += vec3(0.42, 0.62, 0.14) * backlit * 0.85;
+          totalEmissiveRadiance += vec3(0.28, 0.40, 0.09) * backlit * 0.44;
           `
         );
       };
@@ -11016,9 +11504,9 @@
 
             const toneMix = baseTone * 0.60 + pseudoRand() * 0.40;
             tintColor.setRGB(
-              0.46 + toneMix * 0.24,
-              0.74 + (1.0 - Math.abs(toneMix - 0.5)) * 0.18,
-              0.30 + (1.0 - toneMix) * 0.14
+              0.40 + toneMix * 0.22,
+              0.62 + (1.0 - Math.abs(toneMix - 0.5)) * 0.16,
+              0.24 + (1.0 - toneMix) * 0.12
             );
             grassMesh.setColorAt(placedGrass, tintColor);
             placedGrass++;
@@ -11106,10 +11594,14 @@
       });
       flowerMat.onBeforeCompile = function (shader) {
         shader.uniforms.uLodBias = window.grassUniforms.uLodBias;
+        shader.uniforms.uGrassTime = window.grassUniforms.uGrassTime;
+        shader.uniforms.uGrassWind = window.grassUniforms.uGrassWind;
         shader.vertexShader = shader.vertexShader.replace(
           '#include <common>',
           `#include <common>
           uniform float uLodBias;
+          uniform float uGrassTime;
+          uniform float uGrassWind;
           `
         ).replace(
           '#include <begin_vertex>',
@@ -11117,20 +11609,29 @@
           #ifdef USE_INSTANCING
             vec4 flOrigin = modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
             float flDist = length(cameraPosition.xz - flOrigin.xz);
-            float flScale = 1.0 - smoothstep(40.0 * uLodBias, 72.0 * uLodBias, flDist);
-            transformed *= flScale;
+            float flScale = 1.0 - smoothstep(78.0 * uLodBias, 130.0 * uLodBias, flDist);
+            if (flScale <= 0.001) {
+              transformed = vec3(0.0);
+            } else {
+              float flY = clamp(position.y / 0.25, 0.0, 1.0);
+              float flPhase = flOrigin.x * 0.24 + flOrigin.z * 0.19 + uGrassTime * 2.5;
+              float flGust = (sin(flPhase) * 0.022 + sin(flPhase * 2.1 + 0.7) * 0.010) * uGrassWind * flScale * (flY * flY);
+              transformed *= flScale;
+              transformed.x += flGust;
+              transformed.z += flGust * 0.55;
+            }
           #endif
           `
         );
       };
       const flowerMesh = new THREE.InstancedMesh(flowerGeo, flowerMat, flowerCount);
       const flowerPalette = [
-        new THREE.Color(0xff5252), // Tropical Hibiscus Red
-        new THREE.Color(0xffd54f), // Plumeria Sun Gold
-        new THREE.Color(0xff7043), // Bird-of-Paradise Coral
-        new THREE.Color(0x4fc3f7), // Lagoon Bluebell
-        new THREE.Color(0xec407a), // Tropical Orchid Magenta
-        new THREE.Color(0xfffde7)  // White Frangipani
+        new THREE.Color(0xc94242), // Tropical Hibiscus Crimson
+        new THREE.Color(0xe0b646), // Plumeria Sun Gold
+        new THREE.Color(0xd45d3b), // Bird-of-Paradise Coral
+        new THREE.Color(0x458fb8), // Lagoon Bluebell
+        new THREE.Color(0xc23c6b), // Tropical Orchid Magenta
+        new THREE.Color(0xe8e4ce)  // Warm Cream Frangipani
       ];
 
       let placedFlowers = 0;
@@ -11295,11 +11796,13 @@
         shader.uniforms.uGrassTime = window.grassUniforms.uGrassTime;
         shader.uniforms.uGrassWind = window.grassUniforms.uGrassWind;
         shader.uniforms.uSunDir = window.grassUniforms.uSunDir;
+        shader.uniforms.uLodBias = window.grassUniforms.uLodBias;
         shader.vertexShader = shader.vertexShader.replace(
           '#include <common>',
           `#include <common>
           uniform float uGrassTime;
           uniform float uGrassWind;
+          uniform float uLodBias;
           varying float vTipWeight;
           varying vec3 vGrassWorldPos;
           `
@@ -11313,12 +11816,20 @@
             vec4 instWorldOrigin = modelMatrix * vec4(position, 1.0);
             float wPhase = position.x * 0.22 + uGrassTime * 2.1;
           #endif
-          float tipWeight = clamp(position.y / 1.15, 0.0, 1.1);
-          tipWeight = tipWeight * tipWeight;
-          float gust = (sin(wPhase) * 0.14 + sin(wPhase * 2.3 + 0.7) * 0.05) * uGrassWind;
-          transformed.x += gust * tipWeight;
-          transformed.z += gust * 0.60 * tipWeight;
-          vTipWeight = tipWeight;
+          float reedDist = length(cameraPosition.xz - instWorldOrigin.xz);
+          float reedScale = 1.0 - smoothstep(155.0 * uLodBias, 245.0 * uLodBias, reedDist);
+          if (reedScale <= 0.001) {
+            transformed = vec3(0.0);
+            vTipWeight = 0.0;
+          } else {
+            float tipWeight = clamp(position.y / 1.15, 0.0, 1.1);
+            tipWeight = tipWeight * tipWeight;
+            float gust = (sin(wPhase) * 0.14 + sin(wPhase * 2.3 + 0.7) * 0.05) * uGrassWind * reedScale;
+            transformed *= reedScale;
+            transformed.x += gust * tipWeight;
+            transformed.z += gust * 0.60 * tipWeight;
+            vTipWeight = tipWeight;
+          }
           vGrassWorldPos = instWorldOrigin.xyz;
           `
         );
@@ -11475,11 +11986,13 @@
         shader.uniforms.uGrassTime = window.grassUniforms.uGrassTime;
         shader.uniforms.uGrassWind = window.grassUniforms.uGrassWind;
         shader.uniforms.uSunDir = window.grassUniforms.uSunDir;
+        shader.uniforms.uLodBias = window.grassUniforms.uLodBias;
         shader.vertexShader = shader.vertexShader.replace(
           '#include <common>',
           `#include <common>
           uniform float uGrassTime;
           uniform float uGrassWind;
+          uniform float uLodBias;
           varying float vFernTip;
           varying vec3 vFernWorldPos;
           `
@@ -11491,13 +12004,21 @@
           #else
             vec4 fOrigin = modelMatrix * vec4(position, 1.0);
           #endif
-          float rDist = clamp(length(position.xz) / 0.55, 0.0, 1.0);
-          float fPhase = fOrigin.x * 0.25 + fOrigin.z * 0.21 + position.x * 3.0 + uGrassTime * 2.4;
-          float fSway = (sin(fPhase) * 0.055 + cos(fPhase * 1.9) * 0.025) * uGrassWind * (rDist * rDist);
-          transformed.x += fSway;
-          transformed.y += fSway * 0.35;
-          transformed.z += fSway * 0.75;
-          vFernTip = rDist;
+          float fernDist = length(cameraPosition.xz - fOrigin.xz);
+          float fernScale = 1.0 - smoothstep(135.0 * uLodBias, 215.0 * uLodBias, fernDist);
+          if (fernScale <= 0.001) {
+            transformed = vec3(0.0);
+            vFernTip = 0.0;
+          } else {
+            float rDist = clamp(length(position.xz) / 0.55, 0.0, 1.0);
+            float fPhase = fOrigin.x * 0.25 + fOrigin.z * 0.21 + position.x * 3.0 + uGrassTime * 2.4;
+            float fSway = (sin(fPhase) * 0.055 + cos(fPhase * 1.9) * 0.025) * uGrassWind * (rDist * rDist) * fernScale;
+            transformed *= fernScale;
+            transformed.x += fSway;
+            transformed.y += fSway * 0.35;
+            transformed.z += fSway * 0.75;
+            vFernTip = rDist;
+          }
           vFernWorldPos = fOrigin.xyz;
           `
         );
@@ -12038,11 +12559,21 @@
         { seed: 20, count: 30, name: 'glacialErratic' },  // Solitary Glacial Striated Monoliths on high alpine tarn benches
         { seed: 27, count: 40, name: 'duneVentifact' }    // Wind-Carved Dreikanter Ventifacts at rocky headland-to-dune transitions
       ];
+      const obsidianRockMat = new THREE.MeshStandardMaterial({
+        normalMap: cliffNormTex,
+        normalScale: new THREE.Vector2(1.4, 1.4),
+        color: 0x161920,
+        roughness: 0.14,
+        metalness: 0.48,
+        envMap: skyEnvCubeTex,
+        envMapIntensity: 0.95
+      });
       window.instancedLocationRocks = [];
       for (let ls = 0; ls < locSpecs.length; ls++) {
         const spec = locSpecs[ls];
         const lGeo = buildLoveRockGeometry(1.0, 2, spec.seed);
-        const lMesh = new THREE.InstancedMesh(lGeo, talusMat, spec.count);
+        const lMat = (spec.seed === 18) ? obsidianRockMat : talusMat;
+        const lMesh = new THREE.InstancedMesh(lGeo, lMat, spec.count);
         lMesh.castShadow = true;
         lMesh.receiveShadow = true;
         lMesh.layers.set(1);
@@ -12369,6 +12900,68 @@
           metalness: 0.05
         }));
       }
+      const portalBoulderMat = applyAAARockShader(new THREE.MeshStandardMaterial({
+        color: 0x7c8078,
+        roughness: 0.86,
+        metalness: 0.06
+      }));
+      function createPortalRockSlab(radius, seed) {
+        const slab = new THREE.Mesh(buildLoveRockGeometry(radius, 3, seed), portalBoulderMat);
+        slab.rotation.y = ((seed * 1.6180339) % 1.0) * Math.PI * 2.0;
+        slab.castShadow = true;
+        slab.receiveShadow = true;
+        return slab;
+      }
+      function createContouredCavePoolGeo(isLavaTube, distCenter, floorY, halfW, ptCenter, sNorm, radius, radialSegs = 24, ringSegs = 5) {
+        const pos = [];
+        const uvs = [];
+        const indices = [];
+        const samples = [];
+        let rimSum = 0.0, rimCnt = 0;
+        let innerMin = Infinity;
+        for (let r = 0; r <= ringSegs; r++) {
+          const rN = r / ringSegs;
+          const rad = rN * radius;
+          for (let a = 0; a <= radialSegs; a++) {
+            const u = a / radialSegs;
+            const ang = u * Math.PI * 2.0;
+            const lx = Math.cos(ang) * rad;
+            const lz = Math.sin(ang) * rad;
+            const wx = ptCenter.x + lx;
+            const wz = ptCenter.z + lz;
+            const sLat = (wx - ptCenter.x) * ptCenter.perpX + (wz - ptCenter.z) * ptCenter.perpZ;
+            const locF = floorY + evalCaveFloorRelief(isLavaTube, distCenter, sLat, halfW, wx, wz, sNorm);
+            if (rN <= 0.65 && locF < innerMin) innerMin = locF;
+            if (r === ringSegs - 1 && a < radialSegs) { rimSum += locF; rimCnt++; }
+            samples.push({ rN, lx, lz, locF, u: 0.5 + 0.5 * rN * Math.cos(ang), v: 0.5 + 0.5 * rN * Math.sin(ang) });
+          }
+        }
+        const rimAvg = rimCnt > 0 ? rimSum / rimCnt : floorY;
+        const centerLocF = samples[0] ? samples[0].locF : floorY;
+        const waterY = Math.max(floorY - 0.14, Math.min(floorY + 0.14, Math.min(centerLocF + 0.12, rimAvg + 0.04)));
+        for (let i = 0; i < samples.length; i++) {
+          const sp = samples[i];
+          const rimDrop = sp.rN > 0.68 ? ((sp.rN - 0.68) / 0.32) : 0.0;
+          const smoothRim = rimDrop * rimDrop * (3.0 - 2.0 * rimDrop);
+          const vyWorld = waterY * (1.0 - smoothRim) + Math.min(waterY, sp.locF + 0.02) * smoothRim;
+          pos.push(sp.lx, vyWorld - waterY, sp.lz);
+          uvs.push(sp.u, sp.v);
+        }
+        const stride = radialSegs + 1;
+        for (let r = 0; r < ringSegs; r++) {
+          for (let a = 0; a < radialSegs; a++) {
+            const p0 = r * stride + a, p1 = p0 + 1, p2 = (r + 1) * stride + a, p3 = p2 + 1;
+            indices.push(p0, p1, p2, p1, p3, p2);
+          }
+        }
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+        geo.setIndex(indices);
+        geo.computeVertexNormals();
+        geo.userData.waterY = waterY;
+        return geo;
+      }
 
       // 1. Dedicated Karst Limestone Triplanar Material (horizontal dolomite strata, wet calcite flowstone curtains & cavity AO)
       const karstWallMat = applyAAARockShader(new THREE.MeshStandardMaterial({
@@ -12412,14 +13005,14 @@
       const speleoMat = new THREE.MeshStandardMaterial({
         map: cliffTex,
         normalMap: cliffNormTex,
-        normalScale: new THREE.Vector2(1.65, 1.65),
-        color: 0x8c8273,
+        normalScale: new THREE.Vector2(1.75, 1.75),
+        color: 0x6b645a,
         emissive: 0x000000,
         emissiveIntensity: 0.0,
-        roughness: 0.16,
-        metalness: 0.14,
+        roughness: 0.24,
+        metalness: 0.10,
         envMap: skyEnvCubeTex,
-        envMapIntensity: 0.22,
+        envMapIntensity: 0.16,
         fog: true
       });
       window.caveDynamicMats.push({ mat: speleoMat, mouthEnv: 0.22 });
@@ -12467,12 +13060,12 @@
       const draperyMat = new THREE.MeshStandardMaterial({
         map: cliffTex,
         normalMap: cliffNormTex,
-        normalScale: new THREE.Vector2(1.4, 1.4),
-        color: 0xb59e82,
-        roughness: 0.12,
-        metalness: 0.12,
+        normalScale: new THREE.Vector2(1.5, 1.5),
+        color: 0x7b7062,
+        roughness: 0.18,
+        metalness: 0.10,
         envMap: skyEnvCubeTex,
-        envMapIntensity: 0.25,
+        envMapIntensity: 0.18,
         fog: true,
         side: THREE.DoubleSide
       });
@@ -12574,11 +13167,11 @@
         return g;
       })();
       const crystalMat = new THREE.MeshStandardMaterial({
-        color: 0xb2c8cc,
-        emissive: 0x164a46,
-        emissiveIntensity: 0.14,
-        roughness: 0.14,
-        metalness: 0.42,
+        color: 0x3b5957,
+        emissive: 0x0c2422,
+        emissiveIntensity: 0.06,
+        roughness: 0.10,
+        metalness: 0.56,
         envMapIntensity: 0.0,
         fog: true
       });
@@ -12728,7 +13321,7 @@
         const cave = CAVE_SYSTEMS[cIndex];
         const activeWallMat = cave.isLavaTube ? lavaWallMat : karstWallMat;
         const lengthSteps = 216;
-        const radialSegs = 46;
+        const radialSegs = 56;
         const positions = [];
         const uvs = [];
         const crevices = [];
@@ -13422,23 +14015,22 @@
             branchMeshes.push(rootMesh);
           }
 
-          // Sunlit Mossy Breakdown Boulder Mound & Shallow Skylight Reflection Pool on the Cavern Floor Below
-          const oasisPoolGeo = new THREE.CircleGeometry(skC.r * 1.28, 28);
-          oasisPoolGeo.rotateX(-Math.PI / 2);
-          const oasisPoolMat = new THREE.MeshStandardMaterial({
+          // Sunlit Mossy Breakdown Boulder Mound & Contoured Skylight Reflection Pool on the Cavern Floor Below
+          const oasisFloorY = skC.floorY;
+          const oasisPoolGeo = createContouredCavePoolGeo(false, skC.sk.s * cave.length, oasisFloorY, skC.pt.halfW, { x: skC.x, z: skC.z, perpX: skC.pt.perpX, perpZ: skC.pt.perpZ }, skC.sk.s, skC.r * 1.32, 24, 5);
+          const oasisPoolMat = applyCavePoolShader(new THREE.MeshStandardMaterial({
             color: 0x0d3840,
             emissive: 0x07242a,
             emissiveIntensity: 0.18,
             roughness: 0.05,
             metalness: 0.24,
             transparent: true,
-            opacity: 0.88,
+            opacity: 0.90,
             fog: true,
             side: THREE.DoubleSide
-          });
-          const oasisFloorY = skC.floorY + evalCaveFloorRelief(false, skC.sk.s * cave.length, 0.0, skC.pt.halfW, skC.x, skC.z, skC.sk.s);
+          }), false);
           const oasisPool = new THREE.Mesh(oasisPoolGeo, oasisPoolMat);
-          oasisPool.position.set(skC.x, oasisFloorY + 0.12, skC.z);
+          oasisPool.position.set(skC.x, oasisPoolGeo.userData.waterY, skC.z);
           oasisPool.layers.set(1);
           caveRoot.add(oasisPool);
           branchMeshes.push(oasisPool);
@@ -13459,17 +14051,61 @@
             branchMeshes.push(oasisRock);
           }
 
-          // Volumetric Sun/Moon God-Ray Light Shaft Cone & Localized Skylight Oasis PointLight
+          // Volumetric Sun/Moon God-Ray Light Shaft Cone (Fresnel edge-softened & vertically feathered)
           const shaftH = Math.max(6.0, topY - oasisFloorY);
-          const shaftGeo = new THREE.CylinderGeometry(skC.r * 0.76, skC.r * 1.48, shaftH, 24, 1, true);
-          const shaftMat = new THREE.MeshBasicMaterial({
-            color: skC.sk.lightColor || 0xc4e4f2,
+          const shaftGeo = new THREE.CylinderGeometry(skC.r * 0.76, skC.r * 1.54, shaftH, 28, 1, true);
+          const shaftMat = new THREE.ShaderMaterial({
+            uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib['fog'], {
+              uColor: { value: new THREE.Color(skC.sk.lightColor || 0xc4e4f2) },
+              uOpacity: { value: 0.16 },
+              uTime: window.wfShaderTime
+            }]),
+            vertexShader: `
+              varying vec2 vUv;
+              varying vec3 vNormalW;
+              varying vec3 vWorldPos;
+              #include <fog_pars_vertex>
+              void main() {
+                vUv = uv;
+                vNormalW = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
+                vec4 wp = modelMatrix * vec4(position, 1.0);
+                vWorldPos = wp.xyz;
+                vec4 mvPosition = viewMatrix * wp;
+                gl_Position = projectionMatrix * mvPosition;
+                #include <fog_vertex>
+              }
+            `,
+            fragmentShader: `
+              uniform vec3 uColor;
+              uniform float uOpacity;
+              uniform float uTime;
+              varying vec2 vUv;
+              varying vec3 vNormalW;
+              varying vec3 vWorldPos;
+              #include <fog_pars_fragment>
+              void main() {
+                vec3 vDir = normalize(cameraPosition - vWorldPos);
+                float fresnel = pow(abs(dot(normalize(vNormalW), vDir)), 1.65);
+                float vertFade = smoothstep(0.0, 0.28, vUv.y) * smoothstep(1.0, 0.72, vUv.y);
+                float dustStreaks = 0.74 + 0.26 * sin(vUv.x * 18.8495 + uTime * 0.45) * cos(vUv.y * 5.0 - uTime * 0.32);
+                float alpha = uOpacity * fresnel * vertFade * dustStreaks;
+                if (alpha < 0.004) discard;
+                gl_FragColor = vec4(uColor, alpha);
+                #include <fog_fragment>
+              }
+            `,
             transparent: true,
-            opacity: 0.13,
             blending: THREE.AdditiveBlending,
             depthWrite: false,
             side: THREE.DoubleSide,
             fog: true
+          });
+          Object.defineProperty(shaftMat, 'opacity', {
+            get: () => shaftMat.uniforms.uOpacity.value,
+            set: (v) => { shaftMat.uniforms.uOpacity.value = v; }
+          });
+          Object.defineProperty(shaftMat, 'color', {
+            get: () => shaftMat.uniforms.uColor.value
           });
           const shaftMesh = new THREE.Mesh(shaftGeo, shaftMat);
           shaftMesh.position.set(skC.x + 0.6, oasisFloorY + shaftH * 0.5, skC.z - 0.4);
@@ -13478,7 +14114,7 @@
           caveRoot.add(shaftMesh);
           branchMeshes.push(shaftMesh);
 
-          const skylightPtLight = new THREE.PointLight(skC.sk.lightColor || 0xc4e4f2, 1.65, 22.0, 1.8);
+          const skylightPtLight = new THREE.PointLight(skC.sk.lightColor || 0xc4e4f2, 1.75, 22.0, 1.8);
           skylightPtLight.position.set(skC.x, oasisFloorY + 4.2, skC.z);
           caveRoot.add(skylightPtLight);
           window.managedPointLights = window.managedPointLights || [];
@@ -13486,8 +14122,8 @@
             light: skylightPtLight,
             shaft: shaftMesh,
             shaftMat,
-            baseInt: 1.65,
-            baseShaftOp: 0.13,
+            baseInt: 1.75,
+            baseShaftOp: 0.16,
             x: skC.x,
             z: skC.z,
             radius: skC.r
@@ -13571,10 +14207,9 @@
           caveRoot.add(subWfMesh);
           branchMeshes.push(subWfMesh);
 
-          // Foaming Plunge Basin & Impounded Subterranean Waterfall Pool
-          const wfPoolGeo = new THREE.CircleGeometry(wf.poolR || 6.0, 28);
-          wfPoolGeo.rotateX(-Math.PI / 2);
-          const wfPoolMat = new THREE.MeshStandardMaterial({
+          // Contoured Plunge Basin & Impounded Subterranean Waterfall Pool
+          const wfPoolGeo = createContouredCavePoolGeo(!!cave.isLavaTube, wf.s * cave.length, wfFloorY, ptW.halfW, ptW, wf.s, wf.poolR || 6.0, 24, 5);
+          const wfPoolMat = applyCavePoolShader(new THREE.MeshStandardMaterial({
             color: 0x082a32,
             emissive: 0x041a20,
             emissiveIntensity: 0.12,
@@ -13584,9 +14219,9 @@
             opacity: 0.90,
             fog: true,
             side: THREE.DoubleSide
-          });
+          }), false);
           const wfPoolMesh = new THREE.Mesh(wfPoolGeo, wfPoolMat);
-          wfPoolMesh.position.set(ptW.x, wfFloorY + 0.16, ptW.z);
+          wfPoolMesh.position.set(ptW.x, wfPoolGeo.userData.waterY, ptW.z);
           wfPoolMesh.layers.set(1);
           caveRoot.add(wfPoolMesh);
           branchMeshes.push(wfPoolMesh);
@@ -13598,7 +14233,7 @@
           const br = branches[bIdx];
           const samp = br.samples;
           const bSteps = samp.length - 1;
-          const bRadial = 30;
+          const bRadial = 34;
           const bPos = [], bUVs = [], bCrev = [], bIndices = [];
           let bAccum = 0.0;
           let nextSpeleoM = 3.5;
@@ -13882,14 +14517,13 @@
                 dummy.updateMatrix();
                 caveRimstoneMesh.setMatrixAt(rimstoneIdx++, dummy.matrix);
               }
-              const hallPoolGeo = new THREE.CircleGeometry(Math.max(2.6, chSamp.halfW * 0.62), 24);
-              hallPoolGeo.rotateX(-Math.PI / 2);
-              const hallPoolMat = new THREE.MeshStandardMaterial({
+              const hallPoolGeo = createContouredCavePoolGeo(!!cave.isLavaTube, chSamp.distFromPortal || ch.t * br.length, chSamp.floorY, chSamp.halfW, chSamp, ch.t, Math.max(2.6, chSamp.halfW * 0.62), 22, 4);
+              const hallPoolMat = applyCavePoolShader(new THREE.MeshStandardMaterial({
                 color: 0x062026, emissive: 0x031418, emissiveIntensity: 0.10,
-                roughness: 0.05, metalness: 0.22, transparent: true, opacity: 0.86, fog: true, side: THREE.DoubleSide
-              });
+                roughness: 0.05, metalness: 0.22, transparent: true, opacity: 0.88, fog: true, side: THREE.DoubleSide
+              }), false);
               const hpMesh = new THREE.Mesh(hallPoolGeo, hallPoolMat);
-              hpMesh.position.set(chSamp.x, chSamp.floorY + 0.11, chSamp.z);
+              hpMesh.position.set(chSamp.x, hallPoolGeo.userData.waterY, chSamp.z);
               hpMesh.layers.set(1);
               caveRoot.add(hpMesh);
               branchMeshes.push(hpMesh);
@@ -13933,14 +14567,13 @@
               });
             } else if (ch.kind === 'thermal_vent') {
               // Cooling volcanic magma blister floor vent + clustered sharks-tooth lavacicles & iron-ember mineral pockets
-              const ventPoolGeo = new THREE.CircleGeometry(Math.max(2.6, chSamp.halfW * 0.56), 24);
-              ventPoolGeo.rotateX(-Math.PI / 2);
-              const ventPoolMat = new THREE.MeshStandardMaterial({
-                color: 0x3b1206, emissive: 0x852204, emissiveIntensity: 0.42,
-                roughness: 0.10, metalness: 0.22, transparent: true, opacity: 0.88, fog: true, side: THREE.DoubleSide
-              });
+              const ventPoolGeo = createContouredCavePoolGeo(true, chSamp.distFromPortal || ch.t * br.length, chSamp.floorY, chSamp.halfW, chSamp, ch.t, Math.max(2.6, chSamp.halfW * 0.56), 22, 4);
+              const ventPoolMat = applyCavePoolShader(new THREE.MeshStandardMaterial({
+                color: 0x3b1206, emissive: 0x852204, emissiveIntensity: 0.44,
+                roughness: 0.10, metalness: 0.22, transparent: true, opacity: 0.90, fog: true, side: THREE.DoubleSide
+              }), true);
               const vpMesh = new THREE.Mesh(ventPoolGeo, ventPoolMat);
-              vpMesh.position.set(chSamp.x, chSamp.floorY + 0.12, chSamp.z);
+              vpMesh.position.set(chSamp.x, ventPoolGeo.userData.waterY, chSamp.z);
               vpMesh.layers.set(1);
               caveRoot.add(vpMesh);
               branchMeshes.push(vpMesh);
@@ -14005,26 +14638,26 @@
             });
           }
 
-          // Subterranean dark cold water pool (or cooling ember magma sump in Cave 2) + rimstone dam border
+          // Subterranean dark cold water pool (or cooling ember magma sump in Cave 2) + contoured meniscus
           if (br.hasPool) {
-            const pSample = samp[Math.min(samp.length - 1, Math.floor(samp.length * (br.isInterCave ? 0.50 : 0.78)))];
+            const pT = br.isInterCave ? 0.50 : 0.78;
+            const pSample = samp[Math.min(samp.length - 1, Math.floor(samp.length * pT))];
             const poolR = Math.max(2.8, pSample.halfW * 0.80);
-            const poolGeo = new THREE.CircleGeometry(poolR, 24);
-            poolGeo.rotateX(-Math.PI / 2);
-            const poolMat = new THREE.MeshStandardMaterial({
+            const poolGeo = createContouredCavePoolGeo(!!cave.isLavaTube, pSample.distFromPortal || pT * br.length, pSample.floorY, pSample.halfW, pSample, pT, poolR, 24, 5);
+            const poolMat = applyCavePoolShader(new THREE.MeshStandardMaterial({
               color: cave.isLavaTube ? 0x3b1206 : 0x05181c,
               emissive: cave.isLavaTube ? 0x7a1e02 : 0x000000,
-              emissiveIntensity: cave.isLavaTube ? 0.45 : 0.0,
+              emissiveIntensity: cave.isLavaTube ? 0.48 : 0.0,
               roughness: 0.06,
               metalness: 0.20,
               envMapIntensity: 0.0,
               transparent: true,
-              opacity: 0.88,
+              opacity: 0.90,
               fog: true,
               side: THREE.DoubleSide
-            });
+            }), !!cave.isLavaTube);
             const pMesh = new THREE.Mesh(poolGeo, poolMat);
-            pMesh.position.set(pSample.x, pSample.floorY + 0.16, pSample.z);
+            pMesh.position.set(pSample.x, poolGeo.userData.waterY, pSample.z);
             pMesh.layers.set(1);
             caveRoot.add(pMesh);
             branchMeshes.push(pMesh);
@@ -14036,22 +14669,21 @@
         if (cave.hasCenote || cave.isLavaTube) {
           const cenotePt = cave.getPoint(0.82);
           const cenoteR = cave.isLavaTube ? 7.6 : 10.4;
-          const cenoteGeo = new THREE.CircleGeometry(cenoteR, 32);
-          cenoteGeo.rotateX(-Math.PI / 2);
-          const cenoteMat = new THREE.MeshStandardMaterial({
+          const cenoteGeo = createContouredCavePoolGeo(!!cave.isLavaTube, 0.82 * cave.length, cenotePt.floorY, cenotePt.halfW, cenotePt, 0.82, cenoteR, 28, 6);
+          const cenoteMat = applyCavePoolShader(new THREE.MeshStandardMaterial({
             color: cave.isLavaTube ? 0x591804 : 0x062028,
             emissive: cave.isLavaTube ? 0x9c2802 : 0x03181e,
-            emissiveIntensity: cave.isLavaTube ? 0.52 : 0.08,
+            emissiveIntensity: cave.isLavaTube ? 0.56 : 0.08,
             roughness: 0.06,
             metalness: 0.22,
             envMapIntensity: 0.0,
             transparent: true,
-            opacity: 0.90,
+            opacity: 0.92,
             fog: true,
             side: THREE.DoubleSide
-          });
+          }), !!cave.isLavaTube);
           cenoteMesh = new THREE.Mesh(cenoteGeo, cenoteMat);
-          cenoteMesh.position.set(cenotePt.x, cenotePt.floorY + 0.20, cenotePt.z);
+          cenoteMesh.position.set(cenotePt.x, cenoteGeo.userData.waterY, cenotePt.z);
           cenoteMesh.layers.set(1);
           caveRoot.add(cenoteMesh);
 
@@ -14124,13 +14756,13 @@
               if (isSideSkirt || isEndSkirt) {
                 vy = baseFlY - 1.4;
               } else if (r === 0) {
-                // Seamlessly tuck front lip just below the approach ramp ground
+                // Seamlessly tuck front lip gently beneath the carved approach ground with organic contour
                 const terrEdgeY = Math.min(baseFlY + 0.02, getTerrainHeight(vx, vz));
-                vy = terrEdgeY - 0.45;
+                vy = terrEdgeY - 0.52 + Math.cos(tc * 3.1) * 0.03;
               } else if (r <= 3) {
-                const terrEdgeY = Math.min(baseFlY + 0.02, getTerrainHeight(vx, vz) + 0.02);
+                const terrEdgeY = Math.min(baseFlY + 0.02, getTerrainHeight(vx, vz) + 0.01);
                 const extBlend = r / 3.0;
-                vy = terrEdgeY * (1.0 - extBlend) + (baseFlY + fRel + 0.02 + sillCrown) * extBlend;
+                vy = terrEdgeY * (1.0 - extBlend) + (baseFlY + fRel + 0.015 + sillCrown) * extBlend;
               } else {
                 vy = baseFlY + fRel + 0.02 + sillCrown + Math.abs(tc) * 0.10 + microbmp;
               }
@@ -14251,13 +14883,13 @@
             const anchorX = depthOff >= 0.0 ? ptB.x : (ptArch0.x + cave.dirX * depthOff);
             const anchorZ = depthOff >= 0.0 ? ptB.z : (ptArch0.z + cave.dirZ * depthOff);
             const anchorY = depthOff >= 0.0 ? ptB.floorY : cave.baseY;
-            const bx = anchorX + cave.perpX * (Math.cos(archAng) * (radW + 0.45));
-            const bz = anchorZ + cave.perpZ * (Math.cos(archAng) * (radW + 0.45));
+            const bx = anchorX + cave.perpX * (Math.cos(archAng) * (radW + 0.25));
+            const bz = anchorZ + cave.perpZ * (Math.cos(archAng) * (radW + 0.25));
             const by = anchorY + Math.sin(archAng) * radH;
-            const bScale = (ring === 0 ? 1.35 : 1.55) + Math.sin(tArch * Math.PI) * 0.28;
-            const archBoulder = createGraniteBoulder(bScale, cIndex * 5 + a);
+            const bScale = (ring === 0 ? 1.28 : 1.48) + Math.sin(tArch * Math.PI) * 0.24;
+            const archBoulder = createPortalRockSlab(bScale, cIndex * 5 + a);
             archBoulder.position.set(bx, by, bz);
-            archBoulder.scale.set(isBrowCrown ? 1.40 : 1.12, isBrowCrown ? 0.76 : 0.92, isBrowCrown ? 1.55 : 1.42);
+            archBoulder.scale.set(isBrowCrown ? 1.52 : 1.04, isBrowCrown ? 0.64 : 0.84, isBrowCrown ? 1.40 : 1.32);
             archBoulder.rotation.set((a % 3 - 1) * 0.14, portalYaw + (a % 2 - 0.5) * 0.22, (a % 2 - 0.5) * 0.16);
             // Upper arch lintel rocks sit high above the doorway and should never block horizontal walk-in
             archBoulder.userData.isCaveArch = Math.sin(archAng) > 0.48;
@@ -14267,15 +14899,15 @@
 
         [-1, 1].forEach(sideSign => {
           for (let w = 0; w < 4; w++) {
-            const lat = sideSign * (ptArch0.halfW + 2.65 + w * 1.18);
-            const fwd = 0.25 + w * 0.85;
+            const lat = sideSign * (ptArch0.halfW + 2.45 + w * 1.15);
+            const fwd = 0.35 + w * 0.85;
             const ptW = cave.getPoint(Math.max(0.0, fwd / cave.length));
             const wx = ptW.x + cave.perpX * lat;
             const wz = ptW.z + cave.perpZ * lat;
-            const wy = ptW.floorY + 0.45 + w * 0.78;
-            const wingRock = createGraniteBoulder(2.05 - w * 0.18, cIndex * 3 + w);
+            const wy = ptW.floorY + 0.35 + w * 0.74;
+            const wingRock = createPortalRockSlab(1.92 - w * 0.16, cIndex * 3 + w);
             wingRock.position.set(wx, wy, wz);
-            wingRock.scale.set(1.30, 1.00, 1.45);
+            wingRock.scale.set(1.26, 0.92, 1.36);
             wingRock.rotation.y = portalYaw + sideSign * 0.35;
             caveRoot.add(wingRock);
           }
@@ -14580,12 +15212,12 @@
       const weedMax = 2600;
       const weedMesh = new THREE.InstancedMesh(weedGeo, weedMat, weedMax);
       const weedPalette = [
-        new THREE.Color(0x1f7a4c), // Emerald Hornwort
-        new THREE.Color(0x2e8b57), // River Elodea
-        new THREE.Color(0x26827a), // Teal Lagoon Sea-Fan
-        new THREE.Color(0x558b2f), // Olive Mossy Charophyte
-        new THREE.Color(0xd96b43), // Warm Coral Sea-Whip (Lagoon & Inter-Island Reefs)
-        new THREE.Color(0xc85a72)  // Deep Reef Crimson Gorgonian Fan
+        new THREE.Color(0x1b6642), // Deep Hornwort
+        new THREE.Color(0x26724c), // River Elodea
+        new THREE.Color(0x226e68), // Lagoon Sea-Fan
+        new THREE.Color(0x4b742a), // Olive Mossy Charophyte
+        new THREE.Color(0x9c5540), // Terracotta Coral Sea-Whip
+        new THREE.Color(0x8c4755)  // Deep Reef Gorgonian Fan
       ];
       let placedWeed = 0;
       for (let i = 0; i < 19000 && placedWeed < weedMax; i++) {
@@ -15032,7 +15664,7 @@
       tierLabel: 'Balanced',
       waterReflRes: 256,
       waterReflStride: 3,
-      lodBias: 1.0,
+      lodBias: 1.22,
       grassRatio: 1.0,
       shadowStride: 14,
       shadowSnapStep: 1.5,
@@ -15050,8 +15682,8 @@
           this.tierLabel = 'Perf-Low';
           this.waterReflRes = 160;
           this.waterReflStride = 6;
-          this.lodBias = 0.74;
-          this.grassRatio = 0.65;
+          this.lodBias = 0.95;
+          this.grassRatio = 0.70;
           this.shadowStride = 28;
           this.shadowSnapStep = 5.0;
           this.shadowRadiusSq = 576.0; // 24m
@@ -15062,7 +15694,7 @@
           this.tierLabel = 'Ultra';
           this.waterReflRes = 256;
           this.waterReflStride = 2;
-          this.lodBias = 1.22;
+          this.lodBias = 1.38;
           this.grassRatio = 1.0;
           this.shadowStride = 10;
           this.shadowSnapStep = 1.5;
@@ -15074,7 +15706,7 @@
           this.tierLabel = 'Balanced';
           this.waterReflRes = 256;
           this.waterReflStride = 3;
-          this.lodBias = 1.0;
+          this.lodBias = 1.22;
           this.grassRatio = 1.0;
           this.shadowStride = 14;
           this.shadowSnapStep = 1.5;
@@ -15092,7 +15724,7 @@
         if (window.instancedGrass) {
           const maxAvail = window.maxGrassCount || 58000;
           const tierBase = window._tierBaseGrassCount || Math.min(maxAvail, 52000);
-          const minFloor = Math.min(12000, maxAvail);
+          const minFloor = Math.min(18000, maxAvail);
           window.instancedGrass.count = Math.max(minFloor, Math.min(maxAvail, Math.round(tierBase * this.grassRatio)));
         }
         window._skipWaterReflectionPass = !!this.skipWaterRefl;
@@ -15129,7 +15761,7 @@
 
         const rdr = typeof renderer !== 'undefined' ? renderer : null;
         if (this.ewmaMs > 22.5) {
-          // Stage 2 Hard Throttle (< 44 FPS): trim grass density, DPR, water reflections & heavy shadows
+          // Stage 2 Hard Throttle (< 44 FPS): trim reflections, shadows, DPR & particles first while shielding near-field vegetation >= 0.86
           this.lastAdjustTime = timeSec;
           this.particleBudgetScale = Math.max(0.30, +(this.particleBudgetScale - 0.18).toFixed(3));
           this.shadowStride = Math.min(40, this.shadowStride + 8);
@@ -15139,15 +15771,15 @@
           this.waterReflRes = Math.max(128, this.waterReflRes - 32);
           this.waterReflStride = Math.min(8, this.waterReflStride + 1);
           this.skipWaterRefl = this.ewmaMs > 24.5;
-          this.grassRatio = Math.max(0.45, +(this.grassRatio - 0.12).toFixed(3));
-          this.lodBias = Math.max(0.72, +(this.lodBias - 0.06).toFixed(3));
+          this.grassRatio = Math.max(0.55, +(this.grassRatio - 0.10).toFixed(3));
+          this.lodBias = Math.max(0.86, +(this.lodBias - 0.04).toFixed(3));
           this.tierLabel = !this.shadowEnabledGov ? 'Gov:Guard' : 'Gov:Throttle';
           if (rdr && this.ewmaMs > 23.5 && rdr.getPixelRatio() > 1.0) {
             rdr.setPixelRatio(Math.max(1.0, +(rdr.getPixelRatio() - 0.25).toFixed(2)));
           }
           this.syncConsumers();
         } else if (this.ewmaMs > 18.8 || this.p95Ms > 25.5) {
-          // Stage 1 Early Soft Trim (< 53 FPS or frequent >25.5ms frame spikes): trim particles, shadows & reflections early
+          // Stage 1 Early Soft Trim (< 53 FPS or frequent >25.5ms frame spikes): trim particles, shadows & reflections while keeping near-field lodBias >= 0.94
           this.lastAdjustTime = timeSec;
           this.particleBudgetScale = Math.max(0.38, +(this.particleBudgetScale - 0.14).toFixed(3));
           this.shadowStride = Math.min(34, this.shadowStride + 6);
@@ -15157,7 +15789,7 @@
           this.skipWaterRefl = false;
           this.waterReflRes = Math.max(160, this.waterReflRes - 32);
           this.waterReflStride = Math.min(6, this.waterReflStride + 1);
-          this.lodBias = Math.max(0.78, +(this.lodBias - 0.04).toFixed(3));
+          this.lodBias = Math.max(0.94, +(this.lodBias - 0.03).toFixed(3));
           this.tierLabel = 'Gov:Trim';
           this.syncConsumers();
         } else if (this.ewmaMs < 16.9 && this.p95Ms < 21.5) {
@@ -15165,11 +15797,11 @@
           this.lastAdjustTime = timeSec;
           const maxRes = window.qualityTier === 'high' ? 256 : (window.qualityTier === 'low' ? 192 : 256);
           const minStride = window.qualityTier === 'high' ? 2 : (window.qualityTier === 'low' ? 5 : 3);
-          const maxBias = window.qualityTier === 'high' ? 1.22 : (window.qualityTier === 'low' ? 0.80 : 1.04);
+          const maxBias = window.qualityTier === 'high' ? 1.38 : (window.qualityTier === 'low' ? 1.00 : 1.24);
           const maxPartScale = window.qualityTier === 'high' ? 1.0 : (window.qualityTier === 'low' ? 0.45 : 0.85);
           const minShadowStride = window.qualityTier === 'high' ? 10 : (window.qualityTier === 'low' ? 28 : 14);
           const maxShadowRadSq = window.qualityTier === 'high' ? 2116.0 : (window.qualityTier === 'low' ? 576.0 : 1444.0);
-          const maxGrassRatio = window.qualityTier === 'low' ? 0.65 : 1.0;
+          const maxGrassRatio = window.qualityTier === 'low' ? 0.70 : 1.0;
 
           this.shadowEnabledGov = (window.qualityTier !== 'low');
           this.skipWaterRefl = (window.qualityTier === 'low');
@@ -15215,9 +15847,10 @@
         if (!suppressToast) showToast("⚡ Performance Mode: 60 FPS battery saver active");
       } else if (tier === 'medium') {
         if (qualityValBadge) qualityValBadge.innerText = 'Balanced (60 FPS)';
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.35));
         renderer.shadowMap.enabled = !window._playerInsideCave;
         renderer.shadowMap.type = THREE.PCFShadowMap;
+        renderer.shadowMap.needsUpdate = true;
         window._tierBaseGrassCount = Math.min(maxAvailGrass, 52000);
         if (window.instancedGrass) window.instancedGrass.visible = true;
         if (window.instancedFlowers) window.instancedFlowers.visible = true;
@@ -15229,9 +15862,10 @@
         if (!suppressToast) showToast("⚖️ Balanced Mode: High detail & shadows active");
       } else if (tier === 'high') {
         if (qualityValBadge) qualityValBadge.innerText = 'Cinematic (Ultra)';
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2.0));
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.65));
         renderer.shadowMap.enabled = !window._playerInsideCave;
         renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.shadowMap.needsUpdate = true;
         window._tierBaseGrassCount = maxAvailGrass;
         if (window.instancedGrass) window.instancedGrass.visible = true;
         if (window.instancedFlowers) window.instancedFlowers.visible = true;
@@ -16367,9 +17001,15 @@
     function toggleTreeSpecies(speciesId, btn) {
       btn.classList.toggle('active');
       const isVis = btn.classList.contains('active');
+      const impSys = window.treeImpostorSystem;
       activeEZTrees.forEach(t => {
         if (t.userData && (t.userData.id === speciesId || (speciesId === 'oak' && t.userData.id === 'ash'))) {
+          t.userData.speciesHidden = !isVis;
           t.visible = isVis;
+          if (!isVis && impSys) {
+            impSys.setImpostorActive(t, false);
+            if (impSys.setNearState) impSys.setNearState(t, 'off');
+          }
         }
       });
     }
@@ -16429,6 +17069,22 @@
       });
       renderer.shadowMap.needsUpdate = true;
       showToast("🌱 Procedural trees re-seeded with varied heights!");
+    });
+
+    addTapListener(document.getElementById('btn-dbg-tour-prev'), () => {
+      const modal = document.getElementById('env-modal');
+      if (modal) modal.classList.remove('open');
+      if (typeof window.stepShowcaseTour === 'function') window.stepShowcaseTour(-1);
+    });
+    addTapListener(document.getElementById('btn-dbg-tour-next'), () => {
+      const modal = document.getElementById('env-modal');
+      if (modal) modal.classList.remove('open');
+      if (typeof window.stepShowcaseTour === 'function') window.stepShowcaseTour(1);
+    });
+    addTapListener(document.getElementById('btn-dbg-tour-gallery'), () => {
+      const modal = document.getElementById('env-modal');
+      if (modal) modal.classList.remove('open');
+      if (typeof window.openLiveScreenshotGallery === 'function') window.openLiveScreenshotGallery();
     });
 
     // 4. SKY & ATMOSPHERE CONFIGURATION
@@ -16649,25 +17305,46 @@
       const angle = ((hour - 6) / 12) * Math.PI;
       const y = Math.sin(angle) * 75;
       const x = Math.cos(angle) * 65;
+      const sunElev = Math.sin(angle);
+      window._sunOffsetX = x;
+      window._sunOffsetY = Math.max(-10, y);
+      window._sunOffsetZ = -50;
       sunLight.position.set(x, Math.max(-10, y), -50);
-      const baseSunInt = Math.max(0.05, Math.sin(angle) * 1.45);
-      const baseHemiInt = Math.max(0.15, Math.sin(angle) * 0.96);
+      const baseSunInt = Math.max(0.08, sunElev * 2.25);
+      const baseHemiInt = Math.max(0.18, sunElev * 0.58);
       window._surfaceSunInt = baseSunInt;
       window._surfaceHemiInt = baseHemiInt;
       const dFac = window.caveDarknessFactor || 0.0;
       sunLight.intensity = baseSunInt * (1.0 - 0.996 * dFac);
       hemiLight.intensity = baseHemiInt * (1.0 - 0.992 * dFac);
+      // Dynamic tropical sun warmth: golden amber near horizon -> crisp tropical warm ivory near noon -> cool silver moonlit key
+      if (sunElev > 0.05) {
+        const lowSun = Math.max(0.0, Math.min(1.0, (0.48 - sunElev) / 0.43));
+        sunLight.color.setRGB(1.0, 0.945 - lowSun * 0.19, 0.824 - lowSun * 0.44);
+        hemiLight.color.setRGB(0.58 - lowSun * 0.08, 0.83 - lowSun * 0.18, 1.0 - lowSun * 0.14);
+        if (window.atmUniforms && window.atmUniforms.uMieColor) {
+          window.atmUniforms.uMieColor.value.setRGB(1.0, 0.88 - lowSun * 0.24, 0.64 - lowSun * 0.36);
+        }
+      } else {
+        sunLight.color.setHex(0x8bb6e6);
+        hemiLight.color.setHex(0x1f3652);
+        if (window.atmUniforms && window.atmUniforms.uMieColor) {
+          window.atmUniforms.uMieColor.value.setHex(0x284060);
+        }
+      }
       if (sliderSunInt && sunIntVal) {
         sliderSunInt.value = baseSunInt.toFixed(2);
         sunIntVal.innerText = `${baseSunInt.toFixed(2)}x`;
       }
       const sunDir = sunLight.position.clone().normalize();
       skyUniforms['sunPosition'].value.copy(sunDir).multiplyScalar(400000);
-      const sunElev = Math.sin(angle);
       const nightVal = sunElev < 0.05 ? Math.min(1.0, (0.05 - sunElev) * 3.2) : 0.0;
       skyUniforms['nightMix'].value = nightVal;
       starMat.opacity = nightVal * 0.92;
       starDome.visible = starMat.opacity > 0.01;
+      if (window.atmUniforms && window.atmUniforms.uSunDir) {
+        window.atmUniforms.uSunDir.value.copy(sunDir);
+      }
       if (cloudUniforms && cloudUniforms['uSunDir']) {
         cloudUniforms['uSunDir'].value.copy(sunDir);
       }
@@ -16677,6 +17354,7 @@
       if (water && water.material && water.material.uniforms['sunDirection']) {
         water.material.uniforms['sunDirection'].value.copy(sunDir);
       }
+      if (renderer && renderer.shadowMap) renderer.shadowMap.needsUpdate = true;
     }
 
     // --- MAIN GAME LOOP ---
@@ -16783,6 +17461,11 @@
         }
       }
 
+      if (window.atmUniforms && scene.fog) {
+        window.atmUniforms.uSkyFogColor.value.copy(scene.fog.color);
+        window.atmUniforms.uFogDensity.value = scene.fog.density;
+      }
+
       // Attenuate exterior sunlight, hemisphere sky bounce, and exterior surface campfires inside caves or deep dives
       // Keep natural darkness when unlit; Torch or lit Cave Flare adds localized bounce fill & clearer cavern fog
       const torchActive = window._calderaActiveTool === 'torch';
@@ -16790,11 +17473,11 @@
       window._caveLightingMode = (dFac <= 0.05) ? 'Surface' : (flareActive ? 'Flare' : (torchActive ? 'Torch' : 'Dark'));
       const torchCaveBounce = (torchActive ? 0.34 : (flareActive ? 0.42 : 0.0)) * dFac;
       if (typeof sunLight !== 'undefined' && sunLight) {
-        sunLight.intensity = (window._surfaceSunInt ?? 1.45) * (1.0 - 0.996 * dFac) * uwAtten;
+        sunLight.intensity = (window._surfaceSunInt ?? 2.25) * (1.0 - 0.996 * dFac) * uwAtten;
       }
       if (typeof hemiLight !== 'undefined' && hemiLight) {
         const lightningBoost = window._activeLightningBoost || 0.0;
-        hemiLight.intensity = (((window._surfaceHemiInt ?? 0.96) + lightningBoost) * (1.0 - 0.992 * dFac) + torchCaveBounce) * (0.45 + 0.55 * uwAtten);
+        hemiLight.intensity = (((window._surfaceHemiInt ?? 0.58) + lightningBoost) * (1.0 - 0.992 * dFac) + torchCaveBounce) * (0.45 + 0.55 * uwAtten);
       }
       if (typeof fireLight !== 'undefined' && fireLight && fireLight._baseInt !== undefined) {
         fireLight.intensity = fireLight._baseInt * (1.0 - 0.95 * dFac);
@@ -16898,16 +17581,29 @@
               }
             }
           }
+          if (proto && proto.lod1LeafMats) {
+            for (let lm = 0; lm < proto.lod1LeafMats.length; lm++) {
+              const mat = proto.lod1LeafMats[lm];
+              if (mat && mat.userData && mat.userData.shader && mat.userData.shader.uniforms && mat.userData.shader.uniforms.uTime) {
+                mat.userData.shader.uniforms.uTime.value = _windTime;
+              }
+            }
+          }
         }
       }
-      // Staggered distance LOD & GPU-instanced EZ-Tree LOD1 switching (full 3D < 68m*lodBias, batched instanced EZ-Tree 68m..520m)
+      // Staggered distance LOD & GPU-instanced EZ-Tree LOD1 switching (full 3D >= 98m*lodBias with hysteresis, batched wind-matched LOD1 out to 720m, smoothly tapered bushes out to 170m)
       if (activeEZTrees.length > 0) {
-        const batchSize = 128;
+        const batchSize = Math.min(256, activeEZTrees.length);
         const startIdx = ((animate._treeLodCursor || 0)) % activeEZTrees.length;
         const pxT = player.pos.x, pzT = player.pos.z;
-        const fullDetailRad = 68.0 * lodBias;
-        const fullDetailSq = fullDetailRad * fullDetailRad;
-        const bushMaxSq = (95.0 * lodBias) * (95.0 * lodBias);
+        const fullDetailRad = 98.0 * lodBias;
+        const enterLod1Sq = (fullDetailRad + 4.0) * (fullDetailRad + 4.0);
+        const exitLod1Sq = (fullDetailRad - 4.0) * (fullDetailRad - 4.0);
+        const bushFadeStart = 132.0 * lodBias;
+        const bushFadeEnd = 170.0 * lodBias;
+        const bushFadeStartSq = bushFadeStart * bushFadeStart;
+        const bushMaxSq = bushFadeEnd * bushFadeEnd;
+        const bushFadeSpan = Math.max(1.0, bushFadeEnd - bushFadeStart);
         const shadRadSq = gov ? gov.shadowRadiusSq : 1444.0;
         const impSys = window.treeImpostorSystem;
 
@@ -16915,6 +17611,14 @@
           const idx = (startIdx + k) % activeEZTrees.length;
           const tr = activeEZTrees[idx];
           if (!tr || !tr.parent || (tr.userData && tr.userData.isFalling)) continue;
+          if (tr.userData && tr.userData.speciesHidden) {
+            if (tr.visible) tr.visible = false;
+            if (impSys) {
+              impSys.setImpostorActive(tr, false);
+              if (impSys.setNearState) impSys.setNearState(tr, 'off');
+            }
+            continue;
+          }
           const dx = tr.position.x - pxT;
           const dz = tr.position.z - pzT;
           const dSq = dx * dx + dz * dz;
@@ -16922,42 +17626,62 @@
           if (isBush) {
             const vis = dSq <= bushMaxSq;
             if (tr.visible !== vis) tr.visible = vis;
+            if (vis) {
+              const baseS = (tr.userData && tr.userData.baseScale) ? tr.userData.baseScale : 0.1;
+              let targetFade = 1.0;
+              if (dSq > bushFadeStartSq) {
+                const tFade = Math.min(1.0, Math.max(0.0, (Math.sqrt(dSq) - bushFadeStart) / bushFadeSpan));
+                targetFade = Math.max(0.03, 1.0 - (tFade * tFade * (3.0 - 2.0 * tFade)));
+              }
+              const prevFade = (tr.userData._lodScale !== undefined) ? tr.userData._lodScale : 1.0;
+              if (Math.abs(prevFade - targetFade) > 0.035 || (targetFade === 1.0 && prevFade !== 1.0)) {
+                tr.userData._lodScale = targetFade;
+                const sc = baseS * targetFade;
+                tr.scale.set(sc, sc, sc);
+                tr.updateMatrix();
+                tr.updateMatrixWorld(true);
+              }
+            }
           } else {
-            const maxTreeSq = (tr.userData && tr.userData.baseScale < 0.27) ? 144400.0 : 270400.0; // 380m saplings, 520m large trees
+            const maxTreeSq = (tr.userData && tr.userData.baseScale < 0.27) ? 270400.0 : 518400.0; // 520m saplings, 720m large trees
             if (dSq > maxTreeSq) {
               if (tr.visible) tr.visible = false;
               if (impSys) {
                 impSys.setImpostorActive(tr, false);
                 impSys.setNearState(tr, 'off');
               }
-            } else if (dSq > fullDetailSq && impSys && tr.userData.impostorBatch) {
-              if (tr.branchesMesh && tr.branchesMesh.visible) tr.branchesMesh.visible = false;
-              if (tr.leavesMesh && tr.leavesMesh.visible) tr.leavesMesh.visible = false;
-              if (tr.visible) tr.visible = false;
-              impSys.setNearState(tr, 'off');
-              impSys.setImpostorActive(tr, true);
-            } else if (impSys && tr.userData.nearSlot !== undefined) {
-              if (!tr.visible) tr.visible = true;
-              if (tr.branchesMesh && tr.branchesMesh.visible) {
-                tr.branchesMesh.visible = false;
-                tr.branchesMesh.castShadow = false;
-              }
-              if (tr.leavesMesh && tr.leavesMesh.visible) {
-                tr.leavesMesh.visible = false;
-                tr.leavesMesh.castShadow = false;
-              }
-              impSys.setImpostorActive(tr, false);
-              impSys.setNearState(tr, dSq <= shadRadSq ? 'shadow' : 'plain');
             } else {
-              if (!tr.visible) tr.visible = true;
-              if (impSys) impSys.setImpostorActive(tr, false);
-              if (tr.branchesMesh) {
-                const castShad = dSq <= shadRadSq;
-                if (tr.branchesMesh.castShadow !== castShad) tr.branchesMesh.castShadow = castShad;
-                if (tr.leavesMesh && tr.leavesMesh.castShadow) tr.leavesMesh.castShadow = false;
-                const targetLayerMask = dSq <= 4225.0 ? 1 : 2;
-                if (tr.branchesMesh.layers.mask !== targetLayerMask) {
-                  tr.branchesMesh.layers.mask = targetLayerMask;
+              const wasImpostor = !!(tr.userData && tr.userData.isImpostorActive);
+              const wantImpostor = wasImpostor ? (dSq > exitLod1Sq) : (dSq > enterLod1Sq);
+              if (wantImpostor && impSys && tr.userData.impostorBatch) {
+                if (tr.branchesMesh && tr.branchesMesh.visible) tr.branchesMesh.visible = false;
+                if (tr.leavesMesh && tr.leavesMesh.visible) tr.leavesMesh.visible = false;
+                if (tr.visible) tr.visible = false;
+                impSys.setNearState(tr, 'off');
+                impSys.setImpostorActive(tr, true);
+              } else if (impSys && tr.userData.nearSlot !== undefined) {
+                if (!tr.visible) tr.visible = true;
+                if (tr.branchesMesh && tr.branchesMesh.visible) {
+                  tr.branchesMesh.visible = false;
+                  tr.branchesMesh.castShadow = false;
+                }
+                if (tr.leavesMesh && tr.leavesMesh.visible) {
+                  tr.leavesMesh.visible = false;
+                  tr.leavesMesh.castShadow = false;
+                }
+                impSys.setImpostorActive(tr, false);
+                impSys.setNearState(tr, dSq <= shadRadSq ? 'shadow' : 'plain');
+              } else {
+                if (!tr.visible) tr.visible = true;
+                if (impSys) impSys.setImpostorActive(tr, false);
+                if (tr.branchesMesh) {
+                  const castShad = dSq <= shadRadSq;
+                  if (tr.branchesMesh.castShadow !== castShad) tr.branchesMesh.castShadow = castShad;
+                  if (tr.leavesMesh && tr.leavesMesh.castShadow) tr.leavesMesh.castShadow = false;
+                  const targetLayerMask = dSq <= 4225.0 ? 1 : 2;
+                  if (tr.branchesMesh.layers.mask !== targetLayerMask) {
+                    tr.branchesMesh.layers.mask = targetLayerMask;
+                  }
                 }
               }
             }
@@ -16967,20 +17691,20 @@
         if (impSys && impSys.flushNear) impSys.flushNear();
       }
 
-      // Staggered 2-tier geometric LOD for basalt boulders (< 46m highGeo 22x16, > 46m lowGeo 8x6, > 260m culled) & GLB scatter distance culling
+      // Staggered 2-tier geometric LOD for basalt boulders (< 78m highGeo 22x16, > 78m lowGeo 8x6, > 380m culled) & smoothly tapered GLB scatter
       if (window.activeBoulders && window.activeBoulders.length > 0 && (animate._frameCount & 3) === 0) {
         const bList = window.activeBoulders;
-        const bBatch = Math.min(48, bList.length);
+        const bBatch = Math.min(64, bList.length);
         const bStart = ((animate._boulderLodCursor || 0)) % bList.length;
         const pxB = player.pos.x, pzB = player.pos.z;
-        const lodSwapSq = (46.0 * lodBias) * (46.0 * lodBias);
+        const lodSwapSq = (78.0 * lodBias) * (78.0 * lodBias);
         for (let b = 0; b < bBatch; b++) {
           const rock = bList[(bStart + b) % bList.length];
           if (!rock || !rock.parent) continue;
           const dx = rock.position.x - pxB;
           const dz = rock.position.z - pzB;
           const dSq = dx * dx + dz * dz;
-          if (dSq > 67600.0) { // > 260m
+          if (dSq > 144400.0) { // > 380m
             if (rock.visible) rock.visible = false;
           } else {
             if (!rock.visible) rock.visible = true;
@@ -16994,9 +17718,13 @@
         }
         animate._boulderLodCursor = (bStart + bBatch) % bList.length;
       }
-      if (window.floraItems && (animate._frameCount % 12) === 0) {
+      if (window.floraItems && (animate._frameCount % 6) === 0) {
         const pxF = player.pos.x, pzF = player.pos.z;
-        const maxFloraSq = (50.0 * lodBias) * (50.0 * lodBias);
+        const floraFadeStart = 82.0 * lodBias;
+        const floraFadeEnd = 115.0 * lodBias;
+        const floraFadeStartSq = floraFadeStart * floraFadeStart;
+        const maxFloraSq = floraFadeEnd * floraFadeEnd;
+        const floraFadeSpan = Math.max(1.0, floraFadeEnd - floraFadeStart);
         ['flowers', 'grass', 'rocks'].forEach(cat => {
           const arr = window.floraItems[cat];
           if (!arr) return;
@@ -17005,7 +17733,21 @@
             if (!item) continue;
             const dx = item.position.x - pxF;
             const dz = item.position.z - pzF;
-            item.visible = (dx * dx + dz * dz) <= maxFloraSq;
+            const dSq = dx * dx + dz * dz;
+            const vis = dSq <= maxFloraSq;
+            if (item.visible !== vis) item.visible = vis;
+            if (vis && item.userData && item.userData.baseScale) {
+              let targetFade = 1.0;
+              if (dSq > floraFadeStartSq) {
+                const tFade = Math.min(1.0, Math.max(0.0, (Math.sqrt(dSq) - floraFadeStart) / floraFadeSpan));
+                targetFade = Math.max(0.03, 1.0 - (tFade * tFade * (3.0 - 2.0 * tFade)));
+              }
+              const prevFade = (item.userData._lodScale !== undefined) ? item.userData._lodScale : 1.0;
+              if (Math.abs(prevFade - targetFade) > 0.035 || (targetFade === 1.0 && prevFade !== 1.0)) {
+                item.userData._lodScale = targetFade;
+                item.scale.setScalar(item.userData.baseScale * targetFade);
+              }
+            }
           }
         });
       }
@@ -17333,17 +18075,26 @@
         }
       }
 
-      // Dynamic player-anchored high-res shadow camera tracking (cadence & snap-step controlled by AdaptiveGovernor)
+      // Dynamic player-anchored texel-snapped high-res shadow camera tracking (cadence & snap-step controlled by AdaptiveGovernor)
       if (sunLight && sunLight.target) {
         animate.lastSunX = animate.lastSunX ?? -9999;
         animate.lastSunZ = animate.lastSunZ ?? -9999;
         const shadSnapStep = gov ? gov.shadowSnapStep : 1.5;
         const shadStride = gov ? gov.shadowStride : 14;
         if (Math.hypot(player.pos.x - animate.lastSunX, player.pos.z - animate.lastSunZ) > shadSnapStep && animate._framesSinceShadow >= shadStride) {
-          animate.lastSunX = player.pos.x;
-          animate.lastSunZ = player.pos.z;
-          sunLight.position.set(player.pos.x + 55, player.pos.y + 85, player.pos.z - 50);
-          sunLight.target.position.set(player.pos.x, player.pos.y, player.pos.z);
+          // Snap anchor to discrete world-space grid aligned with frustum width/height so shadows remain rock-steady
+          const frustumW = 68.0;
+          const texelStep = frustumW / 512.0;
+          const snapX = Math.round(player.pos.x / texelStep) * texelStep;
+          const snapY = Math.round(player.pos.y / texelStep) * texelStep;
+          const snapZ = Math.round(player.pos.z / texelStep) * texelStep;
+          animate.lastSunX = snapX;
+          animate.lastSunZ = snapZ;
+          const sOx = window._sunOffsetX !== undefined ? window._sunOffsetX : 45.0;
+          const sOy = window._sunOffsetY !== undefined ? window._sunOffsetY : 75.0;
+          const sOz = window._sunOffsetZ !== undefined ? window._sunOffsetZ : -50.0;
+          sunLight.position.set(snapX + sOx, snapY + sOy, snapZ + sOz);
+          sunLight.target.position.set(snapX, snapY, snapZ);
           sunLight.target.updateMatrixWorld();
           if (renderer.shadowMap.enabled && !window._playerInsideCave) {
             renderer.shadowMap.needsUpdate = true;

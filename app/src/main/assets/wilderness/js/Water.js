@@ -101,6 +101,12 @@
 					},
 					'uWaveAmp': {
 						value: 1.0
+					},
+					'uMieColor': {
+						value: new THREE.Color( 0xffe0a3 )
+					},
+					'uFogDensity': {
+						value: 0.00145
 					}
 				} ] ),
 				vertexShader:
@@ -226,10 +232,16 @@
 					return noise * 0.5 - 1.0;
 				}
 
+				uniform vec3 uMieColor;
+				uniform float uFogDensity;
+
 				void sunLight( const vec3 surfaceNormal, const vec3 eyeDirection, float shiny, float spec, float diffuse, inout vec3 diffuseColor, inout vec3 specularColor ) {
 					vec3 reflection = normalize( reflect( -sunDirection, surfaceNormal ) );
 					float direction = max( 0.0, dot( eyeDirection, reflection ) );
-					specularColor += pow( direction, shiny ) * sunColor * spec;
+					// Dual-lobe solar glint: broad warm sun-path sheen + razor-sharp diamond glitter
+					float broadSheen = pow( direction, max( 28.0, shiny * 0.45 ) ) * ( spec * 0.42 );
+					float diamondGlint = pow( direction, 420.0 ) * ( spec * 1.95 );
+					specularColor += ( broadSheen + diamondGlint ) * sunColor;
 					diffuseColor += max( dot( sunDirection, surfaceNormal ), 0.0 ) * sunColor * diffuse;
 				}
 
@@ -325,19 +337,19 @@
 					float rf0 = 0.035;
 					float reflectance = rf0 + ( 1.0 - rf0 ) * pow( ( 1.0 - theta ), 5.0 );
 
-					// Depth-based Beer-Lambert lagoon color gradient (translucent sand-tinted aqua -> turquoise -> abyssal ocean cobalt)
+					// Depth-based Beer-Lambert lagoon color gradient (translucent coral sand aqua -> turquoise -> abyssal ocean cobalt)
 					float depth = max( 0.0, vWaterDepth + vWaveHeight * 0.22 );
-					vec3 ultraShallowCol = vec3( 0.42, 0.76, 0.72 );
-					vec3 shallowCol = vec3( 0.10, 0.70, 0.72 );
-					vec3 deepCol = vec3( 0.006, 0.095, 0.185 );
-					vec3 depthTint = mix( ultraShallowCol, shallowCol, smoothstep( 0.0, 0.65, depth ) );
+					vec3 ultraShallowCol = vec3( 0.32, 0.64, 0.64 );
+					vec3 shallowCol = vec3( 0.06, 0.56, 0.64 );
+					vec3 deepCol = vec3( 0.004, 0.068, 0.155 );
+					vec3 depthTint = mix( ultraShallowCol, shallowCol, smoothstep( 0.0, 0.68, depth ) );
 					depthTint = mix( depthTint, waterColor, smoothstep( 0.45, 2.2, depth ) );
 					depthTint = mix( depthTint, deepCol, smoothstep( 2.4, 11.5, depth ) );
 
-					// Wave-crest subsurface sunlight scattering (translucent jade-cyan glow through swells)
+					// Wave-crest subsurface sunlight scattering (translucent jade-emerald glow through swells)
 					float sunBacklit = pow( max( 0.0, dot( -eyeDirection, sunDirection ) ), 3.0 );
-					float sss = clamp( vWaveHeight * 0.52, 0.0, 1.0 ) * ( 0.30 + sunBacklit * 0.90 );
-					vec3 sssGlow = vec3( 0.04, 0.36, 0.34 ) * sss;
+					float sss = clamp( vWaveHeight * 0.56, 0.0, 1.0 ) * ( 0.34 + sunBacklit * 0.96 );
+					vec3 sssGlow = vec3( 0.03, 0.42, 0.38 ) * sss;
 
 					// Reduce mirror reflection weight in ultra-shallow shoreline water (< 0.5m) or when eye is at grazing wave-crest level
 					float eyeHeightFade = smoothstep( 0.45, 1.25, eye.y - worldPosition.y );
@@ -345,13 +357,14 @@
 					vec3 skyFallbackCol = mix( vec3( 0.46, 0.74, 0.88 ), sunColor * 0.85, 0.25 );
 					vec3 reflCol = mix( skyFallbackCol, reflectionSample, eyeHeightFade );
 					vec3 scatter = max( 0.0, dot( surfaceNormal, eyeDirection ) ) * depthTint;
-					vec3 albedo = mix( ( sunColor * diffuseLight * 0.35 + scatter + sssGlow ) * getShadowMask(), ( vec3( 0.04 ) + reflCol * 0.94 + reflCol * specularLight ), reflectance * shallowReflFade );
+					vec3 albedo = mix( ( sunColor * diffuseLight * 0.35 + scatter + sssGlow ) * getShadowMask(), ( vec3( 0.03 ) + reflCol * 0.94 + reflCol * specularLight ), reflectance * shallowReflFade );
+					albedo += specularLight * 0.45 * shallowReflFade;
 
 					// Dynamic 3D wide-crest ocean whitecaps & wind-streaked foam lace (eliminates repetitive oval blobs from high altitude)
 					float waveCrest = clamp( noise.x * noise.z * 2.2, 0.0, 1.0 );
 					float normWaveH = vWaveHeight / max( 0.42, uWaveAmp );
 					float streakCoord = worldPosition.x * 0.036 - worldPosition.z * 0.052 + noise.x * 2.4;
-					float foamLace = smoothstep( 0.22, 0.74,
+					float foamLace = smoothstep( 0.24, 0.76,
 						noise.x * 0.85 + noise.z * 0.85 + 0.36
 						+ sin( streakCoord * 2.4 + time * 0.85 ) * 0.24
 						+ cos( ( worldPosition.x * 0.09 + worldPosition.z * 0.065 ) - time * 1.25 ) * 0.20
@@ -359,25 +372,33 @@
 					float altSoften = 1.0 - smoothstep( 160.0, 640.0, camDist ) * 0.55;
 					float swellWhitecap = smoothstep( 0.64, 1.18, normWaveH ) * foamLace * altSoften * ( 0.16 + uFoamIntensity * 0.34 );
 
-					// Smoothly feathered shoreline surf wash & lapping edge foam (fades smoothly to 0.0 right at depth = 0.0!)
-					float inShore = smoothstep( 0.03, 0.18, depth ) * ( 1.0 - smoothstep( 0.22, 1.25, depth ) );
-					float surfBands = pow( max( 0.0, sin( depth * 11.5 - time * 2.8 + noise.x * 2.4 ) ), 3.0 );
-					float edgeLace = smoothstep( 0.02, 0.10, depth ) * ( 1.0 - smoothstep( 0.10, 0.32, depth ) ) * ( 0.55 + 0.45 * sin( worldPosition.x * 1.8 + worldPosition.z * 1.6 + time * 2.2 ) );
-					float shoreFoam = ( inShore * surfBands * ( 0.48 + uFoamIntensity * 0.32 ) + edgeLace * 0.42 );
+					// Smoothly feathered shoreline surf wash & capillary-broken edge lace (soft wash on wet sand)
+					float inShore = smoothstep( 0.04, 0.22, depth ) * ( 1.0 - smoothstep( 0.24, 1.25, depth ) );
+					float surfBands = pow( max( 0.0, sin( depth * 11.5 - time * 2.8 + noise.x * 2.6 ) ), 3.2 );
+					float laceBreak = smoothstep( -0.15, 0.45, noise.z );
+					float edgeLace = smoothstep( 0.02, 0.14, depth ) * ( 1.0 - smoothstep( 0.14, 0.36, depth ) ) * ( 0.42 + 0.58 * laceBreak );
+					float shoreFoam = ( inShore * surfBands * ( 0.30 + uFoamIntensity * 0.24 ) + edgeLace * 0.22 );
 
 					float foam = pow( waveCrest, 3.2 ) * ( 0.14 + uFoamIntensity * 0.26 ) * shallowReflFade * altSoften + swellWhitecap + shoreFoam;
 					albedo += vec3( foam );
 
-					// Zero-seam shoreline alpha: feathers smoothly from 0.0 at depth=0.0 to translucent aqua to deep water
-					float shoreFeather = smoothstep( 0.0, 0.42, depth );
-					float depthAlpha = shoreFeather * mix( 0.34, 0.96, smoothstep( 0.18, 2.8, depth ) );
-					float finalAlpha = clamp( max( depthAlpha, shoreFoam * 0.78 * shoreFeather ) * alpha, 0.0, 1.0 );
+					// Zero-seam shoreline alpha: organic noise-modulated feather from 0.0 at shoreline into deep water
+					float shoreFeather = smoothstep( 0.0, 0.56, depth + noise.x * 0.08 );
+					float depthAlpha = shoreFeather * mix( 0.30, 0.96, smoothstep( 0.20, 2.8, depth ) );
+					float finalAlpha = clamp( max( depthAlpha, shoreFoam * 0.68 * shoreFeather ) * alpha, 0.0, 1.0 );
 
 					vec3 outgoingLight = albedo;
 					gl_FragColor = vec4( outgoingLight, finalAlpha );
 
 					#include <tonemapping_fragment>
 					#include <fog_fragment>
+					#ifdef USE_FOG
+						{
+							float wExt = clamp( 1.0 - exp( -pow( uFogDensity * camDist, 2.0 ) ), 0.0, 0.85 );
+							float wMie = pow( max( 0.0, dot( -eyeDirection, normalize( sunDirection ) ) ), 5.5 );
+							gl_FragColor.rgb = mix( gl_FragColor.rgb, uMieColor, wExt * wMie * 0.45 );
+						}
+					#endif
 				}`
 			};
 			const material = new THREE.ShaderMaterial( {
@@ -401,6 +422,10 @@
 			material.uniforms[ 'distortionScale' ].value = distortionScale;
 			material.uniforms[ 'eye' ].value = eye;
 			material.uniforms[ 'uWaveAmp' ].value = options.waveAmp !== undefined ? options.waveAmp : 1.0;
+			if ( window.atmUniforms ) {
+				material.uniforms[ 'uMieColor' ] = window.atmUniforms.uMieColor;
+				material.uniforms[ 'uFogDensity' ] = window.atmUniforms.uFogDensity;
+			}
 			scope.material = material;
 			scope.renderTarget = renderTarget;
 

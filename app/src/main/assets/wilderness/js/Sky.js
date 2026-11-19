@@ -298,8 +298,8 @@
 					uCloudTex: { value: cloudTex },
 					uTime: { value: 0.0 },
 					uCloudCover: { value: 0.44 },
-					uCloudLight: { value: new THREE.Color( 0xffffff ) },
-					uCloudShadow: { value: new THREE.Color( 0xbcd4ea ) },
+					uCloudLight: { value: new THREE.Color( 0xfffaf2 ) },
+					uCloudShadow: { value: new THREE.Color( 0x9ab4cf ) },
 					uSunDir: { value: new THREE.Vector3( 0.45, 0.75, -0.5 ).normalize() },
 					uOpacity: { value: 0.88 }
 				},
@@ -325,28 +325,35 @@
 
 					void main() {
 						vec3 dir = normalize( vWorldPos - cameraPosition );
-						if ( dir.y < 0.01 ) discard;
+						if ( dir.y < 0.008 ) discard;
 
-						// Overhead altitude projection with smooth horizon perspective stretch
-						vec2 proj = dir.xz / ( dir.y + 0.19 );
-						vec2 uv1 = proj * 0.24 + vec2( uTime * 0.0085, uTime * 0.0032 );
-						vec2 uv2 = proj * 0.46 + vec2( -uTime * 0.0045 + 0.37, uTime * 0.0068 + 0.19 );
+						// Overhead altitude projection with multi-scale cumulus & high-altitude cirrus streaks
+						vec2 proj = dir.xz / ( dir.y + 0.21 );
+						vec2 uv1 = proj * 0.22 + vec2( uTime * 0.0080, uTime * 0.0030 );
+						vec2 uv2 = proj * 0.48 + vec2( -uTime * 0.0042 + 0.37, uTime * 0.0064 + 0.19 );
+						vec2 uvCirrus = proj * 0.14 + vec2( uTime * 0.0022 + 0.61, -uTime * 0.0014 + 0.13 );
 
 						vec4 s1 = texture2D( uCloudTex, uv1 );
 						vec4 s2 = texture2D( uCloudTex, uv2 );
+						vec4 sC = texture2D( uCloudTex, uvCirrus );
 
-						float density = s1.r * 0.72 + s2.r * 0.28;
-						float cutoff = mix( 0.66, 0.30, clamp( uCloudCover, 0.0, 1.0 ) );
-						float alpha = smoothstep( cutoff, cutoff + 0.18, density );
+						float cumulus = s1.r * 0.70 + s2.r * 0.30;
+						float cutoff = mix( 0.65, 0.31, clamp( uCloudCover, 0.0, 1.0 ) );
+						float cumAlpha = smoothstep( cutoff, cutoff + 0.19, cumulus );
+						float cirrus = smoothstep( 0.56, 0.88, sC.b * 0.74 + s2.b * 0.26 ) * 0.26;
+						float alpha = clamp( max( cumAlpha, cirrus * ( 0.45 + uCloudCover * 0.55 ) ), 0.0, 1.0 );
 
-						// Soft fade near the sea horizon so clouds melt into atmospheric haze
-						alpha *= smoothstep( 0.01, 0.22, dir.y ) * uOpacity;
+						// Soft melt into distant sea-horizon atmospheric haze
+						alpha *= smoothstep( 0.008, 0.25, dir.y ) * uOpacity;
 						if ( alpha < 0.004 ) discard;
 
-						float sunForward = pow( max( 0.0, dot( dir, normalize( uSunDir ) ) ), 6.0 );
-						float lit = clamp( s1.g * 0.78 + sunForward * 0.38, 0.0, 1.0 );
+						vec3 sunN = normalize( uSunDir );
+						float sunForward = pow( max( 0.0, dot( dir, sunN ) ), 9.0 );
+						float rimGlow = pow( max( 0.0, dot( dir, sunN ) ), 3.0 ) * ( 1.0 - cumAlpha * 0.55 );
+						float selfShadow = mix( 0.42, 1.0, s1.g ) * mix( 0.68, 1.0, cumulus );
+						float lit = clamp( selfShadow * 0.82 + sunForward * 0.42 + ( 1.0 - cumAlpha ) * 0.18, 0.0, 1.0 );
 						vec3 col = mix( uCloudShadow, uCloudLight, lit );
-						col += uCloudLight * sunForward * 0.22 * ( 1.0 - alpha * 0.4 );
+						col += uCloudLight * ( sunForward * 0.26 + rimGlow * 0.10 ) * ( 1.0 - alpha * 0.45 );
 
 						gl_FragColor = vec4( col, alpha );
 					}

@@ -10,10 +10,9 @@ import android.os.VibratorManager
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.media.SoundPool
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import java.io.File
+import java.util.concurrent.Executors
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -103,7 +102,7 @@ class MainActivity : ComponentActivity() {
 
 private object GameSfx {
   private const val TAG = "SylvanSfx"
-  private val main = Handler(Looper.getMainLooper())
+  private val sfxExecutor = Executors.newSingleThreadExecutor()
   private var pool: SoundPool? = null
   private var appContext: Context? = null
   private val ids = HashMap<String, Int>()
@@ -118,13 +117,14 @@ private object GameSfx {
   private val bedNames = setOf("ocean", "windbed", "wadebed", "under", "cave", "rain", "firebed", "hull")
 
   fun warm(context: Context) {
-    main.post {
-      ensurePool(context.applicationContext)
+    val appCtx = context.applicationContext
+    sfxExecutor.execute {
+      ensurePool(appCtx)
       val listed = try {
-        context.assets.list("wilderness/audio")
+        appCtx.assets.list("wilderness/audio")
       } catch (_: Exception) {
         null
-      } ?: return@post
+      } ?: return@execute
       for (file in listed) {
         if (file.endsWith(".wav")) loadOne(file.removeSuffix(".wav"))
       }
@@ -132,36 +132,38 @@ private object GameSfx {
   }
 
   fun play(context: Context, name: String, volume: Double, rate: Double) {
+    val appCtx = context.applicationContext
     val vol = volume.toFloat().coerceIn(0f, 1f)
     val spd = rate.toFloat().coerceIn(0.5f, 2f)
-    main.post {
-      ensurePool(context.applicationContext)
+    sfxExecutor.execute {
+      ensurePool(appCtx)
       val id = ids[name]
       if (id == null || !ready.contains(id)) {
         if (id == null) loadOne(name)
         pending[name] = vol to spd
-        return@post
+        return@execute
       }
       pool?.play(id, vol, vol, 1, 0, spd)
     }
   }
 
   fun loop(context: Context, name: String, volume: Double) {
+    val appCtx = context.applicationContext
     val vol = volume.toFloat().coerceIn(0f, 1f)
     if (bedNames.contains(name)) {
-      main.post {
-        appContext = context.applicationContext
+      sfxExecutor.execute {
+        appContext = appCtx
         applyBed(name, vol)
       }
       return
     }
-    main.post {
-      ensurePool(context.applicationContext)
+    sfxExecutor.execute {
+      ensurePool(appCtx)
       loopWant[name] = vol
       val id = ids[name]
       if (id == null || !ready.contains(id)) {
         if (id == null) loadOne(name)
-        return@post
+        return@execute
       }
       applyLoop(name, id, vol)
     }
@@ -192,9 +194,11 @@ private object GameSfx {
       created.isLooping = true
       created.setVolume(vol, vol)
       created.setOnPreparedListener { player ->
-        val want = bedWant[name] ?: vol
-        player.setVolume(want, want)
-        if (want >= 0.01f) player.start()
+        sfxExecutor.execute {
+          val want = bedWant[name] ?: vol
+          player.setVolume(want, want)
+          if (want >= 0.01f) player.start()
+        }
       }
       beds[name] = created
       created.prepareAsync()
@@ -220,14 +224,14 @@ private object GameSfx {
       .build()
     val created = SoundPool.Builder().setMaxStreams(12).setAudioAttributes(attrs).build()
     created.setOnLoadCompleteListener { _, sampleId, status ->
-      main.post {
+      sfxExecutor.execute {
         descriptors.remove(sampleId)?.close()
         if (status != 0) {
           Log.e(TAG, "sound $sampleId failed to load ($status)")
-          return@post
+          return@execute
         }
         ready.add(sampleId)
-        val name = names[sampleId] ?: return@post
+        val name = names[sampleId] ?: return@execute
         pending.remove(name)?.let { (vol, spd) ->
           created.play(sampleId, vol, vol, 1, 0, spd)
         }
@@ -325,10 +329,11 @@ class WebAppInterface(private val context: Context) {
 fun WildernessSurvivalApp() {
   val lifecycleOwner = LocalLifecycleOwner.current
   var showGuideDialog by remember { mutableStateOf(false) }
-  // Plain non-Compose ref holder prevents triggering a redundant recomposition / SurfaceSyncGroup pass inside AndroidView(factory)
+  // Plain non-Compose ref holders prevent triggering a redundant recomposition / SurfaceSyncGroup pass
+  val containerHolder = remember { arrayOfNulls<FrameLayout>(1) }
   val webViewHolder = remember { arrayOfNulls<WebView>(1) }
   var webViewKey by remember { mutableIntStateOf(0) }
-  var webViewReadyToMount by remember { mutableStateOf(false) }
+  var webViewPageReady by remember { mutableStateOf(false) }
   var renderCrashCount by remember { mutableIntStateOf(0) }
   var webViewCrashMessage by remember { mutableStateOf<String?>(null) }
 
@@ -336,13 +341,89 @@ fun WildernessSurvivalApp() {
     showGuideDialog = false
   }
 
-  // Let MainActivity commit its initial WindowManager SurfaceSyncGroup frames (<16ms) before cold-starting Chromium WebView
+  // Stage Chromium WebView initialization well after MainActivity's initial WindowManager SurfaceSyncGroup (#0/#1) finishes,
+  // and instantiate WebView while detached so cold native provider loading cannot block an active ViewRootImpl transaction.
   LaunchedEffect(webViewKey) {
-    webViewReadyToMount = false
+    webViewPageReady = false
     withFrameNanos { }
     withFrameNanos { }
-    delay(380L)
-    webViewReadyToMount = true
+    delay(if (webViewKey == 0) 1250L else 180L)
+    val host = containerHolder[0] ?: return@LaunchedEffect
+    if (!host.isAttachedToWindow || webViewHolder[0] != null) return@LaunchedEffect
+
+    val ctx = host.context
+    val wv = WebView(ctx).apply {
+      layoutParams = FrameLayout.LayoutParams(
+        ViewGroup.LayoutParams.MATCH_PARENT,
+        ViewGroup.LayoutParams.MATCH_PARENT
+      )
+      setBackgroundColor(android.graphics.Color.rgb(4, 10, 14))
+
+      settings.apply {
+        javaScriptEnabled = true
+        domStorageEnabled = true
+        allowFileAccess = true
+        allowContentAccess = true
+        @Suppress("DEPRECATION")
+        allowFileAccessFromFileURLs = true
+        @Suppress("DEPRECATION")
+        allowUniversalAccessFromFileURLs = true
+        useWideViewPort = true
+        loadWithOverviewMode = true
+        mediaPlaybackRequiresUserGesture = false
+        cacheMode = WebSettings.LOAD_DEFAULT
+      }
+
+      webChromeClient = object : WebChromeClient() {
+        override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+          Log.d("SylvanWeb", "${consoleMessage?.message()} -- line ${consoleMessage?.lineNumber()} of ${consoleMessage?.sourceId()}")
+          return true
+        }
+      }
+
+      webViewClient = object : WebViewClient() {
+        override fun onPageFinished(view: WebView?, url: String?) {
+          super.onPageFinished(view, url)
+          webViewPageReady = true
+          Log.d("SylvanWeb", "Wilderness page loaded: $url")
+        }
+
+        override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+          val crashed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            detail?.didCrash() == true
+          } else true
+          Log.e("SylvanWeb", "WebView render process gone (didCrash=$crashed, attempt=$renderCrashCount)")
+          if (renderCrashCount < 1) {
+            renderCrashCount += 1
+            webViewKey += 1
+          } else {
+            webViewCrashMessage = if (crashed) {
+              "The 3D WebGL graphics process stopped unexpectedly."
+            } else {
+              "The Android WebView renderer ran low on graphics memory."
+            }
+          }
+          return true
+        }
+      }
+
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false)
+      }
+
+      addJavascriptInterface(WebAppInterface(ctx), "AndroidBridge")
+    }
+    webViewHolder[0] = wv
+
+    // Let main looper settle after Chromium cold-start before attaching child view and loading WebGL page
+    withFrameNanos { }
+    if (!host.isAttachedToWindow || webViewHolder[0] !== wv) return@LaunchedEffect
+    host.addView(wv)
+
+    withFrameNanos { }
+    if (webViewHolder[0] === wv && wv.isAttachedToWindow) {
+      wv.loadUrl("file:///android_asset/wilderness/index.html")
+    }
   }
 
   DisposableEffect(lifecycleOwner, webViewKey) {
@@ -362,6 +443,7 @@ fun WildernessSurvivalApp() {
     lifecycleOwner.lifecycle.addObserver(observer)
     onDispose {
       lifecycleOwner.lifecycle.removeObserver(observer)
+      containerHolder[0] = null
       val wv = webViewHolder[0]
       webViewHolder[0] = null
       wv?.apply {
@@ -383,96 +465,26 @@ fun WildernessSurvivalApp() {
         .fillMaxSize()
         .testTag("wilderness_container")
     ) {
-      // 1. Lightweight FrameLayout wrapper commits AndroidView SurfaceSyncGroup immediately, then attaches Chromium WebView asynchronously
-      if (webViewReadyToMount) {
-        key(webViewKey) {
-          AndroidView(
-            factory = { ctx ->
-              FrameLayout(ctx).apply {
-                layoutParams = ViewGroup.LayoutParams(
-                  ViewGroup.LayoutParams.MATCH_PARENT,
-                  ViewGroup.LayoutParams.MATCH_PARENT
-                )
-                setBackgroundColor(android.graphics.Color.rgb(4, 10, 14))
+      // 1. Mount lightweight FrameLayout immediately on Frame 1 so Compose tree never structurally swaps during launch
+      key(webViewKey) {
+        AndroidView(
+          factory = { ctx ->
+            FrameLayout(ctx).apply {
+              layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+              )
+              setBackgroundColor(android.graphics.Color.rgb(4, 10, 14))
+              containerHolder[0] = this
+            }
+          },
+          modifier = Modifier
+            .fillMaxSize()
+            .testTag("wilderness_webview")
+        )
+      }
 
-                postDelayed({
-                  if (!isAttachedToWindow) return@postDelayed
-                  val wv = WebView(ctx).apply {
-                    webViewHolder[0] = this
-                    layoutParams = FrameLayout.LayoutParams(
-                      ViewGroup.LayoutParams.MATCH_PARENT,
-                      ViewGroup.LayoutParams.MATCH_PARENT
-                    )
-                    setBackgroundColor(android.graphics.Color.rgb(4, 10, 14))
-
-                    settings.apply {
-                      javaScriptEnabled = true
-                      domStorageEnabled = true
-                      allowFileAccess = true
-                      allowContentAccess = true
-                      @Suppress("DEPRECATION")
-                      allowFileAccessFromFileURLs = true
-                      @Suppress("DEPRECATION")
-                      allowUniversalAccessFromFileURLs = true
-                      useWideViewPort = true
-                      loadWithOverviewMode = true
-                      mediaPlaybackRequiresUserGesture = false
-                      cacheMode = WebSettings.LOAD_DEFAULT
-                    }
-
-                    webChromeClient = object : WebChromeClient() {
-                      override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
-                        Log.d("SylvanWeb", "${consoleMessage?.message()} -- line ${consoleMessage?.lineNumber()} of ${consoleMessage?.sourceId()}")
-                        return true
-                      }
-                    }
-
-                    webViewClient = object : WebViewClient() {
-                      override fun onPageFinished(view: WebView?, url: String?) {
-                        super.onPageFinished(view, url)
-                        Log.d("SylvanWeb", "Wilderness page loaded: $url")
-                      }
-
-                      override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
-                        val crashed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                          detail?.didCrash() == true
-                        } else true
-                        Log.e("SylvanWeb", "WebView render process gone (didCrash=$crashed, attempt=$renderCrashCount)")
-                        if (renderCrashCount < 1) {
-                          renderCrashCount += 1
-                          webViewKey += 1
-                        } else {
-                          webViewCrashMessage = if (crashed) {
-                            "The 3D WebGL graphics process stopped unexpectedly."
-                          } else {
-                            "The Android WebView renderer ran low on graphics memory."
-                          }
-                        }
-                        return true
-                      }
-                    }
-
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                      setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false)
-                    }
-
-                    addJavascriptInterface(WebAppInterface(ctx), "AndroidBridge")
-                  }
-                  addView(wv)
-                  wv.postOnAnimation {
-                    if (webViewHolder[0] === wv && wv.isAttachedToWindow) {
-                      wv.loadUrl("file:///android_asset/wilderness/index.html")
-                    }
-                  }
-                }, 140L)
-              }
-            },
-            modifier = Modifier
-              .fillMaxSize()
-              .testTag("wilderness_webview")
-          )
-        }
-      } else {
+      if (!webViewPageReady && webViewCrashMessage == null) {
         Box(
           modifier = Modifier
             .fillMaxSize()
@@ -638,7 +650,7 @@ fun SurvivalGuideDialog(onDismiss: () -> Unit) {
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-              text = "Sylvan Explorer & HUD Guide",
+              text = "Castaway Field Guide",
               color = Color(0xFFF4FBF9),
               fontSize = 18.sp,
               fontWeight = FontWeight.Bold
@@ -647,7 +659,7 @@ fun SurvivalGuideDialog(onDismiss: () -> Unit) {
           IconButton(
             onClick = onDismiss,
             modifier = Modifier
-              .size(36.dp)
+              .size(48.dp)
               .testTag("close_guide_button")
           ) {
             Icon(
@@ -658,28 +670,28 @@ fun SurvivalGuideDialog(onDismiss: () -> Unit) {
           }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(14.dp))
+
+        GuideSectionItem(
+          icon = Icons.Default.Whatshot,
+          title = "Campaign: 3 Avionics & Signal Rescue",
+          description = "Recover all 3 Cockpit/Battery/Recorder Avionics across the wreck, deep reef, and caverns to repair the hilltop Radio Outpost, then launch a Signal Flare into the sky."
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
 
         GuideSectionItem(
           icon = Icons.Default.Water,
-          title = "Twin Highland Lakes, Waterfalls & 3D Diving",
-          description = "Explore the Grand Headwaters Lake and Cliff-Top Alpine Gorge cascading into the river. Tap Dive [🤿] to swim underwater among swaying kelp, pondweed, and sun god-rays."
+          title = "Lakes, Reef Diving & 1,000m+ Karst Caves",
+          description = "Explore twin alpine lakes, underwater kelp trenches (tap Dive 🤿), the 470m Inter-Cave Karst Aqueduct, Lava Tube, and outer islands by raft or keeled boat."
         )
 
         Spacer(modifier = Modifier.height(12.dp))
 
         GuideSectionItem(
           icon = Icons.Default.Eco,
-          title = "370m Subterranean Caverns & Elderwood Forest",
-          description = "Venture 225m inside the Whispering Basalt Cave to discover the glowing crystal Cenote Lake, or explore the 145m Cataract Echo Grotto and Ancient Elderwood Sanctuary."
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        GuideSectionItem(
-          icon = Icons.Default.Whatshot,
-          title = "Command Center, Fast-Travel & Debug Menu",
-          description = "Use [🗺️ World] to fast-travel to 8 major landmarks, adjust weather & graphics presets, or open [🛠️ Debug] for live FPS/Coord telemetry, survival cheats, and shader uniforms."
+          title = "Tab-Organized Pack (🎒) & Settings (⚙️)",
+          description = "Open 🎒 Pack on the Quick Belt for tabbed Gear, Craft, Build blueprints, and island Travel. Tap ⚙️ top-right for Weather, Graphics, Survey Map, and Debug Telemetry."
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -691,14 +703,14 @@ fun SurvivalGuideDialog(onDismiss: () -> Unit) {
         ) {
           Column(modifier = Modifier.padding(14.dp)) {
             Text(
-              text = "🕹️ Ergonomic Radial Thumb-Arc Controls",
+              text = "🎯 Controls & Hold-Drag Ranged Aim",
               color = Color(0xFF26E6C6),
               fontWeight = FontWeight.Bold,
               fontSize = 14.sp
             )
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-              text = "• Top-Left Survivor Pod: Health, Stamina/Oxygen, Vitals & Timber/Stone\n• Top-Center Compass Tape: Live heading degrees, biome & elevation/depth\n• Primary Anchor [Strike]: Chop trees for timber, mine boulders, or drink\n• Radial Arc Buttons: Jump/Surface [⬆️], Dive 3D [🤿], Sprint [⚡], Campfire [🔥]\n• Top-Right Dock: [🗺️ World] Fast-Travel & [🛠️ Debug] Shader/Telemetry Menu",
+              text = "• Hold & Drag [Aim] (Bow / X-Bow / Pistol / Rifle / Flare): Slide thumb anywhere to fine-aim with zoom, release to fire, or drag onto [✕ Cancel] to abort safely.\n• Quick Tap [Chop / Thrust / Cast]: Harvest trees & rocks, strike nearby wildlife, or drink from streams.\n• Survivor Pod (Top-Left): Tap to expand Hunger, Thirst, Temp, Timber & Stone (auto-peeks on harvest or low vitals).\n• Quick Belt (Bottom): Swap Hatchet, Spear, Ranged, Utility & 🎒 Pack.",
               color = Color(0xFFB8CDC8),
               fontSize = 12.sp,
               lineHeight = 18.sp

@@ -92,6 +92,9 @@
     },
     weaponPoseBlend: 0,
     crossbowCooldown: 0,
+    chamberCycleTimer: 0,
+    chamberCycleDuration: 0.25,
+    chamberCycleWeapon: null,
     bleedTimer: 0,
     activeHarvest: null,
     modulesFound: {
@@ -434,27 +437,33 @@
       return tex;
     }
 
-    // 1. Riveted Stressed-Skin Aircraft Duralumin (Panel Seams, Double Rivet Rows & Salt Weathering)
+    // 1. Riveted Stressed-Skin Aircraft Duralumin (Brushed Micro-Grain, Panel Seams, Double Rivet Rows & Salt Weathering)
     const aluH = document.createElement('canvas');
     aluH.width = size; aluH.height = size;
     const ahCtx = aluH.getContext('2d');
     ahCtx.fillStyle = '#808080';
     ahCtx.fillRect(0, 0, size, size);
+    // Fine anisotropic brushed aluminum streaks
+    for (let s = 0; s < 420; s++) {
+      const sy = Math.random() * size;
+      ahCtx.fillStyle = s % 2 === 0 ? 'rgba(210,210,210,0.09)' : 'rgba(60,60,60,0.09)';
+      ahCtx.fillRect(0, sy, size, 1 + (s % 2));
+    }
     // Panel seam grooves
-    ahCtx.strokeStyle = '#282828';
+    ahCtx.strokeStyle = '#242424';
     ahCtx.lineWidth = 3;
     for (let p = 0; p < size; p += 128) {
       ahCtx.beginPath(); ahCtx.moveTo(p, 0); ahCtx.lineTo(p, size); ahCtx.stroke();
       ahCtx.beginPath(); ahCtx.moveTo(0, p); ahCtx.lineTo(size, p); ahCtx.stroke();
       // Raised dome rivets along both sides of panel seams
-      ahCtx.fillStyle = '#e8e8e8';
+      ahCtx.fillStyle = '#ececec';
       for (let r = 8; r < size; r += 16) {
         ahCtx.beginPath(); ahCtx.arc(p + 8, r, 2.4, 0, Math.PI * 2); ahCtx.fill();
         ahCtx.beginPath(); ahCtx.arc((p + 120) % size, r, 2.4, 0, Math.PI * 2); ahCtx.fill();
         ahCtx.beginPath(); ahCtx.arc(r, p + 8, 2.4, 0, Math.PI * 2); ahCtx.fill();
       }
     }
-    const aluNormTex = heightToNormalCanvas(aluH, 3.4);
+    const aluNormTex = heightToNormalCanvas(aluH, 3.6);
     await yieldFrame();
 
     // 2. Corrugated Weathered Industrial Steel & Reinforced Bunker Concrete Normal Map
@@ -466,38 +475,44 @@
       shCtx.fillStyle = `rgb(${wave},${wave},${wave})`;
       shCtx.fillRect(x, 0, 1, size);
     }
-    for (let i = 0; i < 1600; i++) {
+    for (let i = 0; i < 2000; i++) {
       const px = Math.random() * size, py = Math.random() * size;
-      shCtx.fillStyle = Math.random() > 0.5 ? 'rgba(20,20,20,0.35)' : 'rgba(220,220,220,0.25)';
-      shCtx.fillRect(px, py, 3 + Math.random() * 6, 3 + Math.random() * 6);
+      shCtx.fillStyle = Math.random() > 0.5 ? 'rgba(18,18,18,0.38)' : 'rgba(226,226,226,0.28)';
+      shCtx.fillRect(px, py, 2 + Math.random() * 6, 3 + Math.random() * 8);
     }
-    const steelNormTex = heightToNormalCanvas(steelH, 3.0);
+    const steelNormTex = heightToNormalCanvas(steelH, 3.3);
     await yieldFrame();
 
     // 3. Woven Pandanus Sailcloth & Herringbone Palm Thatch Albedo + Normal Map
     const thatchC = document.createElement('canvas');
     thatchC.width = size; thatchC.height = size;
     const tcCtx = thatchC.getContext('2d');
-    tcCtx.fillStyle = '#9e8244';
+    tcCtx.fillStyle = '#8b6f36';
     tcCtx.fillRect(0, 0, size, size);
     const thatchH = document.createElement('canvas');
     thatchH.width = size; thatchH.height = size;
     const thCtx = thatchH.getContext('2d');
-    thCtx.fillStyle = '#808080';
+    thCtx.fillStyle = '#767676';
     thCtx.fillRect(0, 0, size, size);
     for (let y = 0; y < size; y += 16) {
       for (let x = 0; x < size; x += 16) {
         const odd = ((x / 16 + y / 16) % 2 === 0);
-        tcCtx.fillStyle = odd ? '#b69754' : '#886c34';
+        tcCtx.fillStyle = odd ? '#b08f4c' : '#7b602c';
         tcCtx.fillRect(x + 1, y + 1, 14, 14);
-        thCtx.fillStyle = odd ? '#c4c4c4' : '#4a4a4a';
+        // Fine individual dried palm frond fiber strands
+        tcCtx.fillStyle = odd ? 'rgba(220,192,124,0.34)' : 'rgba(65,48,20,0.34)';
+        for (let f = 2; f < 14; f += 3) {
+          if (odd) tcCtx.fillRect(x + f, y + 1, 1, 14);
+          else tcCtx.fillRect(x + 1, y + f, 14, 1);
+        }
+        thCtx.fillStyle = odd ? '#cacaca' : '#464646';
         thCtx.fillRect(x + 2, y + 2, 12, 12);
       }
     }
     const thatchTex = new THREE.CanvasTexture(thatchC);
     thatchTex.wrapS = thatchTex.wrapT = THREE.RepeatWrapping;
     thatchTex.repeat.set(3, 3);
-    const thatchNormTex = heightToNormalCanvas(thatchH, 2.8);
+    const thatchNormTex = heightToNormalCanvas(thatchH, 3.1);
     thatchNormTex.repeat.set(3, 3);
 
     if (window.applyMaxAnisotropy) {
@@ -530,14 +545,14 @@
     metalness: 0.06
   });
 
-  let matAluminum, matAnodizedDark, matRescueRed, matSafetyOrange, matRustedSteel, matObsidianGlass, matRawhide, matThatch;
+  let matAluminum, matAnodizedDark, matRescueRed, matSafetyOrange, matRustedSteel, matObsidianGlass, matRawhide, matThatch, matSailCanvas;
   function initSharedSurfaceMaterials() {
     matAluminum = new THREE.MeshStandardMaterial({
-      color: 0xd8e0e8,
+      color: 0xa4b0bc,
       normalMap: aaaSurfacePBRAssets.aluNormTex,
-      normalScale: new THREE.Vector2(0.85, 0.85),
-      roughness: 0.26,
-      metalness: 0.86
+      normalScale: new THREE.Vector2(0.95, 0.95),
+      roughness: 0.34,
+      metalness: 0.78
     });
     matAnodizedDark = new THREE.MeshStandardMaterial({
       color: 0x222830,
@@ -547,34 +562,34 @@
       metalness: 0.86
     });
     matRescueRed = new THREE.MeshStandardMaterial({
-      color: 0xc62828,
+      color: 0xa82828,
       normalMap: aaaSurfacePBRAssets.aluNormTex,
-      normalScale: new THREE.Vector2(0.65, 0.65),
-      roughness: 0.34,
-      metalness: 0.38
+      normalScale: new THREE.Vector2(0.75, 0.75),
+      roughness: 0.40,
+      metalness: 0.34
     });
     matSafetyOrange = new THREE.MeshStandardMaterial({
-      color: 0xff5722,
+      color: 0xd65428,
       normalMap: aaaSurfacePBRAssets.aluNormTex,
-      normalScale: new THREE.Vector2(0.45, 0.45),
-      roughness: 0.30,
-      metalness: 0.40
+      normalScale: new THREE.Vector2(0.55, 0.55),
+      roughness: 0.38,
+      metalness: 0.28
     });
     matRustedSteel = new THREE.MeshStandardMaterial({
-      color: 0x6e4b3a,
+      color: 0x664434,
       normalMap: aaaSurfacePBRAssets.steelNormTex,
       normalScale: new THREE.Vector2(0.95, 0.95),
-      roughness: 0.64,
-      metalness: 0.62
+      roughness: 0.66,
+      metalness: 0.60
     });
     matObsidianGlass = new THREE.MeshStandardMaterial({
       color: 0x080b12,
       emissive: 0x160828,
-      emissiveIntensity: 0.32,
+      emissiveIntensity: 0.24,
       normalMap: aaaSurfacePBRAssets.steelNormTex,
       normalScale: new THREE.Vector2(0.65, 0.65),
-      roughness: 0.06,
-      metalness: 0.94
+      roughness: 0.08,
+      metalness: 0.92
     });
     matRawhide = new THREE.MeshStandardMaterial({
       color: 0x4a2c18,
@@ -586,12 +601,88 @@
     matThatch = new THREE.MeshStandardMaterial({
       map: aaaSurfacePBRAssets.thatchTex,
       normalMap: aaaSurfacePBRAssets.thatchNormTex,
-      normalScale: new THREE.Vector2(0.95, 0.95),
-      color: 0xb89a58,
-      roughness: 0.82,
+      normalScale: new THREE.Vector2(1.05, 1.05),
+      color: 0x8e7444,
+      roughness: 0.88,
       metalness: 0.02,
       side: THREE.DoubleSide
     });
+
+    // Stitched salt-weathered cream flax canvas for raft & keeled boat sails
+    const sc = document.createElement('canvas');
+    sc.width = 256; sc.height = 256;
+    const sCtx = sc.getContext('2d');
+    sCtx.fillStyle = '#d4c8ae';
+    sCtx.fillRect(0, 0, 256, 256);
+    for (let y = 0; y < 256; y += 3) {
+      sCtx.fillStyle = (y % 6 === 0) ? 'rgba(90,74,52,0.06)' : 'rgba(255,250,238,0.08)';
+      sCtx.fillRect(0, y, 256, 1);
+    }
+    for (let x = 0; x < 256; x += 3) {
+      sCtx.fillStyle = (x % 6 === 0) ? 'rgba(90,74,52,0.05)' : 'rgba(255,250,238,0.06)';
+      sCtx.fillRect(x, 0, 1, 256);
+    }
+    // Horizontal reef-panel stitched seams & corner weathering
+    sCtx.fillStyle = 'rgba(72,56,38,0.28)';
+    for (let sy = 48; sy < 256; sy += 64) {
+      sCtx.fillRect(0, sy, 256, 2);
+    }
+    const sailTex = new THREE.CanvasTexture(sc);
+    sailTex.wrapS = sailTex.wrapT = THREE.RepeatWrapping;
+    if (window.applyMaxAnisotropy) window.applyMaxAnisotropy(sailTex);
+    matSailCanvas = new THREE.MeshStandardMaterial({
+      map: sailTex,
+      normalMap: aaaSurfacePBRAssets.thatchNormTex,
+      normalScale: new THREE.Vector2(0.35, 0.35),
+      color: 0xd0c4a8,
+      roughness: 0.84,
+      metalness: 0.02,
+      side: THREE.DoubleSide
+    });
+  }
+
+  function createLayeredThatchRoof(radius, height) {
+    const roofGrp = new THREE.Group();
+    const lowerSkirt = new THREE.Mesh(
+      new THREE.ConeGeometry(radius, height * 0.62, 12, 1, true),
+      matThatch
+    );
+    lowerSkirt.position.y = -height * 0.19;
+    lowerSkirt.castShadow = true;
+    lowerSkirt.receiveShadow = true;
+    roofGrp.add(lowerSkirt);
+
+    const upperCap = new THREE.Mesh(
+      new THREE.ConeGeometry(radius * 0.68, height * 0.68, 12),
+      matThatch
+    );
+    upperCap.position.y = height * 0.18;
+    upperCap.castShadow = true;
+    upperCap.receiveShadow = true;
+    roofGrp.add(upperCap);
+
+    const ridgeCap = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.08, 0.15, height * 0.24, 8),
+      matSeasonedBamboo
+    );
+    ridgeCap.position.y = height * 0.48;
+    roofGrp.add(ridgeCap);
+
+    const rafterLen = Math.hypot(radius * 0.94, height * 0.92);
+    const tilt = Math.atan2(radius * 0.94, height * 0.92);
+    for (let r = 0; r < 4; r++) {
+      const ang = (r / 4) * Math.PI * 2 + Math.PI / 4;
+      const rafter = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.055, 0.07, rafterLen, 6),
+        matTimberLog
+      );
+      rafter.position.set(Math.cos(ang) * radius * 0.45, -0.02, Math.sin(ang) * radius * 0.45);
+      rafter.rotation.order = 'YXZ';
+      rafter.rotation.y = -ang + Math.PI / 2;
+      rafter.rotation.x = tilt;
+      roofGrp.add(rafter);
+    }
+    return roofGrp;
   }
 
   // Shared lightweight invisible hit-proxy material for interactive crates & structures
@@ -891,8 +982,13 @@
       intakeLip.position.set(3.58, 2.65, zEng);
       planeGroup.add(intakeLip);
 
+      const sootRing = new THREE.Mesh(new THREE.CylinderGeometry(0.49, 0.48, 0.24, 20), matAnodizedDark);
+      sootRing.rotation.z = Math.PI / 2;
+      sootRing.position.set(2.96, 2.65, zEng);
+      planeGroup.add(sootRing);
+
       [-1, 1].forEach(exSide => {
-        const exhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 0.48, 12), matBrass);
+        const exhaust = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 0.48, 12), matRustedSteel);
         exhaust.position.set(2.95, 2.52, zEng + exSide * 0.42);
         exhaust.rotation.x = exSide * 0.82;
         planeGroup.add(exhaust);
@@ -1089,13 +1185,13 @@
     const rx = -62.0, rz = -268.0;
     const ruinGroup = new THREE.Group();
     const stoneMat = applyAAARockShader(new THREE.MeshStandardMaterial({
-      color: 0x5e7c74, roughness: 0.72, metalness: 0.14
+      color: 0x465850, roughness: 0.78, metalness: 0.10
     }));
     const coralPinkMat = new THREE.MeshStandardMaterial({
-      color: 0xff5277, emissive: 0x881838, emissiveIntensity: 0.55, roughness: 0.52
+      color: 0x8c524b, emissive: 0x000000, emissiveIntensity: 0.0, roughness: 0.68
     });
     const coralGoldMat = new THREE.MeshStandardMaterial({
-      color: 0xffb300, emissive: 0x663d00, emissiveIntensity: 0.48, roughness: 0.58
+      color: 0x997946, emissive: 0x000000, emissiveIntensity: 0.0, roughness: 0.70
     });
 
     // Helper for 24-flute carved Doric column shaft with eroded marine limestone relief
@@ -1193,11 +1289,11 @@
     }
 
     const crystalMat = new THREE.MeshStandardMaterial({
-      color: 0x00f2fe,
-      emissive: 0x00bcd4,
-      emissiveIntensity: 2.15,
-      roughness: 0.08,
-      metalness: 0.45
+      color: 0x168a96,
+      emissive: 0x0d5c66,
+      emissiveIntensity: 0.42,
+      roughness: 0.14,
+      metalness: 0.52
     });
     for (let k = 0; k < 7; k++) {
       const h = (k === 0) ? 2.15 : (1.55 - (k % 3) * 0.25);
@@ -1213,7 +1309,7 @@
       ruinGroup.add(shard);
     }
 
-    const trenchLight = new THREE.PointLight(0x00f2fe, 2.5, 36.0);
+    const trenchLight = new THREE.PointLight(0x1fa8b8, 1.45, 32.0);
     trenchLight.position.set(rx, centerY + 3.0, rz);
     worldLandmarksGroup.add(trenchLight);
     registerManagedLight(trenchLight, 68.0);
@@ -2364,10 +2460,23 @@
     outpostGroup.position.set(ox, oy, oz);
 
     const concreteMat = new THREE.MeshStandardMaterial({
-      color: 0x6a726c,
+      color: 0x646c66,
       normalMap: aaaSurfacePBRAssets.steelNormTex,
-      normalScale: new THREE.Vector2(0.55, 0.55),
-      roughness: 0.82
+      normalScale: new THREE.Vector2(0.62, 0.62),
+      roughness: 0.84
+    });
+
+    // Deep reinforced retaining foundation skirt + corner concrete piers so downhill corners never float on slopes
+    const foundationPlinth = new THREE.Mesh(new THREE.BoxGeometry(11.35, 3.8, 9.75), concreteMat);
+    foundationPlinth.position.set(0, -1.68, 0);
+    foundationPlinth.receiveShadow = true;
+    outpostGroup.add(foundationPlinth);
+
+    [[-5.4, -4.6], [5.4, -4.6], [-5.4, 4.6], [5.4, 4.6]].forEach(([px, pz]) => {
+      const pier = new THREE.Mesh(new THREE.BoxGeometry(0.95, 4.2, 0.95), concreteMat);
+      pier.position.set(px, -1.78, pz);
+      pier.receiveShadow = true;
+      outpostGroup.add(pier);
     });
 
     const pad = new THREE.Mesh(new THREE.BoxGeometry(11.6, 0.55, 10.0), concreteMat);
@@ -2637,10 +2746,8 @@
       deck.receiveShadow = true;
       tower.add(deck);
       registerClimbableBox(wx, wz, 1.95, 1.95, 0, wy + towerH + 0.14, wy);
-      const roof = new THREE.Mesh(new THREE.ConeGeometry(2.95, 1.65, 4), matThatch);
+      const roof = createLayeredThatchRoof(2.95, 1.65);
       roof.position.y = towerH + 2.55;
-      roof.rotation.y = Math.PI / 4;
-      roof.castShadow = true;
       tower.add(roof);
       const lantern = new THREE.Mesh(
         new THREE.CylinderGeometry(0.22, 0.22, 0.42, 8),
@@ -2880,7 +2987,7 @@
     yard.position.set(0, 4.35, -0.5);
     rGroup.add(yard);
 
-    const sail = new THREE.Mesh(new THREE.PlaneGeometry(2.40, 3.25, 12, 12), matThatch);
+    const sail = new THREE.Mesh(new THREE.PlaneGeometry(2.40, 3.25, 12, 12), matSailCanvas);
     const sPos = sail.geometry.attributes.position;
     for (let i = 0; i < sPos.count; i++) {
       const u = sPos.getX(i), v = sPos.getY(i);
@@ -2890,6 +2997,17 @@
     sail.position.set(0, 2.75, -0.45);
     sail.castShadow = true;
     rGroup.add(sail);
+
+    [2.15, 3.35].forEach(by => {
+      const batten = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 2.38, 6), matSeasonedBamboo);
+      batten.rotation.z = Math.PI / 2;
+      batten.position.set(0, by, -0.22);
+      rGroup.add(batten);
+    });
+    const forestay = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 4.65, 6), matRawhide);
+    forestay.position.set(0, 2.65, -1.62);
+    forestay.rotation.x = 0.48;
+    rGroup.add(forestay);
 
     // Steering Oar Blade & Lashed Supply Crate on Deck
     const deckCrate = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.56, 0.68), matTimberLog);
@@ -3088,7 +3206,7 @@
     const sPos = [];
     const sUvs = [];
     const sIdx = [];
-    const yStart = -0.52;
+    const yStart = -0.34;
     const yEnd = 0.62;
     const shaftLen = yEnd - yStart;
 
@@ -3126,13 +3244,14 @@
     const shaftMat = new THREE.MeshStandardMaterial({
       map: spearWoodTex,
       roughness: 0.38,
-      metalness: 0.04
+      metalness: 0.04,
+      side: THREE.DoubleSide
     });
     spearAssembly.add(new THREE.Mesh(shaftGeo, shaftMat));
 
     const buttSpike = new THREE.Mesh(new THREE.ConeGeometry(0.021, 0.09, 12), matAnodizedDark);
     buttSpike.rotation.x = Math.PI;
-    buttSpike.position.set(0, -0.56, 0);
+    buttSpike.position.set(0, -0.375, 0);
     spearAssembly.add(buttSpike);
 
     const gripMat = new THREE.MeshStandardMaterial({
@@ -3178,9 +3297,9 @@
     spearAssembly.add(sinewSleeve);
 
     for (let c = 0; c < 4; c++) {
-      const cord = new THREE.Mesh(new THREE.TorusGeometry(0.0245, 0.0038, 6, 16), matRawhide);
+      const cord = new THREE.Mesh(new THREE.TorusGeometry(0.0232, 0.0044, 6, 16), matRawhide);
       cord.position.set(0, 0.595 + c * 0.015, 0);
-      cord.rotation.x = Math.PI / 2 + (c % 2 === 0 ? 0.28 : -0.28);
+      cord.rotation.x = Math.PI / 2 + (c % 2 === 0 ? 0.24 : -0.24);
       spearAssembly.add(cord);
     }
 
@@ -3272,10 +3391,10 @@
       spearAssembly.add(barb);
     });
 
-    spearAssembly.rotation.set(-1.12, 0.24, 0.28);
+    spearAssembly.rotation.set(-1.02, 0.22, 0.24);
     g.add(spearAssembly);
 
-    g.position.set(0.36, -0.36, -0.58);
+    g.position.set(0.36, -0.36, -0.66);
     g.visible = false;
     fpToolHolder.add(g);
   }
@@ -3371,9 +3490,13 @@
     const g = toolMeshes.torch;
     const vfx = window.getCampfireVFXAssets ? window.getCampfireVFXAssets() : null;
 
-    // 1. Sculpted Charred Hickory Shaft + Cross-Lashed Leather Grip + Forged Iron Guard Ring
+    // 1. Sculpted Charred Hickory Shaft + Soot Collar + Cross-Lashed Leather Grip
     const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.019, 0.66, 16), matHickory);
     g.add(handle);
+
+    const charCollar = new THREE.Mesh(new THREE.CylinderGeometry(0.0262, 0.0252, 0.13, 14), matAnodizedDark);
+    charCollar.position.y = 0.21;
+    g.add(charCollar);
 
     const gripWrap = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.026, 0.24, 14), matRawhide);
     gripWrap.position.y = -0.08;
@@ -3442,12 +3565,16 @@
         flameGroup.add(fMesh);
       }
     } else {
-      const fallbackFlame = new THREE.Mesh(
-        new THREE.ConeGeometry(0.075, 0.28, 12),
-        new THREE.MeshBasicMaterial({ color: 0xff9100, transparent: true, opacity: 0.92 })
-      );
-      fallbackFlame.position.y = 0.14;
-      flameGroup.add(fallbackFlame);
+      const fbMat = new THREE.MeshBasicMaterial({
+        color: 0xff7a1a, transparent: true, opacity: 0.45,
+        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
+      });
+      for (let t = 0; t < 2; t++) {
+        const fbRibbon = new THREE.Mesh(new THREE.PlaneGeometry(0.11, 0.24, 2, 4), fbMat);
+        fbRibbon.position.y = 0.11;
+        fbRibbon.rotation.y = (t * Math.PI) * 0.5;
+        flameGroup.add(fbRibbon);
+      }
     }
     g.add(flameGroup);
     g.userData.flame = flameGroup;
@@ -3582,8 +3709,8 @@
       g.add(claw);
     });
 
-    g.position.set(0.36, -0.38, -0.62);
-    g.rotation.set(0.22, -0.25, 0.12);
+    g.position.set(0.35, -0.35, -0.59);
+    g.rotation.set(0.20, -0.22, 0.10);
     g.visible = false;
     fpToolHolder.add(g);
   }
@@ -3602,6 +3729,13 @@
       ]);
       const stave = new THREE.Mesh(new THREE.TubeGeometry(limbCurve, 20, 0.017, 8, false), matHickory);
       g.add(stave);
+      // Horn-reinforced recurve limb tips & arrow rest brass collar
+      [0.55, -0.55].forEach(ty => {
+        const limbTip = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.016, 0.06, 8), matAnodizedDark);
+        limbTip.position.set(0, ty, 0.075);
+        limbTip.rotation.x = ty > 0 ? 0.45 : -0.45;
+        g.add(limbTip);
+      });
       const gripWrap = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.16, 10), matRawhide);
       gripWrap.position.set(0, 0, -0.15);
       g.add(gripWrap);
@@ -3619,10 +3753,21 @@
       aShaft.rotation.x = Math.PI / 2;
       aShaft.position.z = -0.24;
       nockedArrow.add(aShaft);
+      const aFerrule = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.0065, 0.03, 6), matBrass);
+      aFerrule.rotation.x = Math.PI / 2;
+      aFerrule.position.z = -0.57;
+      nockedArrow.add(aFerrule);
       const aTip = new THREE.Mesh(new THREE.ConeGeometry(0.014, 0.055, 6), matAnodizedDark);
       aTip.rotation.x = -Math.PI / 2;
       aTip.position.z = -0.60;
       nockedArrow.add(aTip);
+      // Crimson fletching vanes at tail
+      [0, (Math.PI * 2) / 3, (Math.PI * 4) / 3].forEach(fa => {
+        const vane = new THREE.Mesh(new THREE.BoxGeometry(0.002, 0.016, 0.075), matRescueRed);
+        vane.position.set(Math.sin(fa) * 0.01, Math.cos(fa) * 0.01, 0.055);
+        vane.rotation.z = -fa;
+        nockedArrow.add(vane);
+      });
       g.add(nockedArrow);
       g.userData.nockedArrow = nockedArrow;
       g.userData.upperString = upperString;
@@ -3633,33 +3778,74 @@
       fpToolHolder.add(g);
     }
 
-    // 2. Hunting Crossbow
+    // 2. Hunting Crossbow (Split Animated Prod Strings + Latch Block + Steel Stirrup + Fletched Bolt)
     {
       const g = toolMeshes.crossbow;
       const stock = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.068, 0.62), matHickory);
       stock.position.set(0, 0.0, -0.15);
       g.add(stock);
+      const foreGrip = new THREE.Mesh(new THREE.BoxGeometry(0.060, 0.036, 0.22), matRawhide);
+      foreGrip.position.set(0, -0.022, -0.24);
+      g.add(foreGrip);
       const rail = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.024, 0.44), matAnodizedDark);
       rail.position.set(0, 0.042, -0.26);
       g.add(rail);
       const prod = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.018, 0.026), matAnodizedDark);
       prod.position.set(0, 0.036, -0.45);
       g.add(prod);
-      const loadedBolt = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.34, 6), matAluminum);
-      loadedBolt.rotation.x = Math.PI / 2;
+      const stirrup = new THREE.Mesh(new THREE.TorusGeometry(0.052, 0.006, 6, 12), matAnodizedDark);
+      stirrup.rotation.x = Math.PI / 2;
+      stirrup.position.set(0, 0.024, -0.50);
+      g.add(stirrup);
+      const xHalfGeo = new THREE.CylinderGeometry(0.0024, 0.0024, 1.0, 6);
+      xHalfGeo.rotateZ(Math.PI / 2);
+      const xLeftStr = new THREE.Mesh(xHalfGeo, matRawhide);
+      xLeftStr.position.set(-0.115, 0.042, -0.34);
+      xLeftStr.scale.set(0.255, 1, 1);
+      g.add(xLeftStr);
+      const xRightStr = new THREE.Mesh(xHalfGeo, matRawhide);
+      xRightStr.position.set(0.115, 0.042, -0.34);
+      xRightStr.scale.set(0.255, 1, 1);
+      g.add(xRightStr);
+      const xLatch = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.022, 0.035), matBrass);
+      xLatch.position.set(0, 0.054, -0.18);
+      g.add(xLatch);
+      const loadedBolt = new THREE.Group();
       loadedBolt.position.set(0, 0.055, -0.29);
+      const bShaft = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.34, 6), matAluminum);
+      bShaft.rotation.x = Math.PI / 2;
+      loadedBolt.add(bShaft);
+      const bTip = new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.045, 6), matBrass);
+      bTip.rotation.x = -Math.PI / 2;
+      bTip.position.set(0, 0, -0.18);
+      loadedBolt.add(bTip);
+      const bVane = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.002, 0.055), matSafetyOrange);
+      bVane.position.set(0, 0, 0.14);
+      loadedBolt.add(bVane);
       g.add(loadedBolt);
       g.userData.loadedBolt = loadedBolt;
+      g.userData.xbowLeftStr = xLeftStr;
+      g.userData.xbowRightStr = xRightStr;
+      g.userData.xbowLatch = xLatch;
       g.position.set(0.30, -0.28, -0.52);
       g.visible = false;
       fpToolHolder.add(g);
     }
 
-    // 3. Scavenged Expedition Pistol
+    // 3. Scavenged Expedition Pistol (Reciprocating Slide, Iron Sights & Brass Trigger Guard)
     {
       const g = toolMeshes.pistol;
       const slide = new THREE.Mesh(new THREE.BoxGeometry(0.036, 0.046, 0.25), matAnodizedDark);
       slide.position.set(0, 0.065, -0.09);
+      const frontSight = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.010, 0.010), matBrass);
+      frontSight.position.set(0, 0.026, -0.115);
+      slide.add(frontSight);
+      const rearSight = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.009, 0.010), matAnodizedDark);
+      rearSight.position.set(0, 0.026, 0.112);
+      slide.add(rearSight);
+      const ejectPort = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.014, 0.048), matAluminum);
+      ejectPort.position.set(0.012, 0.018, -0.02);
+      slide.add(ejectPort);
       g.add(slide);
       const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.012, 0.14, 10), matAluminum);
       barrel.rotation.x = Math.PI / 2;
@@ -3669,25 +3855,56 @@
       grip.position.set(0, -0.01, 0.01);
       grip.rotation.x = 0.28;
       g.add(grip);
+      const triggerGuard = new THREE.Mesh(new THREE.TorusGeometry(0.020, 0.0035, 6, 12), matAnodizedDark);
+      triggerGuard.rotation.y = Math.PI / 2;
+      triggerGuard.position.set(0, 0.024, -0.045);
+      g.add(triggerGuard);
+      const trigger = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.020, 0.008), matBrass);
+      trigger.position.set(0, 0.025, -0.040);
+      trigger.rotation.x = 0.35;
+      g.add(trigger);
+      g.userData.slideMesh = slide;
       g.position.set(0.30, -0.28, -0.50);
       g.visible = false;
       fpToolHolder.add(g);
     }
 
-    // 4. Bolt-Action Scoped Hunting Rifle
+    // 4. Bolt-Action Scoped Hunting Rifle (Animated Bolt Handle + Optic Lenses & Rings)
     {
       const g = toolMeshes.rifle;
       const woodStock = new THREE.Mesh(new THREE.BoxGeometry(0.046, 0.088, 0.52), matHickory);
       woodStock.position.set(0, 0.02, -0.08);
       g.add(woodStock);
+      const buttPad = new THREE.Mesh(new THREE.BoxGeometry(0.048, 0.092, 0.032), matAnodizedDark);
+      buttPad.position.set(0, 0.018, 0.185);
+      g.add(buttPad);
       const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.016, 0.56, 10), matAnodizedDark);
       barrel.rotation.x = Math.PI / 2;
       barrel.position.set(0, 0.062, -0.44);
       g.add(barrel);
+      const frontBead = new THREE.Mesh(new THREE.SphereGeometry(0.0055, 8, 8), matBrass);
+      frontBead.position.set(0, 0.078, -0.70);
+      g.add(frontBead);
       const scope = new THREE.Mesh(new THREE.CylinderGeometry(0.020, 0.018, 0.24, 12), matBrass);
       scope.rotation.x = Math.PI / 2;
       scope.position.set(0, 0.105, -0.18);
       g.add(scope);
+      [-0.298, -0.062].forEach(lz => {
+        const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.006, 12), matCockpitGlass);
+        lens.rotation.x = Math.PI / 2;
+        lens.position.set(0, 0.105, lz);
+        g.add(lens);
+      });
+      [-0.23, -0.13].forEach(rz => {
+        const sRing = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.018, 12), matAnodizedDark);
+        sRing.rotation.x = Math.PI / 2;
+        sRing.position.set(0, 0.105, rz);
+        g.add(sRing);
+      });
+      const boltHandle = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.012, 0.016), matAluminum);
+      boltHandle.position.set(0.032, 0.064, -0.14);
+      g.add(boltHandle);
+      g.userData.boltHandle = boltHandle;
       g.position.set(0.28, -0.28, -0.48);
       g.visible = false;
       fpToolHolder.add(g);
@@ -3696,14 +3913,24 @@
     // 5. Bundle of Dynamite
     {
       const g = toolMeshes.dynamite;
-      const dynMat = new THREE.MeshStandardMaterial({ color: 0xb71c1c, roughness: 0.55 });
+      const dynMat = new THREE.MeshStandardMaterial({ color: 0xa61818, roughness: 0.58 });
       [[-0.018, 0], [0.018, 0], [0, 0.028]].forEach(([dx, dy]) => {
         const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.22, 10), dynMat);
         stick.position.set(dx, dy, 0);
         g.add(stick);
       });
-      const band = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.04, 10), matAnodizedDark);
-      g.add(band);
+      [-0.045, 0.045].forEach(by => {
+        const band = new THREE.Mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.032, 10), matAnodizedDark);
+        band.position.y = by;
+        g.add(band);
+      });
+      const fuseCurve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(0, 0.10, 0),
+        new THREE.Vector3(0.008, 0.125, 0.006),
+        new THREE.Vector3(0, 0.145, 0)
+      ]);
+      const fuseCord = new THREE.Mesh(new THREE.TubeGeometry(fuseCurve, 6, 0.003, 6, false), matRawhide);
+      g.add(fuseCord);
       const fuseSpark = new THREE.Mesh(new THREE.SphereGeometry(0.014, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffab00 }));
       fuseSpark.position.set(0, 0.145, 0);
       g.add(fuseSpark);
@@ -3804,11 +4031,22 @@
     });
   }
 
-  const buildGhost = new THREE.Mesh(
-    new THREE.BoxGeometry(3.6, 0.35, 3.6),
-    new THREE.MeshBasicMaterial({ color: 0x00e676, wireframe: true, transparent: true, opacity: 0.72 })
-  );
-  buildGhost.visible = false;
+  const buildGhost = (() => {
+    const grp = new THREE.Group();
+    const h = 1.85, c = 0.55;
+    const pts = [
+      -h, 0, -h,  -h + c, 0, -h,   -h, 0, -h,  -h, 0, -h + c,
+       h, 0, -h,   h - c, 0, -h,    h, 0, -h,   h, 0, -h + c,
+       h, 0,  h,   h - c, 0,  h,    h, 0,  h,   h, 0,  h - c,
+      -h, 0,  h,  -h + c, 0,  h,   -h, 0,  h,  -h, 0,  h - c
+    ];
+    const gGeo = new THREE.BufferGeometry();
+    gGeo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+    const gMat = new THREE.LineBasicMaterial({ color: 0xdcb46a, transparent: true, opacity: 0.48 });
+    grp.add(new THREE.LineSegments(gGeo, gMat));
+    grp.visible = false;
+    return grp;
+  })();
   scene.add(buildGhost);
 
   const RANGED_WEAPON_CONFIG = {
@@ -4080,10 +4318,8 @@
       });
       registerCollider(gx, gz, 1.2, gy, gy + 2.6, 'built_wall');
     } else if (piece === 'roof') {
-      const roof = new THREE.Mesh(new THREE.ConeGeometry(2.92, 1.52, 4), matThatch);
+      const roof = createLayeredThatchRoof(2.92, 1.52);
       roof.position.y = 2.85;
-      roof.rotation.y = Math.PI / 4;
-      roof.castShadow = true;
       sGroup.add(roof);
       registerClimbableBox(gx, gz, 1.9, 1.9, snapYaw, gy + 2.6, gy + 1.5);
     } else if (piece === 'campfire') {
@@ -4194,11 +4430,11 @@
 
   const matBoarHide  = new THREE.MeshStandardMaterial({ color: 0x3b281e, roughness: 0.86 });
   const matBoarMane  = new THREE.MeshStandardMaterial({ color: 0x1e130d, roughness: 0.92 });
-  const matSnoutPink = new THREE.MeshStandardMaterial({ color: 0x7a493e, roughness: 0.65 });
+  const matSnoutPink = new THREE.MeshStandardMaterial({ color: 0x5c3632, roughness: 0.68 });
   const matWolfFur   = new THREE.MeshStandardMaterial({ color: 0x565e66, roughness: 0.80 });
   const matWolfBelly = new THREE.MeshStandardMaterial({ color: 0x9aa2a8, roughness: 0.82 });
-  const matEyeAmber  = new THREE.MeshBasicMaterial({ color: 0xffc107 });
-  const matEyeDark   = new THREE.MeshBasicMaterial({ color: 0x111111 });
+  const matEyeAmber  = new THREE.MeshStandardMaterial({ color: 0x9e5e14, roughness: 0.08, metalness: 0.25 });
+  const matEyeDark   = new THREE.MeshStandardMaterial({ color: 0x0e0f12, roughness: 0.08, metalness: 0.25 });
   const matIvory     = new THREE.MeshStandardMaterial({ color: 0xf7f2e4, roughness: 0.28 });
   const matCrabShell = new THREE.MeshStandardMaterial({ color: 0xb73e26, roughness: 0.38 });
   const matFishScale = new THREE.MeshStandardMaterial({ color: 0x26c6da, roughness: 0.18, metalness: 0.68 });
@@ -4404,23 +4640,24 @@
         ` + shader.fragmentShader.replace(
           '#include <dithering_fragment>',
           `
-          // 1. Kajiya-Kay Anisotropic Specular Highlights (Dual-lobe primary + secondary hair sheen)
+          // 1. Kajiya-Kay Anisotropic Specular Highlights (Dual-lobe sun-keyed hair sheen)
           vec3 viewDirW = normalize(cameraPosition - vWolfWorldPos);
           vec3 sunDirW = normalize(uSunDir);
+          float sunUp = smoothstep(-0.05, 0.18, sunDirW.y);
           vec3 H = normalize(sunDirW + viewDirW);
           vec3 T = normalize(vWolfFurTangent + normal * 0.28);
           float dotTH = clamp(dot(T, H), -1.0, 1.0);
           float sinTH = sqrt(max(0.001, 1.0 - dotTH * dotTH));
-          float dirAtten = smoothstep(-1.0, 0.0, dotTH);
-          float primaryAniso = dirAtten * pow(sinTH, 28.0) * 0.34;
+          float dirAtten = smoothstep(-1.0, 0.0, dotTH) * sunUp;
+          float primaryAniso = dirAtten * pow(sinTH, 32.0) * 0.30;
           float secondaryAniso = dirAtten * pow(sinTH, 8.0) * 0.14;
-          vec3 anisoSheen = vec3(0.88, 0.92, 0.98) * primaryAniso + vec3(0.68, 0.60, 0.50) * secondaryAniso;
+          vec3 anisoSheen = vec3(1.0, 0.94, 0.84) * primaryAniso + vec3(0.66, 0.56, 0.44) * secondaryAniso;
 
-          // 2. Subsurface Scattering (SSS) — Warm crimson-amber light passing through the tips of the ears
-          float backLight = pow(clamp(dot(viewDirW, -sunDirW), 0.0, 1.0), 2.4);
-          float rimGrazing = pow(1.0 - clamp(dot(normal, viewDirW), 0.0, 1.0), 2.8);
+          // 2. Subsurface Scattering (SSS) — Warm crimson-amber light passing through ear tips & silhouette coat edges
+          float backLight = pow(clamp(dot(viewDirW, -sunDirW), 0.0, 1.0), 2.4) * sunUp;
+          float rimGrazing = pow(1.0 - clamp(dot(normal, viewDirW), 0.0, 1.0), 3.0);
           float earSss = clamp(vSssWeight, 0.0, 1.0) * (backLight * 0.85 + rimGrazing * 0.45);
-          vec3 sssContribution = vec3(1.0, 0.26, 0.10) * earSss * 0.68;
+          vec3 sssContribution = vec3(1.0, 0.28, 0.10) * earSss * 0.70 + vec3(0.96, 0.82, 0.58) * rimGrazing * backLight * 0.20;
 
           gl_FragColor.rgb += anisoSheen + sssContribution;
           #include <dithering_fragment>
@@ -5155,22 +5392,22 @@
   let sharedBoarAssets = null;
   function buildSharedBoarAssets() {
     const boarSkinMat = new THREE.MeshStandardMaterial({
-      color: 0x3b261a,
+      color: 0x362216,
       normalMap: wolfPBRAssets.normTex,
-      normalScale: new THREE.Vector2(1.65, 1.65),
+      normalScale: new THREE.Vector2(1.75, 1.75),
       displacementMap: wolfPBRAssets.dispTex,
       displacementScale: 0.014,
       displacementBias: -0.007,
-      roughness: 0.72,
-      metalness: 0.05
+      roughness: 0.68,
+      metalness: 0.06
     });
     wolfPBRAssets.injectWolfAnisotropicSSSMaterial(boarSkinMat, false);
 
     const boarBristleMat = new THREE.MeshStandardMaterial({
-      color: 0x24160e,
+      color: 0x1e120b,
       normalMap: wolfPBRAssets.normTex,
-      normalScale: new THREE.Vector2(1.2, 1.2),
-      roughness: 0.54,
+      normalScale: new THREE.Vector2(1.25, 1.25),
+      roughness: 0.52,
       metalness: 0.08,
       side: THREE.DoubleSide
     });
@@ -5369,7 +5606,7 @@
 
     const nasalDisc = new THREE.Mesh(
       new THREE.CylinderGeometry(0.095, 0.105, 0.045, 16),
-      new THREE.MeshStandardMaterial({ color: 0x8d5248, roughness: 0.24, metalness: 0.12 })
+      new THREE.MeshStandardMaterial({ color: 0x3b2622, roughness: 0.22, metalness: 0.12 })
     );
     nasalDisc.rotation.x = Math.PI / 2 + 0.12;
     nasalDisc.position.set(0, -0.045, 0.44);
@@ -8528,6 +8765,13 @@
     ag.hp = u.health;
     spawnBloodSpeck(ag.mesh.position.x, ag.mesh.position.y + 0.15, ag.mesh.position.z);
 
+    if (window.triggerHitmarker) {
+      window.triggerHitmarker(isVital, u.health <= 0);
+    }
+    if (AudioEngine._haptic) {
+      AudioEngine._haptic(isVital || u.health <= 0 ? 28 : 14);
+    }
+
     if (ag.isShark) {
       if (u.health <= 0) {
         transitionAgentToDying(ag, hitDir);
@@ -8539,13 +8783,6 @@
         showToast(`🦈 ${isVital ? 'CRITICAL FIN/GILL HIT! ' : ''}Struck Shark! (${u.health} HP left)`);
       }
       return true;
-    }
-
-    if (window.triggerHitmarker) {
-      window.triggerHitmarker(isVital, u.health <= 0);
-    }
-    if (AudioEngine._haptic) {
-      AudioEngine._haptic(isVital || u.health <= 0 ? 28 : 14);
     }
 
     if (u.health <= 0) {
@@ -8883,6 +9120,7 @@
   }
 
   window.triggerHitmarker = function (isVital = false, isKill = false) {
+    if (AudioEngine.playHitmarker) AudioEngine.playHitmarker(isVital, isKill);
     const hmEl = document.getElementById('cc-hitmarker');
     if (!hmEl) return;
     hmEl.classList.remove('active', 'crit', 'kill');
@@ -8900,6 +9138,7 @@
     let firedAmmoType = 'arrow';
     if (weaponType === 'bow') {
       if ((player.inventory.arrows || 0) <= 0) {
+        if (AudioEngine.playDryFire) AudioEngine.playDryFire();
         showToast('🏹 Out of Arrows! Find your shot arrows or craft more in Pack (1 Timber + 1 Flint + 1 Feather).');
         return;
       }
@@ -8909,6 +9148,7 @@
       triggerWeaponKickback('bow', Math.max(0.65, drawPow));
     } else if (weaponType === 'crossbow') {
       if (campaign.crossbowCooldown > 0) {
+        if (AudioEngine.playDryFire) AudioEngine.playDryFire();
         showToast(`🎯 Reloading Crossbow (${campaign.crossbowCooldown.toFixed(1)}s)...`);
         return;
       }
@@ -8919,29 +9159,41 @@
         player.inventory.arrows--;
         firedAmmoType = 'arrow';
       } else {
+        if (AudioEngine.playDryFire) AudioEngine.playDryFire();
         showToast('🎯 Out of Bolts & Arrows! Pick up fired bolts/arrows or craft more in Pack.');
         return;
       }
       campaign.crossbowCooldown = 1.8;
       AudioEngine.playBowTwang();
+      if (AudioEngine.playCrossbowReload) AudioEngine.playCrossbowReload();
       triggerWeaponKickback('crossbow', 1.0);
     } else if (weaponType === 'pistol') {
       if ((player.inventory.pistolAmmo || 0) <= 0) {
+        if (AudioEngine.playDryFire) AudioEngine.playDryFire();
         showToast('🔫 Out of Pistol Rounds! Search outer island expedition crates.');
         return;
       }
       player.inventory.pistolAmmo--;
       AudioEngine.playRifleShot(true);
+      if (AudioEngine.playChamberCycle) AudioEngine.playChamberCycle(false);
+      campaign.chamberCycleWeapon = 'pistol';
+      campaign.chamberCycleDuration = 0.20;
+      campaign.chamberCycleTimer = 0.20;
       alertWildlifeFromGunshot(player.pos, 130.0);
       triggerWeaponKickback('pistol', 1.0);
       spawnMuzzleFlashAndSmoke('pistol');
     } else if (weaponType === 'rifle') {
       if ((player.inventory.rifleAmmo || 0) <= 0) {
+        if (AudioEngine.playDryFire) AudioEngine.playDryFire();
         showToast('🎯 Out of Rifle Rounds! Search outer island & deep cave caches.');
         return;
       }
       player.inventory.rifleAmmo--;
       AudioEngine.playRifleShot(false);
+      if (AudioEngine.playChamberCycle) AudioEngine.playChamberCycle(true);
+      campaign.chamberCycleWeapon = 'rifle';
+      campaign.chamberCycleDuration = 0.42;
+      campaign.chamberCycleTimer = 0.42;
       alertWildlifeFromGunshot(player.pos, 155.0);
       triggerWeaponKickback('rifle', 1.0);
       spawnMuzzleFlashAndSmoke('rifle');
@@ -9358,12 +9610,14 @@
 
   function fireSignalFlare() {
     if (player.inventory.flares <= 0) {
+      if (AudioEngine.playDryFire) AudioEngine.playDryFire();
       showToast('⚠️ Out of Signal Flares! Craft more in Pack (1 Obsidian + 1 Bamboo).');
       return;
     }
     player.inventory.flares--;
     updateCastawayHUD();
-    AudioEngine.playFire();
+    if (AudioEngine.playFlareLaunch) AudioEngine.playFlareLaunch();
+    else AudioEngine.playFire();
     triggerWeaponKickback('flare', 1.0);
     spawnMuzzleFlashAndSmoke('flare');
 
@@ -9467,12 +9721,14 @@
       if (!cfg) return false;
       if (getRangedAmmoCount(tool) <= 0) {
         if (!tryDirectAmmoOrCachePickup()) {
+          if (AudioEngine.playDryFire) AudioEngine.playDryFire();
           if (AudioEngine._haptic) AudioEngine._haptic(10);
           showToast(cfg.emptyMsg);
         }
         return false;
       }
       if (tool === 'crossbow' && campaign.crossbowCooldown > 0) {
+        if (AudioEngine.playDryFire) AudioEngine.playDryFire();
         showToast(`🎯 Reloading Crossbow (${campaign.crossbowCooldown.toFixed(1)}s)...`);
         return false;
       }
@@ -9493,6 +9749,7 @@
         campaign.bowDraw.holding = true;
         campaign.bowDraw.holdTime = 0;
         campaign.bowDraw.power = 0.25;
+        if (AudioEngine.playBowDrawCreak) AudioEngine.playBowDrawCreak();
       }
       newStrikeBtn.classList.add('aiming');
       const cancelEl = document.getElementById('cc-cancel-aim');
@@ -10041,14 +10298,116 @@
         border-radius: 20px;
         max-width: 520px;
         width: 100%;
-        max-height: 84vh;
-        overflow-y: auto;
-        padding: 16px;
+        max-height: 86vh;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        padding: 14px;
         color: #eaf4ff;
       }
+      .cc-pack-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        flex-shrink: 0;
+      }
+      #cc-close-craft {
+        background: rgba(255,255,255,0.10);
+        border: 1px solid rgba(255,255,255,0.18);
+        color: #fff;
+        min-width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        font-size: 16px;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+      .cc-pack-res-strip {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 8px;
+        padding: 6px 9px;
+        background: rgba(255,255,255,0.05);
+        border-radius: 10px;
+        font-size: 10.5px;
+        font-weight: 700;
+        color: #b2ebf2;
+        flex-shrink: 0;
+      }
+      .cc-pack-tabs {
+        display: flex;
+        gap: 4px;
+        margin-top: 10px;
+        padding: 4px;
+        background: rgba(0, 0, 0, 0.42);
+        border: 1px solid rgba(255,255,255,0.10);
+        border-radius: 13px;
+        flex-shrink: 0;
+      }
+      .cc-pack-tab {
+        flex: 1;
+        min-height: 44px;
+        border: none;
+        border-radius: 9px;
+        background: transparent;
+        color: rgba(216, 232, 242, 0.76);
+        font-size: 11px;
+        font-weight: 800;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        padding: 4px 6px;
+        transition: background 0.16s ease, color 0.16s ease;
+      }
+      .cc-pack-tab.active {
+        background: #26e6c6;
+        color: #041410;
+        box-shadow: 0 2px 10px rgba(38, 230, 198, 0.35);
+      }
+      .cc-pack-body {
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        margin-top: 10px;
+        padding-right: 2px;
+        flex: 1 1 auto;
+      }
+      .cc-pack-pane { display: none; }
+      .cc-pack-pane.active { display: block; }
       .cc-arsenal-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+        gap: 6px;
+      }
+      .cc-arsenal-grid .cc-tool-slot.locked {
+        opacity: 0.48;
+        border-style: dashed;
+      }
+      .cc-craft-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 6px;
+      }
+      .cc-craft-grid .cc-btn-secondary,
+      .cc-travel-grid .cc-btn-secondary {
+        min-height: 48px;
+        margin-top: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        line-height: 1.2;
+      }
+      .cc-travel-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
         gap: 6px;
         margin-top: 8px;
       }
@@ -10056,13 +10415,13 @@
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
         gap: 7px;
-        margin-top: 8px;
       }
       .cc-recipe-item {
         background: rgba(255,255,255,0.06);
         border: 1px solid rgba(255,255,255,0.14);
         border-radius: 12px;
-        padding: 8px;
+        padding: 9px;
+        min-height: 48px;
         font-size: 11px;
         cursor: pointer;
       }
@@ -10076,8 +10435,13 @@
         letter-spacing: 0.06em;
         color: #80d8ff;
         text-transform: uppercase;
-        margin-top: 12px;
-        margin-bottom: 5px;
+        margin-top: 4px;
+        margin-bottom: 6px;
+      }
+      @media (max-width: 400px) {
+        .cc-craft-box { padding: 11px; }
+        .cc-pack-tab { font-size: 10px; padding: 4px 3px; }
+        .cc-craft-grid { grid-template-columns: 1fr; }
       }
     `;
     document.head.appendChild(style);
@@ -10272,12 +10636,12 @@
     craftModal.id = 'cc-craft-modal';
     craftModal.innerHTML = `
       <div class="cc-craft-box">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <h3 style="margin:0;font-size:15.5px;color:#26e6c6;">🎒 Survivor Pack, Gear & Workbench</h3>
-          <button id="cc-close-craft" style="background:rgba(255,255,255,0.1);border:none;color:#fff;width:30px;height:30px;border-radius:50%;font-size:15px;cursor:pointer;">✕</button>
+        <div class="cc-pack-header">
+          <h3 style="margin:0;font-size:15.5px;color:#26e6c6;">🎒 Survivor Pack</h3>
+          <button id="cc-close-craft" aria-label="Close Pack">✕</button>
         </div>
-        <div id="cc-objective-text" style="font-size:11.5px;color:#ffd54f;margin-top:6px;font-weight:700;">📡 Avionics Modules: 0/3 found • Repair Radio Outpost at (52, 96)</div>
-        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;padding:7px 10px;background:rgba(255,255,255,0.05);border-radius:10px;font-size:11px;font-weight:700;color:#b2ebf2;">
+        <div id="cc-objective-text" style="font-size:11px;color:#ffd54f;margin-top:5px;font-weight:700;">📡 Avionics Modules: 0/3 found • Repair Radio Outpost at (52, 96)</div>
+        <div class="cc-pack-res-strip">
           <span>🎍 Bamboo: <b id="cc-cnt-bamboo">6</b></span>
           <span>🖤 Obsidian: <b id="cc-cnt-obsidian">3</b></span>
           <span>🐟 Raw: <b id="cc-cnt-fish">0</b></span>
@@ -10288,58 +10652,79 @@
           <span>🎇 Flares: <b id="cc-cnt-flares">2</b></span>
         </div>
 
-        <div class="cc-section-lbl">⚔️ Equip Tool or Weapon</div>
-        <div class="cc-arsenal-grid" id="cc-arsenal-grid">
-          <div class="cc-tool-slot active" data-tool="hatchet" style="width:100%;"><span class="ico">🪓</span><span>Hatchet</span></div>
-          <div class="cc-tool-slot" data-tool="spear" style="width:100%;"><span class="ico">🔱</span><span>Spear</span></div>
-          <div class="cc-tool-slot" data-tool="bow" style="width:100%;"><span class="ico">🏹</span><span>Bow</span></div>
-          <div class="cc-tool-slot" data-tool="crossbow" style="width:100%;"><span class="ico">🎯</span><span>X-Bow</span></div>
-          <div class="cc-tool-slot" data-tool="pistol" style="width:100%;"><span class="ico">🔫</span><span>Pistol</span></div>
-          <div class="cc-tool-slot" data-tool="rifle" style="width:100%;"><span class="ico">🎯</span><span>Rifle</span></div>
-          <div class="cc-tool-slot" data-tool="rod" style="width:100%;"><span class="ico">🎣</span><span>Fish Rod</span></div>
-          <div class="cc-tool-slot" data-tool="torch" style="width:100%;"><span class="ico">🔥</span><span>Torch</span></div>
-          <div class="cc-tool-slot" data-tool="flare" style="width:100%;"><span class="ico">🎇</span><span>Flare</span></div>
-          <div class="cc-tool-slot" data-tool="dynamite" style="width:100%;"><span class="ico">🧨</span><span>Blast</span></div>
-          <div class="cc-tool-slot" data-tool="build" style="width:100%;"><span class="ico">🔨</span><span>Build</span></div>
+        <div class="cc-pack-tabs" id="cc-pack-tabs">
+          <button class="cc-pack-tab active" data-packtab="pack-tab-gear">⚔️ Gear</button>
+          <button class="cc-pack-tab" data-packtab="pack-tab-craft">🛠️ Craft</button>
+          <button class="cc-pack-tab" data-packtab="pack-tab-build">🔨 Build</button>
+          <button class="cc-pack-tab" data-packtab="pack-tab-travel">🧭 Travel</button>
         </div>
 
-        <div class="cc-section-lbl">🍳 Survival Rations & Crafting</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:6px;">
-          <button class="cc-btn-secondary" id="cc-act-eat" style="margin-top:0;">🍖 Eat Ration (+45 Food)</button>
-          <button class="cc-btn-secondary" id="cc-act-cook" style="margin-top:0;">🍳 Roast Raw Fish/Meat</button>
-          <button class="cc-btn-secondary" id="cc-act-bow" style="margin-top:0;">🏹 Craft Bow (2T+1S+1F)</button>
-          <button class="cc-btn-secondary" id="cc-act-xbow" style="margin-top:0;">🎯 Craft X-Bow (3T+2B+2S)</button>
-          <button class="cc-btn-secondary" id="cc-act-arrows" style="margin-top:0;">🏹 +5 Arrows (1T+1Fl+1Fe)</button>
-          <button class="cc-btn-secondary" id="cc-act-bolts" style="margin-top:0;">🎯 +4 Bolts (1T+1Ob+1Fe)</button>
-          <button class="cc-btn-secondary" id="cc-act-flare" style="margin-top:0;">🎇 +2 Flares (1Ob+1Bam)</button>
-          <button class="cc-btn-secondary" id="cc-act-raft" style="margin-top:0;">🛶 Lash Beach Raft (4 Bam + 2 Fiber)</button>
-          <button class="cc-btn-secondary" id="cc-act-boat" style="margin-top:0;">⛵ Build Keeled Boat (4 arc pieces)</button>
-        </div>
+        <div class="cc-pack-body">
+          <div class="cc-pack-pane active" id="pack-tab-gear">
+            <div class="cc-section-lbl">Equip Tool or Weapon</div>
+            <div class="cc-arsenal-grid" id="cc-arsenal-grid">
+              <div class="cc-tool-slot active" data-tool="hatchet" style="width:100%;"><span class="ico">🪓</span><span>Hatchet</span></div>
+              <div class="cc-tool-slot" data-tool="spear" style="width:100%;"><span class="ico">🔱</span><span>Spear</span></div>
+              <div class="cc-tool-slot" data-tool="bow" style="width:100%;"><span class="ico">🏹</span><span>Bow</span></div>
+              <div class="cc-tool-slot" data-tool="crossbow" style="width:100%;"><span class="ico">🎯</span><span>X-Bow</span></div>
+              <div class="cc-tool-slot" data-tool="pistol" style="width:100%;"><span class="ico">🔫</span><span>Pistol</span></div>
+              <div class="cc-tool-slot" data-tool="rifle" style="width:100%;"><span class="ico">🎯</span><span>Rifle</span></div>
+              <div class="cc-tool-slot" data-tool="rod" style="width:100%;"><span class="ico">🎣</span><span>Fish Rod</span></div>
+              <div class="cc-tool-slot" data-tool="torch" style="width:100%;"><span class="ico">🔥</span><span>Torch</span></div>
+              <div class="cc-tool-slot" data-tool="flare" style="width:100%;"><span class="ico">🎇</span><span>Flare</span></div>
+              <div class="cc-tool-slot" data-tool="dynamite" style="width:100%;"><span class="ico">🧨</span><span>Blast</span></div>
+              <div class="cc-tool-slot" data-tool="build" style="width:100%;"><span class="ico">🔨</span><span>Build</span></div>
+            </div>
+          </div>
 
-        <div class="cc-section-lbl">🔨 Modular Shelter Blueprints (Tap to Arm Hammer)</div>
-        <div class="cc-recipe-grid" id="cc-build-grid"></div>
+          <div class="cc-pack-pane" id="pack-tab-craft">
+            <div class="cc-section-lbl">Rations, Ammo &amp; Vessels</div>
+            <div class="cc-craft-grid">
+              <button class="cc-btn-secondary" id="cc-act-eat">🍖 Eat Ration (+45 Food)</button>
+              <button class="cc-btn-secondary" id="cc-act-cook">🍳 Roast Raw Fish/Meat</button>
+              <button class="cc-btn-secondary" id="cc-act-bow">🏹 Craft Bow (2T+1S+1F)</button>
+              <button class="cc-btn-secondary" id="cc-act-xbow">🎯 Craft X-Bow (3T+2B+2S)</button>
+              <button class="cc-btn-secondary" id="cc-act-arrows">🏹 +5 Arrows (1T+1Fl+1Fe)</button>
+              <button class="cc-btn-secondary" id="cc-act-bolts">🎯 +4 Bolts (1T+1Ob+1Fe)</button>
+              <button class="cc-btn-secondary" id="cc-act-flare">🎇 +2 Flares (1Ob+1Bam)</button>
+              <button class="cc-btn-secondary" id="cc-act-raft">🛶 Lash Beach Raft (4 Bam + 2 Fiber)</button>
+              <button class="cc-btn-secondary" id="cc-act-boat">⛵ Build Keeled Boat (4 arc pieces)</button>
+            </div>
+          </div>
 
-        <div class="cc-section-lbl">🗺️ Geological Watershed Map &amp; Quick Fast-Travel</div>
-        <div style="display:flex;gap:6px;margin-bottom:6px;">
-          <button class="cc-btn-secondary" id="cc-open-geo-map" style="margin-top:0;flex:1.4;background:rgba(0,188,212,0.22);border-color:#00e5ff;color:#80deea;">🗺️ Full Geological &amp; Hydrology Map</button>
-          <button class="cc-btn-secondary" id="cc-tour-prev" style="margin-top:0;flex:0.8;">◀ Prev</button>
-          <button class="cc-btn-secondary" id="cc-tour-next" style="margin-top:0;flex:0.8;">▶ Next</button>
-          <button class="cc-btn-secondary" id="cc-tour-grid" style="margin-top:0;flex:0.8;">🖼️ 12 Shots</button>
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:6px;">
-          <button class="cc-btn-secondary" data-cctp="crash" style="margin-top:0;">✈️ Crash Cove</button>
-          <button class="cc-btn-secondary" data-cctp="outpost" style="margin-top:0;">📡 Radio Outpost</button>
-          <button class="cc-btn-secondary" data-cctp="volcano" style="margin-top:0;">🌋 Volcano Rim</button>
-          <button class="cc-btn-secondary" data-cctp="lavatube" style="margin-top:0;">🔥 Lava Tube</button>
-          <button class="cc-btn-secondary" data-cctp="valley_pond" style="margin-top:0;">🌿 Valley Lagoon</button>
-          <button class="cc-btn-secondary" data-cctp="ruins" style="margin-top:0;">🏛️ Sunken Ruins</button>
-          <button class="cc-btn-secondary" data-cctp="bamboo" style="margin-top:0;">🎍 Bamboo Grove</button>
-          <button class="cc-btn-secondary" data-cctp="swim_cay" style="margin-top:0;">🏖️ Reef Cay</button>
-          <button class="cc-btn-secondary" data-cctp="outer_stronghold" style="margin-top:0;">⛵ Outer Island</button>
+          <div class="cc-pack-pane" id="pack-tab-build">
+            <div class="cc-section-lbl">Modular Shelter Blueprints (Tap to Arm Hammer)</div>
+            <div class="cc-recipe-grid" id="cc-build-grid"></div>
+          </div>
+
+          <div class="cc-pack-pane" id="pack-tab-travel">
+            <div class="cc-section-lbl">Watershed Map &amp; Waypoints</div>
+            <button class="cc-btn-secondary" id="cc-open-geo-map" style="margin-top:0;min-height:48px;background:rgba(0,188,212,0.22);border-color:#00e5ff;color:#80deea;">🗺️ Full Geological &amp; Hydrology Map</button>
+            <div class="cc-travel-grid">
+              <button class="cc-btn-secondary" data-cctp="crash">✈️ Crash Cove</button>
+              <button class="cc-btn-secondary" data-cctp="outpost">📡 Radio Outpost</button>
+              <button class="cc-btn-secondary" data-cctp="volcano">🌋 Volcano Rim</button>
+              <button class="cc-btn-secondary" data-cctp="lavatube">🔥 Lava Tube</button>
+              <button class="cc-btn-secondary" data-cctp="valley_pond">🌿 Valley Lagoon</button>
+              <button class="cc-btn-secondary" data-cctp="ruins">🏛️ Sunken Ruins</button>
+              <button class="cc-btn-secondary" data-cctp="bamboo">🎍 Bamboo Grove</button>
+              <button class="cc-btn-secondary" data-cctp="swim_cay">🏖️ Reef Cay</button>
+              <button class="cc-btn-secondary" data-cctp="outer_stronghold">⛵ Outer Island</button>
+            </div>
+          </div>
         </div>
       </div>
     `;
     document.body.appendChild(craftModal);
+
+    craftModal.querySelectorAll('.cc-pack-tab').forEach(tabBtn => {
+      tabBtn.addEventListener('click', e => {
+        e.stopPropagation();
+        const targetId = tabBtn.dataset.packtab;
+        craftModal.querySelectorAll('.cc-pack-tab').forEach(b => b.classList.toggle('active', b === tabBtn));
+        craftModal.querySelectorAll('.cc-pack-pane').forEach(p => p.classList.toggle('active', p.id === targetId));
+      });
+    });
 
     const openGeoMapBtn = document.getElementById('cc-open-geo-map');
     if (openGeoMapBtn) {
@@ -10558,8 +10943,21 @@
       boom.position.set(0, -0.82, 0.35);
       sailPivot.add(boom);
 
-      const sailCanvas = new THREE.Mesh(new THREE.BoxGeometry(0.06, 2.05, 2.45), matThatch);
-      sailCanvas.position.set(0, 0.12, 0.32);
+      const gaff = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.042, 2.55, 6), matSeasonedBamboo);
+      gaff.rotation.x = Math.PI / 2 - 0.14;
+      gaff.position.set(0, 1.16, 0.32);
+      sailPivot.add(gaff);
+
+      const boatSailGeo = new THREE.PlaneGeometry(2.45, 2.05, 10, 8);
+      const bsPos = boatSailGeo.attributes.position;
+      for (let i = 0; i < bsPos.count; i++) {
+        const su = bsPos.getX(i), sv = bsPos.getY(i);
+        bsPos.setZ(i, Math.cos(su * 0.85) * Math.cos(sv * 0.95) * 0.28);
+      }
+      boatSailGeo.computeVertexNormals();
+      const sailCanvas = new THREE.Mesh(boatSailGeo, matSailCanvas);
+      sailCanvas.rotation.y = Math.PI / 2;
+      sailCanvas.position.set(0, 0.15, 0.32);
       sailPivot.add(sailCanvas);
       hull.add(sailPivot);
 
@@ -10762,15 +11160,24 @@
           campGroup.position.set(campX, campY, campZ);
           const deck = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.28, 3.8), matTimberLog);
           deck.position.y = 0.45;
+          deck.castShadow = true;
+          deck.receiveShadow = true;
           campGroup.add(deck);
-          const roof = new THREE.Mesh(new THREE.ConeGeometry(2.85, 1.45, 4), matThatch);
+          const stepLog = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.22, 0.55), matTimberLog);
+          stepLog.position.set(0, 0.22, 2.08);
+          campGroup.add(stepLog);
+          const roof = createLayeredThatchRoof(2.85, 1.45);
           roof.position.y = 2.65;
-          roof.rotation.y = Math.PI / 4;
           campGroup.add(roof);
           [-1.5, 1.5].forEach(px => [-1.5, 1.5].forEach(pz => {
             const post = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 2.3, 8), matTimberLog);
             post.position.set(px, 1.15, pz);
+            post.castShadow = true;
             campGroup.add(post);
+            // Deep ground pilings so sanctuary shelter deck never hovers on slopes
+            const piling = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.19, 3.2, 8), matTimberLog);
+            piling.position.set(px, -0.95, pz);
+            campGroup.add(piling);
           }));
           scene.add(campGroup);
         }
@@ -10885,23 +11292,9 @@
     }
     window.openLiveScreenshotGallery = openLiveScreenshotGallery;
 
-    const prevTourBtn = document.getElementById('cc-tour-prev');
-    if (prevTourBtn) prevTourBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      craftModal.style.display = 'none';
-      goToTourStop(currentTourIdx - 1);
-    });
-    const nextTourBtn = document.getElementById('cc-tour-next');
-    if (nextTourBtn) nextTourBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      craftModal.style.display = 'none';
-      goToTourStop(currentTourIdx + 1);
-    });
-    const gridTourBtn = document.getElementById('cc-tour-grid');
-    if (gridTourBtn) gridTourBtn.addEventListener('click', e => {
-      e.stopPropagation();
-      openLiveScreenshotGallery();
-    });
+    window.stepShowcaseTour = function (delta) {
+      goToTourStop(currentTourIdx + delta);
+    };
 
     const titleScreen = document.createElement('div');
     titleScreen.id = 'cc-title-screen';
@@ -10996,6 +11389,12 @@
         objText.innerText = `📡 Avionics Modules: ${count}/3 found • Repair Radio Outpost at (52, 96)`;
       }
     }
+
+    document.querySelectorAll('#cc-arsenal-grid .cc-tool-slot').forEach(slot => {
+      const t = slot.dataset.tool;
+      const isLocked = ['bow', 'crossbow', 'pistol', 'rifle'].includes(t) && !campaign.unlockedWeapons[t];
+      slot.classList.toggle('locked', isLocked);
+    });
 
     // Live ammo & ration count badges on the 5-Slot Quick Belt
     const slotRanged = document.getElementById('cc-belt-ranged');
@@ -11250,17 +11649,43 @@
         const b = campaign.weaponPoseBlend;
         const hp = activeCfg.hipPos, ap = activeCfg.aimPos;
         const hr = activeCfg.hipRot, ar = activeCfg.aimRot;
+        let reloadDipY = 0, reloadPitch = 0, reloadRoll = 0;
+        if (campaign.activeTool === 'crossbow' && campaign.crossbowCooldown > 0) {
+          const reloadPhase = 1.0 - Math.min(1.0, campaign.crossbowCooldown / 1.8);
+          const crankArc = Math.sin(Math.min(1.0, reloadPhase * 1.15) * Math.PI);
+          reloadDipY = -0.045 * crankArc;
+          reloadPitch = -0.18 * crankArc;
+          reloadRoll = 0.22 * crankArc;
+        }
+        if (campaign.chamberCycleTimer > 0 && campaign.chamberCycleWeapon === campaign.activeTool) {
+          const ct = 1.0 - (campaign.chamberCycleTimer / Math.max(0.01, campaign.chamberCycleDuration));
+          if (campaign.activeTool === 'rifle') {
+            const boltArc = Math.sin(Math.min(1.0, ct * 1.2) * Math.PI);
+            reloadRoll += -0.18 * boltArc;
+            reloadPitch += 0.04 * boltArc;
+            if (activeMesh.userData.boltHandle) {
+              activeMesh.userData.boltHandle.position.z = -0.14 + Math.sin(ct * Math.PI) * 0.055;
+            }
+          } else if (campaign.activeTool === 'pistol' && activeMesh.userData.slideMesh) {
+            const slideArc = Math.sin(ct * Math.PI);
+            activeMesh.userData.slideMesh.position.z = -0.09 + slideArc * 0.045;
+          }
+        } else {
+          if (activeMesh.userData.slideMesh) activeMesh.userData.slideMesh.position.z = -0.09;
+          if (activeMesh.userData.boltHandle) activeMesh.userData.boltHandle.position.z = -0.14;
+        }
         activeMesh.position.x = hp.x + (ap.x - hp.x) * b + swayX;
-        activeMesh.position.y = hp.y + (ap.y - hp.y) * b + swayY + wr.modelZ * 0.16;
+        activeMesh.position.y = hp.y + (ap.y - hp.y) * b + swayY + wr.modelZ * 0.16 + reloadDipY;
         activeMesh.position.z = hp.z + (ap.z - hp.z) * b + wr.modelZ;
-        activeMesh.rotation.x = hr.x + (ar.x - hr.x) * b + wr.modelPitch;
+        activeMesh.rotation.x = hr.x + (ar.x - hr.x) * b + wr.modelPitch + reloadPitch;
         activeMesh.rotation.y = hr.y + (ar.y - hr.y) * b;
-        activeMesh.rotation.z = hr.z + (ar.z - hr.z) * b;
+        activeMesh.rotation.z = hr.z + (ar.z - hr.z) * b + reloadRoll;
       } else {
         const thrust = Math.sin(campaign.toolSwing * Math.PI) * 0.24;
+        const baseZ = (campaign.activeTool === 'spear' ? -0.66 : -0.58);
         activeMesh.position.x = 0.36 + swayX - thrust * 0.18;
         activeMesh.position.y = -0.36 + swayY + thrust * 0.08;
-        activeMesh.position.z = -0.58 - thrust;
+        activeMesh.position.z = baseZ - thrust;
       }
 
       if (campaign.activeTool === 'torch' && activeMesh.userData.flame) {
@@ -11326,7 +11751,7 @@
       const gx = Math.round((px + fwd.x * 3.8) / 1.9) * 1.9;
       const gz = Math.round((pz + fwd.z * 3.8) / 1.9) * 1.9;
       const gy = Math.max(getTerrainHeight(gx, gz), window.getSupportSurfaceY(gx, gz, py));
-      buildGhost.position.set(gx, gy + (campaign.buildPiece === 'roof' ? 2.6 : 0.45), gz);
+      buildGhost.position.set(gx, gy + (campaign.buildPiece === 'roof' ? 2.6 : 0.06), gz);
       buildGhost.rotation.y = Math.round(player.yaw / (Math.PI / 2)) * (Math.PI / 2);
       buildGhost.visible = true;
     } else {
@@ -11500,14 +11925,42 @@
     if (campaign.crossbowCooldown > 0) {
       campaign.crossbowCooldown = Math.max(0, campaign.crossbowCooldown - dt);
     }
+    if (campaign.chamberCycleTimer > 0) {
+      campaign.chamberCycleTimer = Math.max(0, campaign.chamberCycleTimer - dt);
+      if (campaign.chamberCycleTimer <= 0) campaign.chamberCycleWeapon = null;
+    }
     if (campaign.arrowReloadVisualTimer && campaign.arrowReloadVisualTimer > 0) {
       campaign.arrowReloadVisualTimer = Math.max(0, campaign.arrowReloadVisualTimer - dt);
     }
     if (activeMesh) {
       if (campaign.activeTool === 'bow' && activeMesh.userData.nockedArrow) {
         activeMesh.userData.nockedArrow.visible = (player.inventory.arrows || 0) > 0 && !(campaign.arrowReloadVisualTimer > 0);
-      } else if (campaign.activeTool === 'crossbow' && activeMesh.userData.loadedBolt) {
-        activeMesh.userData.loadedBolt.visible = ((player.inventory.bolts || 0) + (player.inventory.arrows || 0)) > 0 && !(campaign.arrowReloadVisualTimer > 0);
+      } else if (campaign.activeTool === 'crossbow') {
+        const hasAmmo = ((player.inventory.bolts || 0) + (player.inventory.arrows || 0)) > 0;
+        const reloadPct = campaign.crossbowCooldown > 0 ? Math.max(0, Math.min(1, 1.0 - (campaign.crossbowCooldown / 1.8))) : 1.0;
+        if (activeMesh.userData.loadedBolt) {
+          activeMesh.userData.loadedBolt.visible = hasAmmo && campaign.crossbowCooldown <= 0.35;
+          activeMesh.userData.loadedBolt.position.z = campaign.crossbowCooldown > 0
+            ? -0.29 - (0.35 - Math.min(0.35, campaign.crossbowCooldown)) * 0.12 + (campaign.crossbowCooldown * 0.25)
+            : -0.29;
+        }
+        if (activeMesh.userData.xbowLeftStr && activeMesh.userData.xbowRightStr && activeMesh.userData.xbowLatch) {
+          // Draw crossbow string & latch progressively from uncocked (-0.43) back to cocked (-0.18) across reload
+          const drawFrac = (campaign.crossbowCooldown > 0)
+            ? Math.max(0, Math.min(1, (reloadPct - 0.15) / 0.78))
+            : 1.0;
+          const latchZ = -0.43 + drawFrac * 0.25;
+          const dz = latchZ - (-0.45);
+          const halfSpan = Math.hypot(0.23, dz);
+          const sweep = Math.atan2(dz, 0.23);
+          activeMesh.userData.xbowLatch.position.z = latchZ;
+          activeMesh.userData.xbowLeftStr.position.set(-0.115, 0.042, (-0.45 + latchZ) * 0.5);
+          activeMesh.userData.xbowLeftStr.scale.set(halfSpan, 1, 1);
+          activeMesh.userData.xbowLeftStr.rotation.y = -sweep;
+          activeMesh.userData.xbowRightStr.position.set(0.115, 0.042, (-0.45 + latchZ) * 0.5);
+          activeMesh.userData.xbowRightStr.scale.set(halfSpan, 1, 1);
+          activeMesh.userData.xbowRightStr.rotation.y = sweep;
+        }
       }
     }
     const bowArcEl = document.getElementById('cc-bow-arc');
@@ -11519,6 +11972,7 @@
       window._bowBreathSteady = inBreathWindow;
       if (inBreathWindow && !campaign.rangedAim.breathHapticFired) {
         campaign.rangedAim.breathHapticFired = true;
+        if (AudioEngine.playBowSteadyCue) AudioEngine.playBowSteadyCue();
         if (AudioEngine._haptic) AudioEngine._haptic(12);
       }
       if (campaign.bowDraw.holdTime > 4.0) {
