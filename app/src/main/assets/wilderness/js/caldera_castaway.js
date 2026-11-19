@@ -199,8 +199,12 @@
   if (Array.isArray(treeFootprints)) {
     for (let i = 0; i < treeFootprints.length; i++) {
       const tf = treeFootprints[i];
+      if (!tf || tf.isBush) continue; // Allow player to walk naturally through soft coastal bushes
       const ty = getTerrainHeight(tf.x, tf.z);
-      registerCollider(tf.x, tf.z, Math.max(0.42, (tf.r || 1.2) * 0.28), ty - 1.0, ty + 14.0, 'tree');
+      const trunkR = (typeof tf.trunkR === 'number' && tf.trunkR > 0.0)
+        ? tf.trunkR
+        : Math.max(0.24, Math.min(0.46, (tf.r || 4.5) * 0.06));
+      registerCollider(tf.x, tf.z, trunkR, ty - 1.0, ty + 14.0, 'tree');
     }
   }
 
@@ -305,19 +309,57 @@
       }
     }
 
+    const sampleSurfaceY = (sx, sz) => {
+      const ha = getTerrainHeight(sx, sz);
+      return window.sampleTerrainMeshHeight ? Math.max(ha, window.sampleTerrainMeshHeight(sx, sz)) : ha;
+    };
     const inCaveApproach = !!(window.isInCaveEntranceApproach && window.isInCaveEntranceApproach(pos.x, pos.z, 5.5, 26.0, 12.0));
     const stepDx = pos.x - lastValidPos.x;
     const stepDz = pos.z - lastValidPos.z;
     const stepDist = Math.hypot(stepDx, stepDz);
-    if (!inCave && !inCaveApproach && stepDist > 0.001 && !player.isSwimming) {
-      const hPrev = getTerrainHeight(lastValidPos.x, lastValidPos.z);
-      const hNext = getTerrainHeight(pos.x, pos.z);
-      const supportNext = window.getSupportSurfaceY(pos.x, pos.z, pos.y);
-      if (hNext > hPrev + 0.04 && supportNext < hNext) {
-        const grade = (hNext - hPrev) / stepDist;
-        if (grade > 1.95) {
-          pos.x = lastValidPos.x;
-          pos.z = lastValidPos.z;
+    if (!inCave && !inCaveApproach && !player.isSwimming) {
+      if (stepDist > 0.001) {
+        const hPrev = sampleSurfaceY(lastValidPos.x, lastValidPos.z);
+        const hNext = sampleSurfaceY(pos.x, pos.z);
+        const supportNext = window.getSupportSurfaceY(pos.x, pos.z, pos.y);
+        if (hNext > hPrev + 0.04 && supportNext < hNext) {
+          const grade = (hNext - hPrev) / stepDist;
+          if (grade > 1.95) {
+            pos.x = lastValidPos.x;
+            pos.z = lastValidPos.z;
+          }
+        }
+      }
+      // 360-degree cliff-face clearance ring: keep camera near-plane cleanly outside vertical canyon/cliff triangles
+      const ringR = Math.max(0.66, playerRadius + 0.14);
+      const baseFootY = Math.max(pos.y, sampleSurfaceY(pos.x, pos.z));
+      let pushX = 0.0, pushZ = 0.0, pushHits = 0;
+      for (let k = 0; k < 8; k++) {
+        const ang = (k / 8) * Math.PI * 2.0;
+        const dirX = Math.cos(ang), dirZ = Math.sin(ang);
+        const rx = pos.x + dirX * ringR;
+        const rz = pos.z + dirZ * ringR;
+        const hRing = sampleSurfaceY(rx, rz);
+        if (hRing > baseFootY + 1.35) {
+          const supRing = window.getSupportSurfaceY(rx, rz, pos.y);
+          if (supRing < hRing - 0.15) {
+            const wallExcess = Math.min(1.0, (hRing - (baseFootY + 1.35)) * 0.45 + 0.25);
+            pushX -= dirX * wallExcess;
+            pushZ -= dirZ * wallExcess;
+            pushHits++;
+          }
+        }
+      }
+      if (pushHits > 0) {
+        const pLen = Math.hypot(pushX, pushZ);
+        if (pLen > 0.001) {
+          const pushAmt = Math.min(0.42, ringR * 0.48);
+          const candX = pos.x + (pushX / pLen) * pushAmt;
+          const candZ = pos.z + (pushZ / pLen) * pushAmt;
+          if (sampleSurfaceY(candX, candZ) <= baseFootY + 1.25) {
+            pos.x = candX;
+            pos.z = candZ;
+          }
         }
       }
     }
@@ -545,6 +587,138 @@
   const worldLandmarksGroup = new THREE.Group();
   scene.add(worldLandmarksGroup);
   const animatedProps = [];
+  const minorStaticProps = [];
+
+  // Zero-visual-loss static BufferGeometry batcher: merges static child meshes sharing identical material/flags inside a local group
+  function mergeStaticGroupByMaterial(rootGroup, skipSet) {
+    if (!rootGroup) return;
+    rootGroup.updateMatrixWorld(true);
+    const invRoot = new THREE.Matrix4().copy(rootGroup.matrixWorld).invert();
+    const relMat = new THREE.Matrix4();
+    const buckets = new Map();
+    const matIds = new Map();
+    let nextMatId = 1;
+
+    function isSkipped(obj) {
+      if (!skipSet || skipSet.size === 0) return false;
+      let cur = obj;
+      while (cur && cur !== rootGroup) {
+        if (skipSet.has(cur)) return true;
+        cur = cur.parent;
+      }
+      return false;
+    }
+
+    rootGroup.traverse(obj => {
+      if (!obj.isMesh || obj.isInstancedMesh || obj.isSkinnedMesh) return;
+      if (obj.material === _landmarkProxyMat || !obj.material || Array.isArray(obj.material)) return;
+      if (obj.userData && obj.userData.noMerge) return;
+      if (isSkipped(obj)) return;
+      const geo = obj.geometry;
+      if (!geo || !geo.attributes || !geo.attributes.position) return;
+
+      let mId = matIds.get(obj.material);
+      if (!mId) { mId = nextMatId++; matIds.set(obj.material, mId); }
+      const key = `${mId}|${obj.castShadow ? 1 : 0}|${obj.receiveShadow ? 1 : 0}|${obj.layers.mask}`;
+      let list = buckets.get(key);
+      if (!list) {
+        list = { mat: obj.material, castShadow: obj.castShadow, receiveShadow: obj.receiveShadow, layerMask: obj.layers.mask, meshes: [] };
+        buckets.set(key, list);
+      }
+      list.meshes.push(obj);
+    });
+
+    buckets.forEach(bucket => {
+      if (bucket.meshes.length < 2) return;
+      const bakedGeos = [];
+      let totalVerts = 0;
+      let hasUv = false;
+      let hasColor = false;
+      let hasSss = false;
+      let allNoRaycast = true;
+
+      for (let i = 0; i < bucket.meshes.length; i++) {
+        const m = bucket.meshes[i];
+        if (m.raycast === THREE.Mesh.prototype.raycast) allNoRaycast = false;
+        const srcGeo = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone();
+        relMat.multiplyMatrices(invRoot, m.matrixWorld);
+        srcGeo.applyMatrix4(relMat);
+        if (!srcGeo.attributes.normal) srcGeo.computeVertexNormals();
+        if (srcGeo.attributes.uv) hasUv = true;
+        if (srcGeo.attributes.color) hasColor = true;
+        if (srcGeo.attributes.aSssWeight) hasSss = true;
+        totalVerts += srcGeo.attributes.position.count;
+        bakedGeos.push(srcGeo);
+      }
+
+      const posArr = new Float32Array(totalVerts * 3);
+      const normArr = new Float32Array(totalVerts * 3);
+      const uvArr = hasUv ? new Float32Array(totalVerts * 2) : null;
+      const colArr = hasColor ? new Float32Array(totalVerts * 3) : null;
+      const sssArr = hasSss ? new Float32Array(totalVerts) : null;
+
+      let vOff = 0;
+      for (let i = 0; i < bakedGeos.length; i++) {
+        const g = bakedGeos[i];
+        const p = g.attributes.position;
+        const n = g.attributes.normal;
+        const cnt = p.count;
+        for (let k = 0; k < cnt; k++) {
+          const i3 = (vOff + k) * 3;
+          posArr[i3] = p.getX(k); posArr[i3 + 1] = p.getY(k); posArr[i3 + 2] = p.getZ(k);
+          normArr[i3] = n.getX(k); normArr[i3 + 1] = n.getY(k); normArr[i3 + 2] = n.getZ(k);
+        }
+        if (uvArr) {
+          const uv = g.attributes.uv;
+          if (uv) {
+            for (let k = 0; k < cnt; k++) {
+              const i2 = (vOff + k) * 2;
+              uvArr[i2] = uv.getX(k); uvArr[i2 + 1] = uv.getY(k);
+            }
+          }
+        }
+        if (colArr) {
+          const col = g.attributes.color;
+          for (let k = 0; k < cnt; k++) {
+            const i3 = (vOff + k) * 3;
+            if (col) {
+              colArr[i3] = col.getX(k); colArr[i3 + 1] = col.getY(k); colArr[i3 + 2] = col.getZ(k);
+            } else {
+              colArr[i3] = 1; colArr[i3 + 1] = 1; colArr[i3 + 2] = 1;
+            }
+          }
+        }
+        if (sssArr) {
+          const sss = g.attributes.aSssWeight;
+          for (let k = 0; k < cnt; k++) {
+            sssArr[vOff + k] = sss ? sss.getX(k) : 0.06;
+          }
+        }
+        vOff += cnt;
+        g.dispose();
+      }
+
+      const mergedGeo = new THREE.BufferGeometry();
+      mergedGeo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+      mergedGeo.setAttribute('normal', new THREE.BufferAttribute(normArr, 3));
+      if (uvArr) mergedGeo.setAttribute('uv', new THREE.BufferAttribute(uvArr, 2));
+      if (colArr) mergedGeo.setAttribute('color', new THREE.BufferAttribute(colArr, 3));
+      if (sssArr) mergedGeo.setAttribute('aSssWeight', new THREE.BufferAttribute(sssArr, 1));
+      mergedGeo.computeBoundingSphere();
+
+      const mergedMesh = new THREE.Mesh(mergedGeo, bucket.mat);
+      mergedMesh.castShadow = bucket.castShadow;
+      mergedMesh.receiveShadow = bucket.receiveShadow;
+      mergedMesh.layers.mask = bucket.layerMask;
+      if (allNoRaycast) mergedMesh.raycast = () => {};
+
+      for (let i = 0; i < bucket.meshes.length; i++) {
+        const m = bucket.meshes[i];
+        if (m.parent) m.parent.remove(m);
+      }
+      rootGroup.add(mergedMesh);
+    });
+  }
 
   // --- 5A. FLIGHT 409 CRASHED TWIN-OTTER SEAPLANE (Dry sand west of the cove: -44, -28) ---
   function buildCrashedSeaplane() {
@@ -807,6 +981,7 @@
       }
     });
 
+    mergeStaticGroupByMaterial(planeGroup, new Set([beaconOrb]));
     worldLandmarksGroup.add(planeGroup);
     registerCollider(cx, cz, 3.2, cy - 1.0, cy + 3.5, 'seaplane');
     registerClimbableBox(cx + 0.6, cz + 4.4, 2.2, 5.0, 0.42, cy + 1.85, cy - 0.5, -0.95);
@@ -1030,6 +1205,7 @@
     obelisk.castShadow = true;
     ruinGroup.add(obelisk);
 
+    mergeStaticGroupByMaterial(ruinGroup);
     worldLandmarksGroup.add(ruinGroup);
 
     spawnStoryCrate(
@@ -2051,7 +2227,9 @@
           ? 'Mine Magma-Veined Lava Tube Obsidian (+2 Obsidian, +1 Flint) [Tap Strike]'
           : 'Mine Volcanic Obsidian Shard [Tap Strike]'
       };
+      mergeStaticGroupByMaterial(node);
       worldLandmarksGroup.add(node);
+      minorStaticProps.push({ obj: node, x: ox, z: oz, maxDist: 220.0 });
       registerInteractiveTarget(node);
       registerCollider(ox, oz, 0.68, oy - 0.5, oy + 1.8, 'obsidian');
     }
@@ -2354,6 +2532,7 @@
       }
     });
 
+    mergeStaticGroupByMaterial(outpostGroup, new Set([anemometer, apexBeacon]));
     worldLandmarksGroup.add(outpostGroup);
   }
 
@@ -2385,6 +2564,7 @@
         cairn.add(stone);
         hAcc += r * 0.72;
       }
+      mergeStaticGroupByMaterial(cairn);
       expGroup.add(cairn);
       registerCollider(cx, cz, 0.85 * scale, cy - 0.5, cy + 2.4 * scale, 'cairn');
     }
@@ -2451,6 +2631,7 @@
       nwBeaconLight.position.set(wx, wy + towerH + 1.4, wz);
       worldLandmarksGroup.add(nwBeaconLight);
       registerManagedLight(nwBeaconLight, 78.0);
+      mergeStaticGroupByMaterial(tower);
       expGroup.add(tower);
 
       // Basalt Arch Isle monolith ring
@@ -2566,6 +2747,7 @@
         rib.castShadow = true;
         wreck.add(rib);
       }
+      mergeStaticGroupByMaterial(wreck);
       expGroup.add(wreck);
       buildStoneCairn(-815.0, 755.0, 1.35);
     }
@@ -2593,6 +2775,7 @@
         rail.position.set(sx, 1.12, 0);
         bridge.add(rail);
       }
+      mergeStaticGroupByMaterial(bridge);
       expGroup.add(bridge);
       registerClimbableBox(bx, bz, 1.2, spanLen * 0.5, 0, bridgeY + 0.12, bridgeY - 1.5);
       buildStoneCairn(215.0, 42.0, 1.1);
@@ -7649,8 +7832,17 @@
       const rightLeg = buildArticulatedSongbirdLeg(1, sharedEagleAssets.songbirdLegMat);
       root.add(leftLeg.legPivot, rightLeg.legPivot);
 
+      // Merge static sub-meshes within each articulated songbird pivot (4 toes -> 1, 7 tail feathers -> 1, 3 crest plumes -> 1, paired eyes -> 1)
+      // Preserves 100% of wing, leg, beak, crest, head & tail articulation with zero visual loss
+      mergeStaticGroupByMaterial(crestGroup);
+      mergeStaticGroupByMaterial(tailFan);
+      mergeStaticGroupByMaterial(headPivot, new Set([crestGroup, lowerBeak]));
+      mergeStaticGroupByMaterial(leftLeg.footGroup);
+      mergeStaticGroupByMaterial(rightLeg.footGroup);
+
       const speciesScale = species === 'dove' ? 1.18 : (species === 'kingfisher' ? 1.08 : 1.02);
       root.scale.setScalar(speciesScale);
+      root.userData.species = 'songbird';
       root.traverse(ch => { if (ch.isMesh || ch.isInstancedMesh) ch.raycast = () => {}; });
       wildlifeGroup.add(root);
 
@@ -10897,12 +11089,19 @@
         if (ag.deathCollapseT >= 1.0) ag.state = 'carcass_settled';
         continue;
       }
-      if (ag.isDead) continue;
-
       const pos = ag.mesh.position;
       const dxP = px - pos.x;
       const dzP = pz - pos.z;
       const distP = Math.hypot(dxP, dzP);
+      // Tiered Longer-Sightline visibility culling (small 90m, medium 170m) with hysteresis buffer
+      const isSmallAg = (ag.species === 'rabbit' || ag.species === 'squirrel' || ag.species === 'crab');
+      const showDist = isSmallAg ? 90.0 : 170.0;
+      const hideDist = isSmallAg ? 96.0 : 178.0;
+      if (ag.mesh.visible && distP > hideDist) ag.mesh.visible = false;
+      else if (!ag.mesh.visible && distP <= showDist) ag.mesh.visible = true;
+
+      if (ag.isDead) continue;
+
       // Throttle distant wildlife (>95m) to 1/8th update rate to avoid 50+ full FBM/cave getTerrainHeight calls per frame
       if (distP > 95.0 && ((frameCounter + i) & 7) !== 0) continue;
       const stepDt = distP > 95.0 ? dt * 8.0 : dt;
@@ -11177,10 +11376,13 @@
         if (sh.deathCollapseT >= 1.0) sh.state = 'carcass_settled';
         continue;
       }
-      if (sh.isDead) continue;
       const sp = sh.mesh.position;
       const dxP = px - sp.x, dzP = pz - sp.z;
       const distP = Math.hypot(dxP, dzP);
+      // Medium-tier shark visibility culling (170m sightline with hysteresis)
+      if (sh.mesh.visible && distP > 178.0) sh.mesh.visible = false;
+      else if (!sh.mesh.visible && distP <= 170.0) sh.mesh.visible = true;
+      if (sh.isDead) continue;
       if (distP > 130.0 && ((frameCounter + s) & 7) !== 0) continue;
       sh.prevYaw = sh.yaw;
 
@@ -11356,8 +11558,12 @@
     for (let r = 0; r < snapperAgents.length; r++) {
       const sn = snapperAgents[r];
       if (!sn.mesh.parent) continue;
+      const snDist = Math.hypot(sn.cx - px, sn.cz - pz);
+      if (sn.mesh.visible && snDist > 96.0) sn.mesh.visible = false;
+      else if (!sn.mesh.visible && snDist <= 90.0) sn.mesh.visible = true;
+      if (!sn.mesh.visible) continue;
       sn.ang += dt * 0.65;
-      if (Math.hypot(sn.cx - px, sn.cz - pz) > 85.0 && ((frameCounter + r) & 3) !== 0) continue;
+      if (snDist > 85.0 && ((frameCounter + r) & 3) !== 0) continue;
       const sx = sn.cx + Math.cos(sn.ang) * sn.rad;
       const sz = sn.cz + Math.sin(sn.ang) * sn.rad;
       const sBed = getTerrainHeight(sx, sz);
@@ -11369,7 +11575,11 @@
 
     for (let st = 0; st < stingrayAgents.length; st++) {
       const ray = stingrayAgents[st];
-      if (Math.hypot(ray.cx - px, ray.cz - pz) > 120.0 && ((frameCounter + st) & 7) !== 0) continue;
+      const rayDist = Math.hypot(ray.cx - px, ray.cz - pz);
+      if (ray.mesh.visible && rayDist > 96.0) ray.mesh.visible = false;
+      else if (!ray.mesh.visible && rayDist <= 90.0) ray.mesh.visible = true;
+      if (!ray.mesh.visible) continue;
+      if (rayDist > 85.0 && ((frameCounter + st) & 3) !== 0) continue;
       ray.ang += dt * ray.speed;
       const rx = ray.cx + Math.cos(ray.ang) * ray.rad;
       const rz = ray.cz + Math.sin(ray.ang) * ray.rad;
@@ -11382,8 +11592,12 @@
     for (let f = 0; f < fishAgents.length; f++) {
       const fa = fishAgents[f];
       if (!fa.mesh.parent) continue;
+      const fDist = Math.hypot(fa.cx - px, fa.cz - pz);
+      if (fa.mesh.visible && fDist > 96.0) fa.mesh.visible = false;
+      else if (!fa.mesh.visible && fDist <= 90.0) fa.mesh.visible = true;
+      if (!fa.mesh.visible) continue;
       fa.ang += dt * 0.85;
-      if (Math.hypot(fa.cx - px, fa.cz - pz) > 85.0 && ((frameCounter + f) & 3) !== 0) continue;
+      if (fDist > 85.0 && ((frameCounter + f) & 3) !== 0) continue;
       fa.mesh.position.set(
         fa.cx + Math.cos(fa.ang) * fa.rad,
         fa.baseY + Math.sin(timeSec * 2.0 + f) * 0.12,
@@ -11395,11 +11609,18 @@
       }
     }
 
-    // Animate Two-Stage Articulated Sea Eagles & Coastal Tropicbirds / Seabirds (Flapping + Thermal Soaring Glide)
+    // Animate Two-Stage Articulated Sea Eagles & Coastal Tropicbirds / Seabirds (300m soaring sightline culling)
     for (let e = 0; e < eagleAgents.length; e++) {
       const ea = eagleAgents[e];
       const spd = ea.speed || 0.28;
       ea.ang += dt * spd;
+      const ex = ea.cx + Math.cos(ea.ang) * ea.rad;
+      const ez = ea.cz + Math.sin(ea.ang) * ea.rad;
+      const eDist = Math.hypot(ex - px, ez - pz);
+      if (ea.mesh.visible && eDist > 312.0) ea.mesh.visible = false;
+      else if (!ea.mesh.visible && eDist <= 300.0) ea.mesh.visible = true;
+      if (!ea.mesh.visible) continue;
+
       const flapFreq = ea.flapFreq || 5.2;
       // Alternate naturally between active flapping wingbeats and smooth cambered thermal glides
       const glideMod = 0.55 + 0.45 * Math.sin(timeSec * 0.9 + e * 1.7);
@@ -11408,9 +11629,9 @@
       const outerFlex = Math.cos(phase - 0.35) * (ea.isSeabird ? 0.28 : 0.22) * glideMod;
 
       ea.mesh.position.set(
-        ea.cx + Math.cos(ea.ang) * ea.rad,
+        ex,
         ea.alt + Math.sin(timeSec * 0.85 + e) * 1.8 - Math.cos(phase) * 0.08 * glideMod,
-        ea.cz + Math.sin(ea.ang) * ea.rad
+        ez
       );
       ea.mesh.rotation.y = -ea.ang;
       ea.mesh.rotation.z = 0.18 + Math.sin(timeSec * 0.7 + e) * 0.06;
@@ -11423,7 +11644,20 @@
       }
     }
 
-    // 6D. Animate Low-Flying Perching, Walking & Foraging Island Birds (Flying, Landing Flare, Sitting on Branches/Rocks, Ground Walking/Pecking & Mild Fear)
+    // Distance visibility culling for small minor ground props (obsidian clusters beyond 220m)
+    if ((frameCounter & 7) === 0 && minorStaticProps.length > 0) {
+      for (let mp = 0; mp < minorStaticProps.length; mp++) {
+        const item = minorStaticProps[mp];
+        if (!item.obj || !item.obj.parent) continue;
+        const dSq = (item.x - px) * (item.x - px) + (item.z - pz) * (item.z - pz);
+        const showSq = item.maxDist * item.maxDist;
+        const hideSq = (item.maxDist + 10.0) * (item.maxDist + 10.0);
+        if (item.obj.visible && dSq > hideSq) item.obj.visible = false;
+        else if (!item.obj.visible && dSq <= showSq) item.obj.visible = true;
+      }
+    }
+
+    // 6D. Animate Low-Flying Perching, Walking & Foraging Island Birds (90m small-wildlife sightline culling)
     const playerHorizSpeed = Math.hypot(player.vel.x, player.vel.z);
     const playerDisturbScale = player.isCrouching ? 0.65 : (playerHorizSpeed > 5.2 ? 1.32 : 1.0);
     for (let b = 0; b < forestBirdAgents.length; b++) {
@@ -11432,8 +11666,10 @@
       const dxP = px - pos.x;
       const dzP = pz - pos.z;
       const distP = Math.hypot(dxP, dzP);
-      if (distP > 115.0 && ((frameCounter + b) & 3) !== 0) continue;
-      const stepDt = (distP > 115.0) ? dt * 4.0 : dt;
+      if (fb.mesh.visible && distP > 96.0) fb.mesh.visible = false;
+      else if (!fb.mesh.visible && distP <= 90.0) fb.mesh.visible = true;
+      if (!fb.mesh.visible) continue;
+      const stepDt = dt;
       const dyP = Math.abs((py + 1.4) - pos.y);
 
       // Check if host tree or boulder was felled/mined while perched

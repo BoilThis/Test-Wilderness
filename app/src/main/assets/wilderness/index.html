@@ -4857,7 +4857,11 @@
       const h10 = heightsArr[i00 + 1];
       const h01 = heightsArr[i00 + cols];
       const h11 = heightsArr[i00 + cols + 1];
-      return (h00 + (h10 - h00) * sx) * (1.0 - sz) + (h01 + (h11 - h01) * sx) * sz;
+      // Exact two-triangle barycentric interpolation matching PlaneGeometry's (a,b,d) / (b,c,d) diagonal split
+      if (sx + sz <= 1.0) {
+        return h00 + (h10 - h00) * sx + (h01 - h00) * sz;
+      }
+      return h11 + (h01 - h11) * (1.0 - sx) + (h10 - h11) * (1.0 - sz);
     }
     window.sampleTerrainMeshHeight = sampleTerrainMeshHeight;
 
@@ -7430,7 +7434,8 @@
 
       if (trackGlobals) {
         activeEZTrees.push(tree);
-        treeFootprints.push({ x, z, r: footprintRad });
+        const trunkR = isBush ? 0.0 : Math.max(0.24, Math.min(0.46, s * 1.15));
+        treeFootprints.push({ x, z, r: footprintRad, trunkR, isBush });
         if (!isBush && window.treeImpostorSystem) {
           window.treeImpostorSystem.registerTree(tree, presetName, proto);
         }
@@ -7438,11 +7443,55 @@
       return tree;
     }
 
-    // --- PRESET-BATCHED GPU-INSTANCED EZ-TREE LOD1 SYSTEM (Exact EZ-Tree Silhouette, Bark & Foliage Cards beyond ~68m) ---
+    // --- PRESET-BATCHED GPU-INSTANCED EZ-TREE LOD SYSTEM (O(1) Dense Swap-Remove Compaction: 0 Degenerate Zero-Scale Triangles) ---
     window.treeImpostorSystem = (function() {
       const MAX_PER_PRESET = 260;
-      const zeroMat = new THREE.Matrix4().makeScale(0, 0, 0);
       const batches = new Map();
+      const nearBatches = new Map();
+
+      function createCompactPool(inst) {
+        const active = [];
+        const slotOf = new Map();
+        return {
+          inst,
+          add(tree, mat) {
+            const existing = slotOf.get(tree);
+            if (existing !== undefined) {
+              inst.setMatrixAt(existing, mat);
+              inst.instanceMatrix.needsUpdate = true;
+              return;
+            }
+            const idx = active.length;
+            if (idx >= MAX_PER_PRESET) return;
+            active.push(tree);
+            slotOf.set(tree, idx);
+            inst.setMatrixAt(idx, mat);
+            inst.count = active.length;
+            inst.instanceMatrix.needsUpdate = true;
+          },
+          remove(tree) {
+            const idx = slotOf.get(tree);
+            if (idx === undefined) return;
+            const lastIdx = active.length - 1;
+            if (idx !== lastIdx) {
+              const lastTree = active[lastIdx];
+              active[idx] = lastTree;
+              slotOf.set(lastTree, idx);
+              inst.setMatrixAt(idx, lastTree.userData.impostorMat);
+            }
+            active.pop();
+            slotOf.delete(tree);
+            inst.count = active.length;
+            if (active.length > 0) inst.instanceMatrix.needsUpdate = true;
+          },
+          updateMat(tree, mat) {
+            const idx = slotOf.get(tree);
+            if (idx === undefined) return;
+            inst.setMatrixAt(idx, mat);
+            inst.instanceMatrix.needsUpdate = true;
+          }
+        };
+      }
 
       function getOrCreateBatch(presetName, proto) {
         if (batches.has(presetName)) return batches.get(presetName);
@@ -7459,21 +7508,21 @@
         // Skip planar water reflection for distant alpha-tested leaves while keeping Layer 1 enabled on main camera
         leafInst.layers.set(1);
 
-        for (let i = 0; i < MAX_PER_PRESET; i++) {
-          branchInst.setMatrixAt(i, zeroMat);
-          leafInst.setMatrixAt(i, zeroMat);
-        }
         branchInst.count = 0;
         leafInst.count = 0;
         scene.add(branchInst);
         scene.add(leafInst);
 
-        const batch = { branchInst, leafInst, count: 0 };
+        const batch = {
+          branchInst,
+          leafInst,
+          branchPool: createCompactPool(branchInst),
+          leafPool: createCompactPool(leafInst),
+          count: 0
+        };
         batches.set(presetName, batch);
         return batch;
       }
-
-      const nearBatches = new Map();
 
       function makeNearMesh(geo, mat, shadow) {
         const inst = new THREE.InstancedMesh(geo, mat, MAX_PER_PRESET);
@@ -7482,7 +7531,6 @@
         inst.receiveShadow = shadow;
         inst.frustumCulled = false;
         inst.count = 0;
-        for (let i = 0; i < MAX_PER_PRESET; i++) inst.setMatrixAt(i, zeroMat);
         scene.add(inst);
         return inst;
       }
@@ -7495,31 +7543,31 @@
           inst.layers.set(1);
           return inst;
         });
+        const branchShadow = makeNearMesh(proto.branchGeo, proto.branchMat, true);
+        const branchPlain = makeNearMesh(proto.branchGeo, proto.branchMat, false);
+        branchShadow.receiveShadow = true;
+        branchPlain.receiveShadow = true;
         const batch = {
-          branchShadow: makeNearMesh(proto.branchGeo, proto.branchMat, true),
-          branchPlain: makeNearMesh(proto.branchGeo, proto.branchMat, false),
+          branchShadow,
+          branchPlain,
           leaves,
-          count: 0,
-          dirty: false
+          shadowPool: createCompactPool(branchShadow),
+          plainPool: createCompactPool(branchPlain),
+          leafPools: leaves.map(inst => createCompactPool(inst)),
+          count: 0
         };
-        batch.branchShadow.receiveShadow = true;
-        batch.branchPlain.receiveShadow = true;
         nearBatches.set(presetName, batch);
         return batch;
       }
 
       return {
         batches,
+        nearBatches,
         registerTree(tree, presetName, proto) {
           if (!proto || !proto.lod1BranchGeo || !proto.lod1LeafGeo) return;
           const batch = getOrCreateBatch(presetName, proto);
           if (batch.count >= MAX_PER_PRESET) return;
           const slot = batch.count++;
-          batch.branchInst.setMatrixAt(slot, zeroMat);
-          batch.leafInst.setMatrixAt(slot, zeroMat);
-          batch.branchInst.count = batch.count;
-          batch.leafInst.count = batch.count;
-
           tree.userData.impostorBatch = batch;
           tree.userData.impostorSlot = slot;
           tree.userData.impostorMat = tree.matrixWorld.clone();
@@ -7528,9 +7576,6 @@
           if (proto.leafGeo && proto.leafMats && proto.leafMats.length >= 3) {
             const near = getOrCreateNear(presetName, proto);
             const nearSlot = near.count++;
-            near.branchShadow.count = near.count;
-            near.branchPlain.count = near.count;
-            near.leaves.forEach(inst => { inst.count = near.count; });
             tree.userData.nearBatch = near;
             tree.userData.nearSlot = nearSlot;
             tree.userData.nearState = 'off';
@@ -7541,44 +7586,50 @@
           if (tree.userData.isImpostorActive === active) return;
           tree.userData.isImpostorActive = active;
           const batch = tree.userData.impostorBatch;
-          const slot = tree.userData.impostorSlot;
-          const m = active ? tree.userData.impostorMat : zeroMat;
-          batch.branchInst.setMatrixAt(slot, m);
-          batch.leafInst.setMatrixAt(slot, m);
-          batch.branchInst.instanceMatrix.needsUpdate = true;
-          batch.leafInst.instanceMatrix.needsUpdate = true;
+          if (active) {
+            const m = tree.userData.impostorMat;
+            batch.branchPool.add(tree, m);
+            batch.leafPool.add(tree, m);
+          } else {
+            batch.branchPool.remove(tree);
+            batch.leafPool.remove(tree);
+          }
         },
         setNearState(tree, state) {
           if (!tree || !tree.userData || tree.userData.nearSlot === undefined) return;
           if (tree.userData.nearState === state) return;
+          const prevState = tree.userData.nearState;
           tree.userData.nearState = state;
           const batch = tree.userData.nearBatch;
-          const slot = tree.userData.nearSlot;
-          const m = state === 'off' ? zeroMat : tree.userData.impostorMat;
+          const m = tree.userData.impostorMat;
           const tint = tree.userData.leafTint || 0;
-          batch.branchShadow.setMatrixAt(slot, state === 'shadow' ? m : zeroMat);
-          batch.branchPlain.setMatrixAt(slot, state === 'plain' ? m : zeroMat);
-          for (let t = 0; t < 3; t++) {
-            batch.leaves[t].setMatrixAt(slot, (state !== 'off' && t === tint) ? m : zeroMat);
+          if (state === 'shadow') {
+            if (prevState === 'plain') batch.plainPool.remove(tree);
+            batch.shadowPool.add(tree, m);
+            batch.leafPools[tint].add(tree, m);
+          } else if (state === 'plain') {
+            if (prevState === 'shadow') batch.shadowPool.remove(tree);
+            batch.plainPool.add(tree, m);
+            batch.leafPools[tint].add(tree, m);
+          } else {
+            if (prevState === 'shadow') batch.shadowPool.remove(tree);
+            else if (prevState === 'plain') batch.plainPool.remove(tree);
+            batch.leafPools[tint].remove(tree);
           }
-          batch.dirty = true;
         },
         refreshNear(tree) {
           if (!tree || !tree.userData || !tree.userData.nearState || tree.userData.nearState === 'off') return;
           tree.updateMatrixWorld(true);
           tree.userData.impostorMat.copy(tree.matrixWorld);
-          const state = tree.userData.nearState;
-          tree.userData.nearState = null;
-          this.setNearState(tree, state);
+          const batch = tree.userData.nearBatch;
+          const m = tree.userData.impostorMat;
+          const tint = tree.userData.leafTint || 0;
+          if (tree.userData.nearState === 'shadow') batch.shadowPool.updateMat(tree, m);
+          else if (tree.userData.nearState === 'plain') batch.plainPool.updateMat(tree, m);
+          batch.leafPools[tint].updateMat(tree, m);
         },
         flushNear() {
-          nearBatches.forEach(batch => {
-            if (!batch.dirty) return;
-            batch.branchShadow.instanceMatrix.needsUpdate = true;
-            batch.branchPlain.instanceMatrix.needsUpdate = true;
-            batch.leaves.forEach(inst => { inst.instanceMatrix.needsUpdate = true; });
-            batch.dirty = false;
-          });
+          // Matrices are already flagged needsUpdate on O(1) swap-remove mutation
         }
       };
     })();
@@ -11877,18 +11928,28 @@
           if (spec.seed === 27 && site.maxUpslope < 3.4) continue;
 
           const sc = scMin + Math.pow(geoRand(), 0.85) * (scMax - scMin);
-          dummy.position.set(lx, ly - sc * (spec.seed === 22 ? 0.14 : 0.38), lz);
+          // 5-point perimeter minimum grounding so canyon/escarpment rocks embed firmly into steep slopes with zero floating undersides
+          const fpR = Math.max(0.45, sc * 0.68);
+          const hN = sampleTerrainMeshHeight(lx, lz + fpR);
+          const hS = sampleTerrainMeshHeight(lx, lz - fpR);
+          const hE = sampleTerrainMeshHeight(lx + fpR, lz);
+          const hW = sampleTerrainMeshHeight(lx - fpR, lz);
+          const minFootY = Math.min(ly, hN, hS, hE, hW);
+          const slopeDrop = Math.max(0.0, ly - minFootY);
+          const embedDepth = sc * (spec.seed === 22 ? 0.16 : 0.42) + slopeDrop * 0.22;
+          const rockY = minFootY - embedDepth + slopeDrop * 0.15;
+          dummy.position.set(lx, rockY, lz);
           dummy.scale.set(sc * (0.88 + geoRand() * 0.28), sc * (0.82 + geoRand() * 0.36), sc * (0.88 + geoRand() * 0.28));
           dummy.rotation.set((geoRand() - 0.5) * (spec.seed === 22 ? 0.08 : 0.22), geoRand() * Math.PI * 2, (geoRand() - 0.5) * (spec.seed === 22 ? 0.08 : 0.22));
           dummy.updateMatrix();
           lMesh.setMatrixAt(placedLoc, dummy.matrix);
           if (spec.seed !== 22 && sc >= 0.80) {
             window.instancedRockColliders.push({
-              x: lx, y: ly - sc * 0.38, z: lz,
+              x: lx, y: rockY, z: lz,
               r: sc * 0.78,
-              minY: ly - sc,
-              maxY: ly + sc * 0.76,
-              topY: ly + sc * 0.80,
+              minY: rockY - sc * 0.8,
+              maxY: rockY + sc * 1.14,
+              topY: rockY + sc * 1.18,
               climbable: true
             });
           }
@@ -12505,7 +12566,7 @@
         for (let i = 0; i <= lengthSteps; i++) {
           if (yieldFn && (i === 72 || i === 144)) await yieldFn();
           const tStep = i / lengthSteps;
-          const sRaw = -0.015 + tStep * 1.015;
+          const sRaw = -0.032 + tStep * 1.032;
           const sClamped = Math.max(0.0, sRaw);
           const pt = cave.getPoint(sClamped);
           const cx = sRaw < 0.0 ? (pt.x + cave.dirX * (sRaw * cave.length)) : pt.x;
@@ -12513,7 +12574,7 @@
           const floorY = sRaw < 0.0 ? cave.baseY : pt.floorY;
           const distM = Math.max(0.0, sRaw * cave.length);
 
-          const entranceFlare = sRaw < 0.0 ? (1.0 + Math.abs(sRaw / 0.015) * 0.16) : 1.0;
+          const entranceFlare = sRaw < 0.0 ? (1.0 + Math.abs(sRaw / 0.032) * 0.28) : 1.0;
           // Note: cave.getPoint(sClamped) already applies endCap taper; do NOT apply a second endCap here
           const halfW = pt.halfW * entranceFlare;
           const roofH = (pt.ceilY - pt.floorY) * entranceFlare;
@@ -12835,12 +12896,12 @@
                       segHalfW = (sa.halfW + (sb.halfW - sa.halfW) * f);
                     }
                   }
-                  const cutHalfW = Math.max(jp.mouthHalfW * 0.90, segHalfW * 0.94) + 0.10;
+                  const cutHalfW = Math.max(jp.mouthHalfW * 0.86, segHalfW * 0.90) + 0.04;
                   const normD = minSegD / Math.max(1.0, cutHalfW);
                   if (normD < 1.0) {
                     const minFloor = Math.min(jp.floorY, segFloorY);
-                    const archCeilTop = segFloorY + (Math.min(jp.ceilY - jp.floorY, segCeilH) + 0.05) * Math.pow(Math.max(0.0, 1.0 - normD * normD), 0.46);
-                    if (qy > minFloor + 0.04 && qy < archCeilTop) {
+                    const archCeilTop = segFloorY + (Math.min(jp.ceilY - jp.floorY, segCeilH) - 0.04) * Math.pow(Math.max(0.0, 1.0 - normD * normD), 0.46);
+                    if (qy > minFloor + 0.06 && qy < archCeilTop) {
                       skipQuad = true;
                       break;
                     }
@@ -12945,11 +13006,11 @@
           const jPerpX = -jp.seamOutZ, jPerpZ = jp.seamOutX;
           const jYaw = Math.atan2(jp.seamOutX, jp.seamOutZ);
 
-          // Watertight Curved 3D Junction Arch Collar Sleeve swept along jp.seamSamples & culled against main-tunnel lumen
-          // Seals parent-to-branch crown corners on rising/dropping/curving branches while keeping parent tunnel 100% clear
+          // Watertight Closed 360-Degree Outer Junction Baffle Sleeve swept along jp.seamSamples
+          // Seals parent-to-branch floor corners, rising branch crowns (e.g. lava_upper_tube), and oblique jamb seams with zero lumen intrusion
           {
-            const jcRings = 12;
-            const jcSegs = 28;
+            const jcRings = 18;
+            const jcSegs = 32;
             const jcPos = [], jcUVs = [], jcCrev = [], jcIdx = [];
             const ss = jp.seamSamples || [];
             // Build arc-length table along seamSamples starting from the parent-wall seam crossing
@@ -12967,14 +13028,17 @@
                 const prev = throatPath[throatPath.length - 1];
                 pathAccum += Math.hypot(sp.x - prev.x, sp.z - prev.z);
               }
+              const blendJ = Math.max(0.0, 1.0 - pathAccum / 3.5);
+              const spCeilH = sp.ceilH || (jp.ceilY - jp.floorY);
+              const spHalfW = sp.halfW || jp.mouthHalfW;
               throatPath.push({
                 dist: pathAccum,
                 x: sp.x, z: sp.z,
                 floorY: sp.floorY,
-                ceilH: Math.max(jp.ceilY - jp.floorY, sp.ceilH || (jp.ceilY - jp.floorY)),
-                halfW: Math.max(jp.mouthHalfW, sp.halfW || jp.mouthHalfW)
+                ceilH: spCeilH + Math.max(0.0, (jp.ceilY - jp.floorY) - spCeilH) * blendJ,
+                halfW: spHalfW + Math.max(0.0, jp.mouthHalfW - spHalfW) * blendJ
               });
-              if (pathAccum > 9.5) break;
+              if (pathAccum > 14.5) break;
             }
             const evalThroatAt = (along) => {
               if (throatPath.length < 2 || along <= 0.0) {
@@ -13011,36 +13075,57 @@
 
             for (let r = 0; r <= jcRings; r++) {
               const tr = r / jcRings;
-              let along, radScale;
-              if (r <= 2) {
-                const f = r / 2.0;
-                along = -2.20 + f * 2.50;
-                radScale = 1.78 - f * 0.64;
-              } else if (r <= 9) {
-                const f = (r - 2) / 7.0;
-                along = 0.30 + f * 7.60;
-                radScale = 1.14 + Math.sin(f * Math.PI) * 0.08;
+              let along, radScale, yScale = 1.0;
+              if (r === 0) {
+                // Inner rear bulkhead rim extending deep inside uncut main-tunnel roof & floor skins (walkable opening carved below)
+                along = -2.85;
+                radScale = 0.80;
+                yScale = 0.56;
+              } else if (r === 1) {
+                // Rear annular bulkhead flange sealing open back end of baffle sleeve past main roof crown
+                along = -2.85;
+                radScale = 1.56;
+              } else if (r <= 4) {
+                const f = (r - 1) / 3.0;
+                along = -2.85 + f * 3.15;
+                radScale = 1.56 - f * 0.22;
+              } else if (r <= 15) {
+                const f = (r - 4) / 11.0;
+                along = 0.30 + f * 12.10;
+                radScale = 1.34 + Math.sin(f * Math.PI) * 0.08;
+              } else if (r === 16) {
+                along = 13.00;
+                radScale = 1.24;
+              } else if (r === 17) {
+                // Front annular bulkhead flange seated flush onto uncut branch outer skin (zero inward protrusion)
+                along = 13.00;
+                radScale = 0.85;
+                yScale = 0.72;
               } else {
-                const f = (r - 9) / 3.0;
-                along = 7.90 - f * 1.15;
-                radScale = 1.14 + f * 0.50;
+                along = 13.20;
+                radScale = 0.78;
+                yScale = 0.68;
               }
               const tp = evalThroatAt(along);
-              const ringHW = Math.max(2.6, tp.halfW * 1.12);
-              const ringCH = Math.max(3.8, tp.ceilH * 1.28);
+              const ringHW = Math.max(2.9, tp.halfW * 1.18);
+              const ringCH = Math.max(4.4, tp.ceilH * 1.38);
+              const baseFloor = Math.min(tp.floorY, jp.floorY);
+              const subFloorDrop = (r >= 17) ? 0.18 : 1.85;
+              const useHW = (r >= 17) ? (tp.halfW * 1.18) : ringHW;
+              const useCH = (r >= 17) ? (tp.ceilH * 1.38) : ringCH;
               for (let a = 0; a <= jcSegs; a++) {
                 const ua = a / jcSegs;
-                const ang = Math.PI * (-0.16 + ua * 1.32);
+                const ang = ua * Math.PI * 2.0; // Full 360° closed ring (floor included) so zero low-angle floor slivers escape
                 const cosA = Math.cos(ang), sinA = Math.sin(ang);
-                const crag = 1.0 + (fbm2(tp.x * 0.22 + cosA * 2.2, tp.z * 0.22 + sinA * 2.2, 2) - 0.45) * 0.12;
-                const latW = cosA * ringHW * radScale * crag;
+                const crag = 1.0 + (fbm2(tp.x * 0.22 + cosA * 2.2, tp.z * 0.22 + sinA * 2.2, 2) - 0.45) * 0.10;
+                const latW = cosA * useHW * radScale * crag;
                 const vx = tp.x + tp.perpX * latW;
                 const vz = tp.z + tp.perpZ * latW;
                 const vy = sinA >= 0
-                  ? (tp.floorY + Math.pow(sinA, 0.58) * ringCH * radScale * crag)
-                  : (tp.floorY + sinA * 2.2 * radScale);
+                  ? (tp.floorY + Math.pow(sinA, 0.56) * useCH * radScale * yScale * crag)
+                  : ((r >= 17 ? tp.floorY : baseFloor) + 0.02 + sinA * subFloorDrop * radScale);
                 jcPos.push(vx, vy, vz);
-                jcUVs.push(ua * 4.2, tr * 2.8);
+                jcUVs.push(ua * 5.0, tr * 3.2);
                 jcCrev.push(0.45, 0.35, sinA > 0.65 ? 0.55 : 0.20);
               }
             }
@@ -13051,8 +13136,8 @@
                 const qx = (jcPos[pA * 3] + jcPos[pB * 3] + jcPos[pC * 3] + jcPos[pD * 3]) * 0.25;
                 const qy = (jcPos[pA * 3 + 1] + jcPos[pB * 3 + 1] + jcPos[pC * 3 + 1] + jcPos[pD * 3 + 1]) * 0.25;
                 const qz = (jcPos[pA * 3 + 2] + jcPos[pB * 3 + 2] + jcPos[pC * 3 + 2] + jcPos[pD * 3 + 2]) * 0.25;
-                // Keep walkable main-tunnel lumen 100% clear below 3.4m; keep high upper crown arch intact to seal vault seams
-                if (qy < jp.floorY + 3.40 && isPointInMainCaveLumen(qx, qy, qz, 0.86)) continue;
+                // Keep walkable main-tunnel core clear while keeping rear/front bulkhead flanges, floor-edge skirt & high arch sealed
+                if (r <= 5 && qy > jp.floorY + 0.22 && qy < jp.floorY + 2.85 && isPointInMainCaveLumen(qx, qy, qz, 0.68)) continue;
                 jcIdx.push(pA, pB, pC, pB, pD, pC);
               }
             }
@@ -13556,14 +13641,17 @@
           const bStride = bRadial + 1;
           for (let i = 0; i < bSteps; i++) {
             const spI = samp[i];
+            const nearJunctionEnd = spI.t < 0.18 || (br.isLoop && spI.t > 0.82);
             for (let j = 0; j < bRadial; j++) {
               const a = i * bStride + j, b = a + 1, c = (i + 1) * bStride + j, d = c + 1;
-              const qx = (bPos[a * 3] + bPos[b * 3] + bPos[c * 3] + bPos[d * 3]) * 0.25;
-              const qy = (bPos[a * 3 + 1] + bPos[b * 3 + 1] + bPos[c * 3 + 1] + bPos[d * 3 + 1]) * 0.25;
-              const qz = (bPos[a * 3 + 2] + bPos[b * 3 + 2] + bPos[c * 3 + 2] + bPos[d * 3 + 2]) * 0.25;
-              const cullScale = (qy < spI.floorY + 3.40) ? 0.72 : 0.48;
-              if (isPointInMainCaveLumen(qx, qy, qz, cullScale)) {
-                continue;
+              if (nearJunctionEnd) {
+                const qx = (bPos[a * 3] + bPos[b * 3] + bPos[c * 3] + bPos[d * 3]) * 0.25;
+                const qy = (bPos[a * 3 + 1] + bPos[b * 3 + 1] + bPos[c * 3 + 1] + bPos[d * 3 + 1]) * 0.25;
+                const qz = (bPos[a * 3 + 2] + bPos[b * 3 + 2] + bPos[c * 3 + 2] + bPos[d * 3 + 2]) * 0.25;
+                const cullScale = (qy < spI.floorY + 2.75) ? 0.62 : 0.30;
+                if (qy > spI.floorY + 0.22 && isPointInMainCaveLumen(qx, qy, qz, cullScale)) {
+                  continue;
+                }
               }
               bIndices.push(a, b, c, b, d, c);
             }
@@ -17113,7 +17201,7 @@
 
       // Hydrology, Subterranean Caves & 3D Underwater Swimming
       const wInfo = getWaterInfo(player.pos.x, player.pos.z, timeSec);
-      const terrY = getTerrainHeight(player.pos.x, player.pos.z);
+      const terrY = Math.max(getTerrainHeight(player.pos.x, player.pos.z), sampleTerrainMeshHeight(player.pos.x, player.pos.z));
       const caveNavPre = getCaveNavigationInfo(player.pos.x, player.pos.z, player.pos.y);
       const inCavePre = !!(caveNavPre && (caveNavPre.isInside || caveNavPre.s > 0.015 || caveNavPre.branch)) || !!(player._lastCaveNav && player.pos.y < terrY - 2.2);
       const localGroundY = (caveNavPre && (caveNavPre.s > 0.0 || caveNavPre.branch)) ? caveNavPre.floorY : terrY;
@@ -17333,7 +17421,9 @@
       }
 
       let targetEyeH = 1.88;
-      let effectiveGroundY = getTerrainHeight(player.pos.x, player.pos.z);
+      const surfaceAnalyticY = getTerrainHeight(player.pos.x, player.pos.z);
+      const surfaceMeshY = sampleTerrainMeshHeight(player.pos.x, player.pos.z);
+      let effectiveGroundY = Math.max(surfaceAnalyticY, surfaceMeshY);
       if (window.getSupportSurfaceY && !isCaveActive) {
         effectiveGroundY = Math.max(effectiveGroundY, window.getSupportSurfaceY(player.pos.x, player.pos.z, player.pos.y));
       }
