@@ -70,6 +70,27 @@
       rifle: false
     },
     bowDraw: { holding: false, power: 0, holdTime: 0 },
+    rangedAim: {
+      active: false,
+      tool: null,
+      pointerMode: null,
+      touchId: null,
+      lastX: 0,
+      lastY: 0,
+      startX: 0,
+      startY: 0,
+      holdTime: 0,
+      overCancel: false,
+      breathHapticFired: false
+    },
+    weaponRecoil: {
+      camPitch: 0,
+      camYaw: 0,
+      modelZ: 0,
+      modelPitch: 0,
+      fovPunch: 0
+    },
+    weaponPoseBlend: 0,
     crossbowCooldown: 0,
     bleedTimer: 0,
     activeHarvest: null,
@@ -3569,7 +3590,7 @@
 
   // 7F. AAA Hunting Weapons & Explosives (Recurve Bow, Crossbow, Scavenged Pistol, Hunting Rifle, Dynamite Bundle)
   function buildHuntingWeapons() {
-    // 1. Recurve Hunting Bow
+    // 1. Recurve Hunting Bow (Split Animated Bowstring Halves + Nocked Arrow)
     {
       const g = toolMeshes.bow;
       const limbCurve = new THREE.CatmullRomCurve3([
@@ -3584,10 +3605,15 @@
       const gripWrap = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.16, 10), matRawhide);
       gripWrap.position.set(0, 0, -0.15);
       g.add(gripWrap);
-      const strGeo = new THREE.CylinderGeometry(0.0028, 0.0028, 1.08, 6);
-      const stringMesh = new THREE.Mesh(strGeo, matRawhide);
-      stringMesh.position.set(0, 0, 0.08);
-      g.add(stringMesh);
+      const halfStrGeo = new THREE.CylinderGeometry(0.0028, 0.0028, 1.0, 6);
+      const upperString = new THREE.Mesh(halfStrGeo, matRawhide);
+      upperString.position.set(0, 0.28, 0.08);
+      upperString.scale.set(1, 0.56, 1);
+      g.add(upperString);
+      const lowerString = new THREE.Mesh(halfStrGeo, matRawhide);
+      lowerString.position.set(0, -0.28, 0.08);
+      lowerString.scale.set(1, 0.56, 1);
+      g.add(lowerString);
       const nockedArrow = new THREE.Group();
       const aShaft = new THREE.Mesh(new THREE.CylinderGeometry(0.0055, 0.0055, 0.68, 6), matHickory);
       aShaft.rotation.x = Math.PI / 2;
@@ -3599,7 +3625,8 @@
       nockedArrow.add(aTip);
       g.add(nockedArrow);
       g.userData.nockedArrow = nockedArrow;
-      g.userData.stringMesh = stringMesh;
+      g.userData.upperString = upperString;
+      g.userData.lowerString = lowerString;
       g.position.set(0.28, -0.24, -0.54);
       g.rotation.set(0.08, 0.16, -0.22);
       g.visible = false;
@@ -3784,11 +3811,102 @@
   buildGhost.visible = false;
   scene.add(buildGhost);
 
+  const RANGED_WEAPON_CONFIG = {
+    bow: {
+      sensScale: 0.55,
+      zoomFov: -6.5,
+      hipPos: { x: 0.28, y: -0.24, z: -0.54 },
+      hipRot: { x: 0.08, y: 0.16, z: -0.22 },
+      aimPos: { x: 0.15, y: -0.13, z: -0.45 },
+      aimRot: { x: 0.03, y: 0.05, z: -0.54 },
+      recoil: { camPitch: 0.018, camYawJitter: 0.004, modelZ: 0.055, modelPitch: 0.08, fovPunch: 1.0, hapticMs: 16 },
+      emptyMsg: '🏹 Out of Arrows! Recover shot arrows or craft more in Pack.'
+    },
+    crossbow: {
+      sensScale: 0.50,
+      zoomFov: -8.0,
+      hipPos: { x: 0.30, y: -0.28, z: -0.52 },
+      hipRot: { x: 0.0, y: 0.0, z: 0.0 },
+      aimPos: { x: 0.11, y: -0.15, z: -0.41 },
+      aimRot: { x: 0.01, y: 0.03, z: 0.0 },
+      recoil: { camPitch: 0.032, camYawJitter: 0.008, modelZ: 0.085, modelPitch: 0.14, fovPunch: 1.6, hapticMs: 22 },
+      emptyMsg: '🎯 Out of Bolts & Arrows! Pick up fired bolts/arrows or craft in Pack.'
+    },
+    pistol: {
+      sensScale: 0.58,
+      zoomFov: -5.5,
+      hipPos: { x: 0.30, y: -0.28, z: -0.50 },
+      hipRot: { x: 0.0, y: 0.0, z: 0.0 },
+      aimPos: { x: 0.09, y: -0.16, z: -0.40 },
+      aimRot: { x: 0.01, y: 0.02, z: 0.0 },
+      muzzleOffset: { right: 0.08, up: -0.09, fwd: 0.72 },
+      recoil: { camPitch: 0.044, camYawJitter: 0.012, modelZ: 0.095, modelPitch: 0.25, fovPunch: 1.9, hapticMs: 24 },
+      emptyMsg: '🔫 Out of Pistol Rounds! Search outer island expedition crates.'
+    },
+    rifle: {
+      sensScale: 0.42,
+      zoomFov: -11.5,
+      hipPos: { x: 0.28, y: -0.28, z: -0.48 },
+      hipRot: { x: 0.0, y: 0.0, z: 0.0 },
+      aimPos: { x: 0.07, y: -0.15, z: -0.36 },
+      aimRot: { x: 0.0, y: 0.02, z: 0.0 },
+      muzzleOffset: { right: 0.07, up: -0.09, fwd: 1.05 },
+      recoil: { camPitch: 0.070, camYawJitter: 0.016, modelZ: 0.14, modelPitch: 0.28, fovPunch: 3.1, hapticMs: 36 },
+      emptyMsg: '🎯 Out of Rifle Rounds! Search outer island & deep cave caches.'
+    },
+    flare: {
+      sensScale: 0.62,
+      zoomFov: -4.0,
+      hipPos: { x: 0.34, y: -0.34, z: -0.56 },
+      hipRot: { x: 0.0, y: 0.0, z: 0.0 },
+      aimPos: { x: 0.13, y: -0.20, z: -0.45 },
+      aimRot: { x: 0.05, y: 0.03, z: 0.0 },
+      muzzleOffset: { right: 0.11, up: -0.11, fwd: 0.80 },
+      recoil: { camPitch: 0.050, camYawJitter: 0.010, modelZ: 0.11, modelPitch: 0.26, fovPunch: 2.2, hapticMs: 32 },
+      emptyMsg: '⚠️ Out of Signal Flares! Craft more in Pack (1 Obsidian + 1 Bamboo).'
+    }
+  };
+  window.RANGED_WEAPON_CONFIG = RANGED_WEAPON_CONFIG;
+
+  function isRangedAimTool(toolId) {
+    return Object.prototype.hasOwnProperty.call(RANGED_WEAPON_CONFIG, toolId);
+  }
+  function getRangedAmmoCount(toolId) {
+    if (toolId === 'bow') return player.inventory.arrows || 0;
+    if (toolId === 'crossbow') return (player.inventory.bolts || 0) + (player.inventory.arrows || 0);
+    if (toolId === 'pistol') return player.inventory.pistolAmmo || 0;
+    if (toolId === 'rifle') return player.inventory.rifleAmmo || 0;
+    if (toolId === 'flare') return player.inventory.flares || 0;
+    return 0;
+  }
+  function resetRangedAimState() {
+    const aim = campaign.rangedAim;
+    aim.active = false;
+    aim.tool = null;
+    aim.pointerMode = null;
+    aim.touchId = null;
+    aim.holdTime = 0;
+    aim.overCancel = false;
+    aim.breathHapticFired = false;
+    campaign.bowDraw.holding = false;
+    campaign.bowDraw.power = 0;
+    campaign.bowDraw.holdTime = 0;
+    window._bowBreathSteady = false;
+    const strikeEl = document.getElementById('btn-strike');
+    if (strikeEl) strikeEl.classList.remove('aiming');
+    const cancelEl = document.getElementById('cc-cancel-aim');
+    if (cancelEl) {
+      cancelEl.style.display = 'none';
+      cancelEl.classList.remove('hover-cancel');
+    }
+  }
+  window.resetRangedAimState = resetRangedAimState;
+
   function selectTool(toolId) {
     if (['bow', 'crossbow', 'pistol', 'rifle'].includes(toolId) && !campaign.unlockedWeapons[toolId]) {
       const hints = {
-        bow: 'Craft the Recurve Bow in [+Craft/Eat] (2 Timber + 1 Sinew + 1 Fiber)!',
-        crossbow: 'Craft the Crossbow in [+Craft/Eat] (3 Timber + 2 Bone + 2 Sinew)!',
+        bow: 'Craft the Recurve Bow in Pack (2 Timber + 1 Sinew + 1 Fiber)!',
+        crossbow: 'Craft the Crossbow in Pack (3 Timber + 2 Bone + 2 Sinew)!',
         pistol: 'Scavenge the rare Pistol from the SW Shipwreck Cache (-782, 722)!',
         rifle: 'Scavenge the Hunting Rifle from the NW Watchtower Cache (-760, -770)!'
       };
@@ -3799,6 +3917,8 @@
       showToast('🧨 No Dynamite remaining! Scavenge Expedition Blast Crates on outer islands or deep caves.');
       return;
     }
+    resetRangedAimState();
+    campaign.weaponPoseBlend = 0;
     campaign.activeTool = toolId;
     window._calderaActiveTool = toolId;
     Object.keys(toolMeshes).forEach(k => {
@@ -3811,7 +3931,14 @@
     buildGhost.visible = (toolId === 'build');
 
     const aimEl = document.getElementById('cc-bow-arc');
-    if (aimEl) aimEl.style.display = (toolId === 'bow' || toolId === 'crossbow') ? 'block' : 'none';
+    if (aimEl) {
+      aimEl.className = isRangedAimTool(toolId) ? `reticle-${toolId}` : '';
+      aimEl.style.display = isRangedAimTool(toolId) ? 'block' : 'none';
+    }
+    const aimBadgeEl = document.getElementById('cc-aim-badge');
+    if (aimBadgeEl) {
+      aimBadgeEl.style.display = isRangedAimTool(toolId) ? 'block' : 'none';
+    }
 
     document.querySelectorAll('.cc-tool-slot').forEach(el => {
       el.classList.toggle('active', el.dataset.tool === toolId);
@@ -3847,9 +3974,9 @@
     const strikeLblEl = document.querySelector('#btn-strike span');
     if (strikeLblEl) {
       const actionNames = {
-        hatchet: 'Chop', spear: 'Thrust', bow: 'Shoot', crossbow: 'Fire',
-        pistol: 'Fire', rifle: 'Fire', dynamite: 'Toss', rod: 'Cast',
-        torch: 'Swing', flare: 'Signal', build: 'Place'
+        hatchet: 'Chop', spear: 'Thrust', bow: 'Aim', crossbow: 'Aim',
+        pistol: 'Aim', rifle: 'Aim', dynamite: 'Toss', rod: 'Cast',
+        torch: 'Swing', flare: 'Aim', build: 'Place'
       };
       strikeLblEl.innerText = actionNames[toolId] || 'Strike';
     }
@@ -8197,14 +8324,17 @@
       });
     }
 
-    // Brief crosshair hit-confirmation pulse
+    // Brief crosshair hit-confirmation pulse & X-hitmarker
     const bowArcEl = document.getElementById('cc-bow-arc');
-    if (bowArcEl && (campaign.activeTool === 'bow' || campaign.activeTool === 'crossbow')) {
+    if (bowArcEl && isRangedAimTool(campaign.activeTool)) {
       bowArcEl.style.borderColor = isFlesh ? '#ff5252' : '#ffd54f';
-      bowArcEl.style.transform = 'translate(-50%, -50%) scale(1.28)';
+      bowArcEl.style.transform = 'translate(-50%, -50%) scale(1.24)';
       setTimeout(() => {
         if (bowArcEl) bowArcEl.style.transform = 'translate(-50%, -50%) scale(1.0)';
-      }, 180);
+      }, 170);
+    }
+    if (isFlesh && window.triggerHitmarker) {
+      window.triggerHitmarker(false, false);
     }
 
     activeImpactEffects.push({
@@ -8409,6 +8539,13 @@
         showToast(`🦈 ${isVital ? 'CRITICAL FIN/GILL HIT! ' : ''}Struck Shark! (${u.health} HP left)`);
       }
       return true;
+    }
+
+    if (window.triggerHitmarker) {
+      window.triggerHitmarker(isVital, u.health <= 0);
+    }
+    if (AudioEngine._haptic) {
+      AudioEngine._haptic(isVital || u.health <= 0 ? 28 : 14);
     }
 
     if (u.health <= 0) {
@@ -8661,16 +8798,115 @@
   }
   window.detonateDynamiteBlast = detonateDynamiteBlast;
 
+  const activeMuzzleEffects = [];
+  function triggerWeaponKickback(weaponType, powerScale = 1.0) {
+    const cfg = RANGED_WEAPON_CONFIG[weaponType];
+    if (!cfg || !cfg.recoil) return;
+    const r = cfg.recoil;
+    const scale = Math.max(0.45, Math.min(1.25, powerScale));
+    const wr = campaign.weaponRecoil;
+    wr.camPitch = Math.min(0.14, wr.camPitch + r.camPitch * scale);
+    wr.camYaw += (Math.random() - 0.5) * 2.0 * r.camYawJitter * scale;
+    wr.modelZ = Math.min(0.22, wr.modelZ + r.modelZ * scale);
+    wr.modelPitch = Math.min(0.45, wr.modelPitch + r.modelPitch * scale);
+    wr.fovPunch = Math.min(5.0, wr.fovPunch + r.fovPunch * scale);
+    // Subtle authentic upward muzzle climb on firearms
+    if (weaponType === 'pistol' || weaponType === 'rifle' || weaponType === 'flare') {
+      player.pitch = Math.max(-1.3, Math.min(1.3, player.pitch + r.camPitch * 0.22 * scale));
+    }
+    if (AudioEngine._haptic && r.hapticMs) {
+      AudioEngine._haptic(r.hapticMs);
+    }
+  }
+  window.triggerWeaponKickback = triggerWeaponKickback;
+
+  function spawnMuzzleFlashAndSmoke(weaponType) {
+    const cfg = RANGED_WEAPON_CONFIG[weaponType];
+    if (!cfg || !cfg.muzzleOffset) return;
+    const euler = new THREE.Euler(player.pitch, player.yaw, 0, 'YXZ');
+    const fwd = new THREE.Vector3(0, 0, -1).applyEuler(euler).normalize();
+    const right = new THREE.Vector3(1, 0, 0).applyEuler(euler).normalize();
+    const up = new THREE.Vector3(0, 1, 0).applyEuler(euler).normalize();
+    const aimBlend = campaign.weaponPoseBlend || 0;
+    const mOff = cfg.muzzleOffset;
+    const muzzlePos = camera.position.clone()
+      .addScaledVector(right, mOff.right * (1.0 - aimBlend * 0.65))
+      .addScaledVector(up, mOff.up * (1.0 - aimBlend * 0.35))
+      .addScaledVector(fwd, mOff.fwd);
+
+    const isFlare = (weaponType === 'flare');
+    const flashCol = isFlare ? 0xff3d57 : (weaponType === 'rifle' ? 0xffe082 : 0xffcc66);
+    const flashMat = new THREE.MeshBasicMaterial({
+      color: flashCol,
+      transparent: true,
+      opacity: 0.96,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    const flashMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(weaponType === 'rifle' ? 0.11 : (isFlare ? 0.13 : 0.085), 8, 8),
+      flashMat
+    );
+    flashMesh.position.copy(muzzlePos);
+    scene.add(flashMesh);
+
+    const smokePuffs = [];
+    const puffGeo = new THREE.SphereGeometry(0.065, 6, 6);
+    const puffCount = isFlare ? 5 : 4;
+    for (let i = 0; i < puffCount; i++) {
+      const pMat = new THREE.MeshBasicMaterial({
+        color: isFlare ? 0xff8a80 : 0xcfd8dc,
+        transparent: true,
+        opacity: 0.36,
+        depthWrite: false
+      });
+      const pm = new THREE.Mesh(puffGeo, pMat);
+      pm.position.copy(muzzlePos).addScaledVector(fwd, 0.05 * i);
+      scene.add(pm);
+      smokePuffs.push({
+        mesh: pm,
+        mat: pMat,
+        vel: new THREE.Vector3(
+          fwd.x * (1.4 + i * 0.35) + (Math.random() - 0.5) * 0.45,
+          0.55 + Math.random() * 0.45,
+          fwd.z * (1.4 + i * 0.35) + (Math.random() - 0.5) * 0.45
+        )
+      });
+    }
+    activeMuzzleEffects.push({
+      flashMesh,
+      flashMat,
+      smokePuffs,
+      age: 0,
+      maxLife: 0.44
+    });
+  }
+
+  window.triggerHitmarker = function (isVital = false, isKill = false) {
+    const hmEl = document.getElementById('cc-hitmarker');
+    if (!hmEl) return;
+    hmEl.classList.remove('active', 'crit', 'kill');
+    void hmEl.offsetWidth;
+    hmEl.classList.add('active');
+    if (isKill) hmEl.classList.add('kill');
+    else if (isVital) hmEl.classList.add('crit');
+    clearTimeout(window._hitmarkerTimer);
+    window._hitmarkerTimer = setTimeout(() => {
+      hmEl.classList.remove('active', 'crit', 'kill');
+    }, isKill ? 280 : 190);
+  };
+
   function fireRangedProjectile(weaponType, drawPow = 1.0) {
     let firedAmmoType = 'arrow';
     if (weaponType === 'bow') {
       if ((player.inventory.arrows || 0) <= 0) {
-        showToast('🏹 Out of Arrows! Find your shot arrows or craft more in [+Craft/Eat] (1 Timber + 1 Flint + 1 Feather).');
+        showToast('🏹 Out of Arrows! Find your shot arrows or craft more in Pack (1 Timber + 1 Flint + 1 Feather).');
         return;
       }
       player.inventory.arrows--;
       firedAmmoType = 'arrow';
       AudioEngine.playBowTwang();
+      triggerWeaponKickback('bow', Math.max(0.65, drawPow));
     } else if (weaponType === 'crossbow') {
       if (campaign.crossbowCooldown > 0) {
         showToast(`🎯 Reloading Crossbow (${campaign.crossbowCooldown.toFixed(1)}s)...`);
@@ -8683,11 +8919,12 @@
         player.inventory.arrows--;
         firedAmmoType = 'arrow';
       } else {
-        showToast('🎯 Out of Bolts & Arrows! Pick up fired bolts/arrows or craft more in [+Craft/Eat].');
+        showToast('🎯 Out of Bolts & Arrows! Pick up fired bolts/arrows or craft more in Pack.');
         return;
       }
       campaign.crossbowCooldown = 1.8;
       AudioEngine.playBowTwang();
+      triggerWeaponKickback('crossbow', 1.0);
     } else if (weaponType === 'pistol') {
       if ((player.inventory.pistolAmmo || 0) <= 0) {
         showToast('🔫 Out of Pistol Rounds! Search outer island expedition crates.');
@@ -8696,6 +8933,8 @@
       player.inventory.pistolAmmo--;
       AudioEngine.playRifleShot(true);
       alertWildlifeFromGunshot(player.pos, 130.0);
+      triggerWeaponKickback('pistol', 1.0);
+      spawnMuzzleFlashAndSmoke('pistol');
     } else if (weaponType === 'rifle') {
       if ((player.inventory.rifleAmmo || 0) <= 0) {
         showToast('🎯 Out of Rifle Rounds! Search outer island & deep cave caches.');
@@ -8704,6 +8943,8 @@
       player.inventory.rifleAmmo--;
       AudioEngine.playRifleShot(false);
       alertWildlifeFromGunshot(player.pos, 155.0);
+      triggerWeaponKickback('rifle', 1.0);
+      spawnMuzzleFlashAndSmoke('rifle');
     }
     updateCastawayHUD();
 
@@ -9117,12 +9358,14 @@
 
   function fireSignalFlare() {
     if (player.inventory.flares <= 0) {
-      showToast('⚠️ Out of Signal Flares! Craft more in the Survival Menu (1 Obsidian + 1 Bamboo).');
+      showToast('⚠️ Out of Signal Flares! Craft more in Pack (1 Obsidian + 1 Bamboo).');
       return;
     }
     player.inventory.flares--;
     updateCastawayHUD();
     AudioEngine.playFire();
+    triggerWeaponKickback('flare', 1.0);
+    spawnMuzzleFlashAndSmoke('flare');
 
     const caveHit = window.getCaveNavigationInfo ? window.getCaveNavigationInfo(camera.position.x, camera.position.z, player.pos.y) : null;
     const inCave = !!(caveHit && caveHit.isInside);
@@ -9178,37 +9421,243 @@
     }
   }
 
+  function tryDirectAmmoOrCachePickup() {
+    if (lodgedAmmoItems.length > 0) {
+      const lookRay = new THREE.Raycaster();
+      lookRay.layers.enable(1);
+      lookRay.layers.enable(2);
+      lookRay.far = 6.2;
+      lookRay.setFromCamera(new THREE.Vector2(0, 0), camera);
+      const ammoHits = lookRay.intersectObjects(lodgedAmmoItems, true);
+      if (ammoHits.length > 0 && ammoHits[0].distance <= 6.2) {
+        let aRoot = ammoHits[0].object;
+        while (aRoot.parent && aRoot.parent !== scene && (!aRoot.userData || aRoot.userData.type !== 'lodged_ammo')) {
+          aRoot = aRoot.parent;
+        }
+        if (aRoot && aRoot.userData && aRoot.userData.type === 'lodged_ammo' && (aRoot.userData.lodgedAge || 0) > 0.15) {
+          return pickupLodgedAmmo(aRoot);
+        }
+      }
+    }
+    return false;
+  }
+
   const strikeBtn = document.getElementById('btn-strike');
   if (strikeBtn) {
     const newStrikeBtn = strikeBtn.cloneNode(true);
     strikeBtn.parentNode.replaceChild(newStrikeBtn, strikeBtn);
-    const startDraw = e => {
-      e.stopPropagation();
-      if (campaign.activeTool === 'bow') {
+
+    const getCancelRectWithSlop = () => {
+      const cancelEl = document.getElementById('cc-cancel-aim');
+      if (!cancelEl || cancelEl.style.display === 'none') return null;
+      const r = cancelEl.getBoundingClientRect();
+      const slop = 12;
+      return { left: r.left - slop, right: r.right + slop, top: r.top - slop, bottom: r.bottom + slop, el: cancelEl };
+    };
+
+    const isInsideCancelZone = (clientX, clientY) => {
+      const box = getCancelRectWithSlop();
+      if (!box) return false;
+      return clientX >= box.left && clientX <= box.right && clientY >= box.top && clientY <= box.bottom;
+    };
+
+    const beginRangedAim = (mode, touchId, clientX, clientY) => {
+      const tool = campaign.activeTool;
+      const cfg = RANGED_WEAPON_CONFIG[tool];
+      if (!cfg) return false;
+      if (getRangedAmmoCount(tool) <= 0) {
+        if (!tryDirectAmmoOrCachePickup()) {
+          if (AudioEngine._haptic) AudioEngine._haptic(10);
+          showToast(cfg.emptyMsg);
+        }
+        return false;
+      }
+      if (tool === 'crossbow' && campaign.crossbowCooldown > 0) {
+        showToast(`🎯 Reloading Crossbow (${campaign.crossbowCooldown.toFixed(1)}s)...`);
+        return false;
+      }
+      const aim = campaign.rangedAim;
+      aim.active = true;
+      aim.tool = tool;
+      aim.pointerMode = mode;
+      aim.touchId = touchId;
+      aim.lastX = clientX;
+      aim.lastY = clientY;
+      aim.startX = clientX;
+      aim.startY = clientY;
+      aim.holdTime = 0;
+      aim.overCancel = false;
+      aim.breathHapticFired = false;
+
+      if (tool === 'bow') {
         campaign.bowDraw.holding = true;
         campaign.bowDraw.holdTime = 0;
         campaign.bowDraw.power = 0.25;
       }
+      newStrikeBtn.classList.add('aiming');
+      const cancelEl = document.getElementById('cc-cancel-aim');
+      if (cancelEl) {
+        cancelEl.style.display = 'flex';
+        cancelEl.classList.remove('hover-cancel');
+      }
+      return true;
     };
-    const releaseStrike = e => {
-      e.stopPropagation();
-      if (e.type === 'touchend') e.preventDefault();
-      if (campaign.activeTool === 'bow') {
-        const steadyBonus = window._bowBreathSteady ? 1.15 : 1.0;
-        const pow = Math.min(1.15, Math.max(0.45, (campaign.bowDraw.power || 0.72) * steadyBonus));
-        campaign.bowDraw.holding = false;
-        campaign.bowDraw.power = 0;
-        campaign.bowDraw.holdTime = 0;
-        window._bowBreathSteady = false;
-        handleCastawayPrimaryAction(pow);
+
+    const moveRangedAim = (clientX, clientY) => {
+      const aim = campaign.rangedAim;
+      if (!aim.active) return;
+      const cfg = RANGED_WEAPON_CONFIG[aim.tool];
+      if (!cfg) return;
+      const dx = clientX - aim.lastX;
+      const dy = clientY - aim.lastY;
+      aim.lastX = clientX;
+      aim.lastY = clientY;
+
+      const steadyMult = (aim.tool === 'bow' && window._bowBreathSteady) ? 0.84 : 1.0;
+      const sens = cfg.sensScale * steadyMult;
+      player.yaw -= dx * 0.005 * sens;
+      player.pitch = Math.max(-1.3, Math.min(1.3, player.pitch - dy * 0.004 * sens));
+
+      const nowOver = isInsideCancelZone(clientX, clientY);
+      if (nowOver !== aim.overCancel) {
+        aim.overCancel = nowOver;
+        const cancelEl = document.getElementById('cc-cancel-aim');
+        if (cancelEl) cancelEl.classList.toggle('hover-cancel', nowOver);
+        if (nowOver && AudioEngine._haptic) AudioEngine._haptic(12);
+      }
+    };
+
+    const finishRangedAim = (clientX, clientY, forceCancel = false) => {
+      const aim = campaign.rangedAim;
+      if (!aim.active) return;
+      const tool = aim.tool;
+      const wasCanceled = forceCancel || aim.overCancel || isInsideCancelZone(clientX, clientY);
+      const dragDist = Math.hypot(clientX - aim.startX, clientY - aim.startY);
+      const quickTap = aim.holdTime < 0.18 && dragDist < 10;
+      const bowPow = Math.min(
+        1.15,
+        Math.max(0.45, (campaign.bowDraw.power || 0.72) * (window._bowBreathSteady ? 1.15 : 1.0))
+      );
+
+      resetRangedAimState();
+      if (wasCanceled) {
+        showToast('❌ Shot canceled');
+        return;
+      }
+      if (quickTap && tryDirectAmmoOrCachePickup()) {
+        return;
+      }
+      if (tool === 'bow') {
+        handleCastawayPrimaryAction(bowPow);
       } else {
         handleCastawayPrimaryAction();
       }
     };
-    newStrikeBtn.addEventListener('mousedown', startDraw);
-    newStrikeBtn.addEventListener('touchstart', startDraw, { passive: true });
-    newStrikeBtn.addEventListener('click', releaseStrike);
-    newStrikeBtn.addEventListener('touchend', releaseStrike);
+
+    let nonRangedTouchId = null;
+
+    newStrikeBtn.addEventListener('touchstart', e => {
+      e.stopPropagation();
+      e.preventDefault();
+      AudioEngine.init();
+      const t = e.changedTouches[0];
+      if (!t) return;
+      if (isRangedAimTool(campaign.activeTool)) {
+        beginRangedAim('touch', t.identifier, t.clientX, t.clientY);
+      } else {
+        nonRangedTouchId = t.identifier;
+      }
+    }, { passive: false });
+
+    newStrikeBtn.addEventListener('touchend', e => {
+      e.stopPropagation();
+      e.preventDefault();
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        if (campaign.rangedAim.active && campaign.rangedAim.pointerMode === 'touch' && t.identifier === campaign.rangedAim.touchId) {
+          finishRangedAim(t.clientX, t.clientY, false);
+        } else if (t.identifier === nonRangedTouchId) {
+          nonRangedTouchId = null;
+          handleCastawayPrimaryAction();
+        }
+      }
+    }, { passive: false });
+
+    newStrikeBtn.addEventListener('touchcancel', e => {
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        if (campaign.rangedAim.active && campaign.rangedAim.pointerMode === 'touch' && t.identifier === campaign.rangedAim.touchId) {
+          finishRangedAim(t.clientX, t.clientY, true);
+        } else if (t.identifier === nonRangedTouchId) {
+          nonRangedTouchId = null;
+        }
+      }
+    });
+
+    // Window-level touchmove / touchend / touchcancel so sliding thumb anywhere across screen steers aim seamlessly
+    window.addEventListener('touchmove', e => {
+      if (!campaign.rangedAim.active || campaign.rangedAim.pointerMode !== 'touch') return;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        if (t.identifier === campaign.rangedAim.touchId) {
+          e.preventDefault();
+          moveRangedAim(t.clientX, t.clientY);
+          break;
+        }
+      }
+    }, { passive: false });
+
+    window.addEventListener('touchend', e => {
+      if (!campaign.rangedAim.active || campaign.rangedAim.pointerMode !== 'touch') return;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        if (t.identifier === campaign.rangedAim.touchId) {
+          finishRangedAim(t.clientX, t.clientY, false);
+          break;
+        }
+      }
+    });
+
+    window.addEventListener('touchcancel', e => {
+      if (!campaign.rangedAim.active || campaign.rangedAim.pointerMode !== 'touch') return;
+      for (let i = 0; i < e.changedTouches.length; i++) {
+        const t = e.changedTouches[i];
+        if (t.identifier === campaign.rangedAim.touchId) {
+          finishRangedAim(t.clientX, t.clientY, true);
+          break;
+        }
+      }
+    });
+
+    // Desktop mouse hold-drag-release & tap fallback
+    let mouseHandledStrike = false;
+    newStrikeBtn.addEventListener('mousedown', e => {
+      if (e.button !== 0) return;
+      e.stopPropagation();
+      AudioEngine.init();
+      mouseHandledStrike = true;
+      if (isRangedAimTool(campaign.activeTool)) {
+        beginRangedAim('mouse', null, e.clientX, e.clientY);
+      } else {
+        handleCastawayPrimaryAction();
+      }
+    });
+    window.addEventListener('mousemove', e => {
+      if (!campaign.rangedAim.active || campaign.rangedAim.pointerMode !== 'mouse') return;
+      moveRangedAim(e.clientX, e.clientY);
+    });
+    window.addEventListener('mouseup', e => {
+      if (!campaign.rangedAim.active || campaign.rangedAim.pointerMode !== 'mouse') return;
+      finishRangedAim(e.clientX, e.clientY, false);
+    });
+    newStrikeBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (mouseHandledStrike) {
+        mouseHandledStrike = false;
+        return;
+      }
+      handleCastawayPrimaryAction();
+    });
   }
 
   const promptActionEl = document.getElementById('interaction-prompt');
@@ -9233,37 +9682,161 @@
       }
       #cc-tool-dock {
         position: fixed;
-        bottom: calc(env(safe-area-inset-bottom, 8px) + 12px);
+        bottom: calc(env(safe-area-inset-bottom, 10px) + 12px);
         left: 50%;
         transform: translateX(-50%);
         z-index: 46;
         display: flex;
         align-items: center;
-        gap: 6px;
-        background: rgba(8, 15, 22, 0.76);
+        gap: 5px;
+        background: rgba(8, 15, 22, 0.72);
         backdrop-filter: blur(14px);
         -webkit-backdrop-filter: blur(14px);
-        padding: 5px 7px;
-        border-radius: 16px;
-        border: 1px solid rgba(255,255,255,0.15);
+        padding: 4px 6px;
+        border-radius: 15px;
+        border: 1px solid rgba(255,255,255,0.14);
         box-shadow: 0 8px 24px rgba(0,0,0,0.45);
       }
       #cc-bow-arc {
         position: fixed;
         top: 50%;
         left: 50%;
-        transform: translate(-50%, -24%);
-        width: 46px;
-        height: 46px;
+        transform: translate(-50%, -50%);
+        width: 44px;
+        height: 44px;
         pointer-events: none;
         z-index: 48;
         display: none;
         border: 2px dashed rgba(255, 213, 79, 0.72);
         border-radius: 50%;
+        transition: width 0.08s ease, height 0.08s ease, border-color 0.12s ease, transform 0.12s ease;
+      }
+      #cc-bow-arc.reticle-crossbow {
+        border-style: solid;
+        border-width: 1.5px;
+        border-color: rgba(128, 216, 255, 0.75);
+      }
+      #cc-bow-arc.reticle-pistol,
+      #cc-bow-arc.reticle-rifle {
+        border-style: solid;
+        border-width: 1.5px;
+        border-color: rgba(255, 255, 255, 0.65);
+        width: 30px;
+        height: 30px;
+      }
+      #cc-bow-arc.reticle-rifle::before,
+      #cc-bow-arc.reticle-rifle::after {
+        content: '';
+        position: absolute;
+        background: rgba(38, 230, 198, 0.75);
+      }
+      #cc-bow-arc.reticle-rifle::before {
+        top: 50%; left: -7px; right: -7px; height: 1px; transform: translateY(-50%);
+      }
+      #cc-bow-arc.reticle-rifle::after {
+        left: 50%; top: -7px; bottom: -7px; width: 1px; transform: translateX(-50%);
+      }
+      #cc-bow-arc.reticle-flare {
+        border-style: dashed;
+        border-color: rgba(255, 82, 82, 0.78);
+        width: 36px;
+        height: 36px;
+      }
+      #cc-bow-arc.is-aiming {
+        box-shadow: 0 0 14px rgba(38, 230, 198, 0.35);
+      }
+      #cc-aim-badge {
+        position: fixed;
+        top: calc(50% - 48px);
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 48;
+        pointer-events: none;
+        display: none;
+        white-space: nowrap;
+        font-size: 9.5px;
+        font-weight: 800;
+        letter-spacing: 0.3px;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: rgba(8, 15, 22, 0.72);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        color: #f4f9fc;
+        font-variant-numeric: tabular-nums;
+      }
+      #cc-hitmarker {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        width: 24px;
+        height: 24px;
+        transform: translate(-50%, -50%) scale(0.7);
+        pointer-events: none;
+        z-index: 49;
+        opacity: 0;
+      }
+      #cc-hitmarker span {
+        position: absolute;
+        width: 8px;
+        height: 2px;
+        background: #ffffff;
+        border-radius: 2px;
+        box-shadow: 0 0 4px rgba(0, 0, 0, 0.7);
+      }
+      #cc-hitmarker span:nth-child(1) { top: 4px; left: 1px; transform: rotate(45deg); }
+      #cc-hitmarker span:nth-child(2) { top: 4px; right: 1px; transform: rotate(-45deg); }
+      #cc-hitmarker span:nth-child(3) { bottom: 4px; left: 1px; transform: rotate(-45deg); }
+      #cc-hitmarker span:nth-child(4) { bottom: 4px; right: 1px; transform: rotate(45deg); }
+      #cc-hitmarker.active {
+        animation: ccHitPop 0.19s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      }
+      #cc-hitmarker.crit span {
+        background: #ffca58;
+        box-shadow: 0 0 8px rgba(255, 202, 88, 0.85);
+      }
+      #cc-hitmarker.kill span {
+        background: #ff5252;
+        width: 10px;
+        height: 2.5px;
+        box-shadow: 0 0 10px rgba(255, 82, 82, 0.9);
+      }
+      @keyframes ccHitPop {
+        0% { opacity: 1; transform: translate(-50%, -50%) scale(0.75); }
+        45% { opacity: 1; transform: translate(-50%, -50%) scale(1.22); }
+        100% { opacity: 0; transform: translate(-50%, -50%) scale(1.0); }
+      }
+      #cc-cancel-aim {
+        position: fixed;
+        bottom: calc(env(safe-area-inset-bottom, 14px) + 156px);
+        right: 16px;
+        min-width: 76px;
+        min-height: 48px;
+        padding: 6px 12px;
+        border-radius: 999px;
+        background: rgba(18, 12, 16, 0.82);
+        border: 1.5px solid rgba(255, 94, 98, 0.58);
+        color: #ffcdd2;
+        font-size: 11px;
+        font-weight: 800;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        z-index: 52;
+        pointer-events: none;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.55);
+        transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+      }
+      #cc-cancel-aim.hover-cancel {
+        background: rgba(255, 68, 76, 0.92);
+        border-color: #ffffff;
+        color: #ffffff;
+        transform: scale(1.08);
+        box-shadow: 0 0 20px rgba(255, 82, 82, 0.72);
       }
       #cc-cook-panel {
         position: fixed;
-        bottom: calc(env(safe-area-inset-bottom, 8px) + 74px);
+        bottom: calc(env(safe-area-inset-bottom, 8px) + 68px);
         left: 50%;
         transform: translateX(-50%);
         z-index: 47;
@@ -9290,9 +9863,9 @@
       }
       .cc-tool-slot {
         flex: 0 0 auto;
-        width: 50px;
-        height: 46px;
-        border-radius: 12px;
+        width: 48px;
+        height: 48px;
+        border-radius: 11px;
         border: 1px solid rgba(255,255,255,0.12);
         background: rgba(255,255,255,0.05);
         color: #dbe9f6;
@@ -9300,14 +9873,14 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        font-size: 9px;
+        font-size: 8.5px;
         font-weight: 700;
         cursor: pointer;
         user-select: none;
         transition: transform 0.12s ease, background 0.15s ease;
       }
       .cc-tool-slot:active { transform: scale(0.92); }
-      .cc-tool-slot span.ico { font-size: 16px; line-height: 1.1; }
+      .cc-tool-slot span.ico { font-size: 15px; line-height: 1.1; }
       .cc-tool-slot.active {
         background: linear-gradient(135deg, rgba(38, 230, 198, 0.34), rgba(0, 176, 255, 0.30));
         border-color: #26e6c6;
@@ -9321,7 +9894,7 @@
       }
       #cc-raft-btn {
         position: fixed;
-        bottom: calc(env(safe-area-inset-bottom, 8px) + 74px);
+        bottom: calc(env(safe-area-inset-bottom, 8px) + 68px);
         left: 50%;
         transform: translateX(-50%);
         z-index: 47;
@@ -9338,7 +9911,7 @@
       }
       #cc-dialog-banner {
         position: fixed;
-        top: calc(env(safe-area-inset-top, 12px) + 84px);
+        top: calc(max(env(safe-area-inset-top, 12px), 40px) + 56px);
         left: 50%;
         transform: translateX(-50%);
         z-index: 65;
@@ -9346,12 +9919,64 @@
         backdrop-filter: blur(12px);
         border: 1px solid rgba(38, 230, 198, 0.48);
         border-radius: 14px;
-        padding: 10px 14px;
+        padding: 9px 13px;
         color: #ffffff;
-        max-width: 390px;
-        width: 84vw;
+        max-width: 380px;
+        width: calc(100vw - 28px);
         display: none;
         box-shadow: 0 10px 28px rgba(0,0,0,0.5);
+      }
+      @media (max-width: 680px) {
+        #cc-tool-dock {
+          bottom: calc(env(safe-area-inset-bottom, 6px) + 8px);
+          width: min(calc(100vw - 16px), 316px);
+          justify-content: space-between;
+          gap: 4px;
+          padding: 4px 5px;
+        }
+        .cc-tool-slot {
+          flex: 1 1 0;
+          width: auto;
+          min-width: 48px;
+          height: 48px;
+          font-size: 8px;
+        }
+        #cc-cancel-aim {
+          bottom: calc(env(safe-area-inset-bottom, 10px) + 206px);
+          right: 12px;
+        }
+        #cc-cook-panel,
+        #cc-raft-btn {
+          bottom: calc(env(safe-area-inset-bottom, 10px) + 264px);
+        }
+        #cc-dialog-banner {
+          top: calc(max(env(safe-area-inset-top, 10px), 40px) + 118px);
+        }
+        body.pod-drawer-open #cc-dialog-banner {
+          top: calc(max(env(safe-area-inset-top, 10px), 40px) + 164px);
+        }
+        #cc-naval-hud {
+          top: calc(max(env(safe-area-inset-top, 10px), 40px) + 118px) !important;
+          max-width: calc(100vw - 24px);
+          white-space: normal !important;
+          text-align: center;
+        }
+      }
+      @media (max-height: 460px) and (min-width: 560px) {
+        #cc-tool-dock {
+          bottom: 8px;
+          gap: 4px;
+          padding: 3px 5px;
+        }
+        .cc-tool-slot {
+          width: 48px;
+          height: 48px;
+          font-size: 8px;
+        }
+        #cc-cancel-aim {
+          bottom: 140px;
+          right: 14px;
+        }
       }
       #cc-title-screen {
         position: fixed;
@@ -9460,6 +10085,52 @@
     const bowArcEl = document.createElement('div');
     bowArcEl.id = 'cc-bow-arc';
     document.body.appendChild(bowArcEl);
+
+    const aimBadgeEl = document.createElement('div');
+    aimBadgeEl.id = 'cc-aim-badge';
+    document.body.appendChild(aimBadgeEl);
+
+    const hitmarkerEl = document.createElement('div');
+    hitmarkerEl.id = 'cc-hitmarker';
+    hitmarkerEl.innerHTML = '<span></span><span></span><span></span><span></span>';
+    document.body.appendChild(hitmarkerEl);
+
+    const cancelAimEl = document.createElement('div');
+    cancelAimEl.id = 'cc-cancel-aim';
+    cancelAimEl.innerHTML = '<span>✕</span><span>Cancel</span>';
+    document.body.appendChild(cancelAimEl);
+
+    // Wire Survivor Pod collapsible smart-reveal drawer (tap to expand, or peek 3.2s on harvest)
+    const podEl = document.getElementById('survivor-pod');
+    if (podEl) {
+      const togglePodDrawer = e => {
+        if (e.target && (e.target.id === 'cc-weather-badge' || e.target.closest('#cc-weather-badge'))) return;
+        e.stopPropagation();
+        const expanded = podEl.classList.toggle('pod-expanded');
+        document.body.classList.toggle(
+          'pod-drawer-open',
+          expanded || podEl.classList.contains('pod-peek') || podEl.classList.contains('pod-alert')
+        );
+      };
+      podEl.addEventListener('click', togglePodDrawer);
+      podEl.addEventListener('touchend', e => {
+        if (e.target && (e.target.id === 'cc-weather-badge' || e.target.closest('#cc-weather-badge'))) return;
+        e.preventDefault();
+        togglePodDrawer(e);
+      });
+      window._peekSurvivorPod = () => {
+        podEl.classList.add('pod-peek');
+        document.body.classList.add('pod-drawer-open');
+        clearTimeout(window._podPeekTimer);
+        window._podPeekTimer = setTimeout(() => {
+          podEl.classList.remove('pod-peek');
+          document.body.classList.toggle(
+            'pod-drawer-open',
+            podEl.classList.contains('pod-expanded') || podEl.classList.contains('pod-alert')
+          );
+        }, 3200);
+      };
+    }
 
     const cookPanel = document.createElement('div');
     cookPanel.id = 'cc-cook-panel';
@@ -10510,19 +11181,87 @@
       animatedProps[i].update(dt, timeSec);
     }
 
-    // 2. Update First-Person Active Tool Sway, Thrust/Swing & Torch Flicker
+    // 2. Update First-Person Active Tool Pose (Hip vs Braced Aim), Recoil Kickback & Torch Flicker
     if (campaign.toolSwing > 0) {
       campaign.toolSwing = Math.max(0, campaign.toolSwing - dt * 5.0);
     }
+    const wr = campaign.weaponRecoil;
+    const damp = Math.exp(-15.0 * dt);
+    const camDamp = Math.exp(-12.5 * dt);
+    wr.camPitch *= camDamp;
+    wr.camYaw *= camDamp;
+    wr.modelZ *= damp;
+    wr.modelPitch *= damp;
+    wr.fovPunch *= Math.exp(-14.0 * dt);
+    if (Math.abs(wr.camPitch) < 0.0002) wr.camPitch = 0;
+    if (Math.abs(wr.camYaw) < 0.0002) wr.camYaw = 0;
+    if (Math.abs(wr.modelZ) < 0.0002) wr.modelZ = 0;
+    if (Math.abs(wr.modelPitch) < 0.0002) wr.modelPitch = 0;
+    if (Math.abs(wr.fovPunch) < 0.01) wr.fovPunch = 0;
+    player.recoilPitchOffset = wr.camPitch;
+    player.recoilYawOffset = wr.camYaw;
+
+    const activeCfg = RANGED_WEAPON_CONFIG[campaign.activeTool];
+    const isAimingNow = !!(campaign.rangedAim.active && activeCfg && campaign.rangedAim.tool === campaign.activeTool);
+    if (isAimingNow) {
+      campaign.rangedAim.holdTime += dt;
+    }
+    const targetPoseBlend = isAimingNow ? 1.0 : 0.0;
+    campaign.weaponPoseBlend += (targetPoseBlend - campaign.weaponPoseBlend) * Math.min(1.0, 14.0 * dt);
+    const targetAimFov = (isAimingNow ? activeCfg.zoomFov : 0.0) + wr.fovPunch;
+    player.aimFovOffset = (player.aimFovOffset || 0) + (targetAimFov - (player.aimFovOffset || 0)) * Math.min(1.0, 14.0 * dt);
+
+    // Update 3D Muzzle Flash & Gunsmoke Wisps
+    for (let me = activeMuzzleEffects.length - 1; me >= 0; me--) {
+      const mfx = activeMuzzleEffects[me];
+      mfx.age += dt;
+      if (mfx.age >= mfx.maxLife) {
+        if (mfx.flashMesh && mfx.flashMesh.parent) mfx.flashMesh.parent.remove(mfx.flashMesh);
+        for (let s = 0; s < mfx.smokePuffs.length; s++) {
+          const sp = mfx.smokePuffs[s];
+          if (sp.mesh && sp.mesh.parent) sp.mesh.parent.remove(sp.mesh);
+        }
+        activeMuzzleEffects.splice(me, 1);
+        continue;
+      }
+      if (mfx.flashMesh && mfx.flashMat) {
+        const ft = Math.min(1.0, mfx.age / 0.085);
+        mfx.flashMesh.scale.setScalar(1.0 + ft * 0.65);
+        mfx.flashMat.opacity = Math.max(0, (1.0 - ft) * 0.96);
+        if (ft >= 1.0) mfx.flashMesh.visible = false;
+      }
+      const st = mfx.age / mfx.maxLife;
+      for (let s = 0; s < mfx.smokePuffs.length; s++) {
+        const sp = mfx.smokePuffs[s];
+        sp.mesh.position.addScaledVector(sp.vel, dt);
+        const sc = 1.0 + st * 2.8;
+        sp.mesh.scale.setScalar(sc);
+        sp.mat.opacity = Math.max(0, (1.0 - st) * 0.34);
+      }
+    }
+
     const activeMesh = toolMeshes[campaign.activeTool];
     if (activeMesh && campaign.activeTool !== 'hatchet') {
       const moveMag = (wish && typeof wish.length === 'function') ? wish.length() : 0;
-      const swayX = Math.sin(timeSec * 7.0) * 0.018 * moveMag;
-      const swayY = Math.abs(Math.cos(timeSec * 7.0)) * 0.022 * moveMag;
-      const thrust = Math.sin(campaign.toolSwing * Math.PI) * 0.24;
-      activeMesh.position.x = 0.36 + swayX - thrust * 0.18;
-      activeMesh.position.y = -0.36 + swayY + thrust * 0.08;
-      activeMesh.position.z = -0.58 - thrust;
+      const aimSteady = 1.0 - campaign.weaponPoseBlend * 0.68;
+      const swayX = Math.sin(timeSec * 7.0) * 0.018 * moveMag * aimSteady;
+      const swayY = Math.abs(Math.cos(timeSec * 7.0)) * 0.022 * moveMag * aimSteady;
+      if (activeCfg) {
+        const b = campaign.weaponPoseBlend;
+        const hp = activeCfg.hipPos, ap = activeCfg.aimPos;
+        const hr = activeCfg.hipRot, ar = activeCfg.aimRot;
+        activeMesh.position.x = hp.x + (ap.x - hp.x) * b + swayX;
+        activeMesh.position.y = hp.y + (ap.y - hp.y) * b + swayY + wr.modelZ * 0.16;
+        activeMesh.position.z = hp.z + (ap.z - hp.z) * b + wr.modelZ;
+        activeMesh.rotation.x = hr.x + (ar.x - hr.x) * b + wr.modelPitch;
+        activeMesh.rotation.y = hr.y + (ar.y - hr.y) * b;
+        activeMesh.rotation.z = hr.z + (ar.z - hr.z) * b;
+      } else {
+        const thrust = Math.sin(campaign.toolSwing * Math.PI) * 0.24;
+        activeMesh.position.x = 0.36 + swayX - thrust * 0.18;
+        activeMesh.position.y = -0.36 + swayY + thrust * 0.08;
+        activeMesh.position.z = -0.58 - thrust;
+      }
 
       if (campaign.activeTool === 'torch' && activeMesh.userData.flame) {
         const fScale = 0.94 + Math.sin(timeSec * 17.0) * 0.10;
@@ -10772,19 +11511,36 @@
       }
     }
     const bowArcEl = document.getElementById('cc-bow-arc');
+    const aimBadgeEl = document.getElementById('cc-aim-badge');
     if (campaign.bowDraw.holding && campaign.activeTool === 'bow') {
       campaign.bowDraw.holdTime += dt;
       campaign.bowDraw.power = Math.min(1.0, campaign.bowDraw.power + dt * 1.15);
       const inBreathWindow = campaign.bowDraw.holdTime >= 0.35 && campaign.bowDraw.holdTime <= 1.15;
       window._bowBreathSteady = inBreathWindow;
+      if (inBreathWindow && !campaign.rangedAim.breathHapticFired) {
+        campaign.rangedAim.breathHapticFired = true;
+        if (AudioEngine._haptic) AudioEngine._haptic(12);
+      }
       if (campaign.bowDraw.holdTime > 4.0) {
         player.vitals.stamina = Math.max(5, player.vitals.stamina - dt * 12.0);
       }
+      const drawPull = campaign.bowDraw.power * 0.16;
       if (activeMesh && activeMesh.userData.nockedArrow) {
-        activeMesh.userData.nockedArrow.position.z = campaign.bowDraw.power * 0.16;
+        activeMesh.userData.nockedArrow.position.z = drawPull;
+      }
+      if (activeMesh && activeMesh.userData.upperString && activeMesh.userData.lowerString) {
+        const segLen = Math.hypot(0.56, drawPull);
+        const tilt = Math.atan2(drawPull, 0.56);
+        activeMesh.userData.upperString.position.set(0, 0.28, 0.08 + drawPull * 0.5);
+        activeMesh.userData.upperString.scale.set(1, segLen, 1);
+        activeMesh.userData.upperString.rotation.x = -tilt;
+        activeMesh.userData.lowerString.position.set(0, -0.28, 0.08 + drawPull * 0.5);
+        activeMesh.userData.lowerString.scale.set(1, segLen, 1);
+        activeMesh.userData.lowerString.rotation.x = tilt;
       }
       if (bowArcEl) {
         const sz = Math.round(52 - campaign.bowDraw.power * 28);
+        bowArcEl.classList.add('is-aiming');
         bowArcEl.style.width = `${sz}px`;
         bowArcEl.style.height = `${sz}px`;
         bowArcEl.style.borderColor = inBreathWindow
@@ -10793,14 +11549,62 @@
       }
     } else {
       window._bowBreathSteady = false;
-      if (activeMesh && campaign.activeTool === 'bow' && activeMesh.userData.nockedArrow) {
-        activeMesh.userData.nockedArrow.position.z = 0;
+      if (activeMesh && campaign.activeTool === 'bow') {
+        if (activeMesh.userData.nockedArrow) activeMesh.userData.nockedArrow.position.z = 0;
+        if (activeMesh.userData.upperString && activeMesh.userData.lowerString) {
+          activeMesh.userData.upperString.position.set(0, 0.28, 0.08);
+          activeMesh.userData.upperString.scale.set(1, 0.56, 1);
+          activeMesh.userData.upperString.rotation.x = 0;
+          activeMesh.userData.lowerString.position.set(0, -0.28, 0.08);
+          activeMesh.userData.lowerString.scale.set(1, 0.56, 1);
+          activeMesh.userData.lowerString.rotation.x = 0;
+        }
       }
-      if (bowArcEl && (campaign.activeTool === 'bow' || campaign.activeTool === 'crossbow')) {
-        bowArcEl.style.width = campaign.activeTool === 'crossbow' ? '28px' : '48px';
-        bowArcEl.style.height = campaign.activeTool === 'crossbow' ? '28px' : '48px';
-        bowArcEl.style.borderColor = 'rgba(255,224,130,0.75)';
+      if (bowArcEl && isRangedAimTool(campaign.activeTool)) {
+        bowArcEl.classList.toggle('is-aiming', isAimingNow);
+        if (campaign.activeTool === 'bow') {
+          bowArcEl.style.width = '46px';
+          bowArcEl.style.height = '46px';
+          bowArcEl.style.borderColor = 'rgba(255,224,130,0.75)';
+        } else if (campaign.activeTool === 'crossbow') {
+          const reloading = campaign.crossbowCooldown > 0;
+          bowArcEl.style.width = isAimingNow ? '24px' : '28px';
+          bowArcEl.style.height = isAimingNow ? '24px' : '28px';
+          bowArcEl.style.borderColor = reloading
+            ? 'rgba(255, 167, 38, 0.88)'
+            : (isAimingNow ? 'rgba(38, 230, 198, 0.96)' : 'rgba(128, 216, 255, 0.78)');
+        } else if (campaign.activeTool === 'pistol' || campaign.activeTool === 'rifle') {
+          const baseSz = campaign.activeTool === 'rifle' ? (isAimingNow ? 22 : 30) : (isAimingNow ? 24 : 32);
+          bowArcEl.style.width = `${baseSz}px`;
+          bowArcEl.style.height = `${baseSz}px`;
+          bowArcEl.style.borderColor = isAimingNow ? 'rgba(38, 230, 198, 0.96)' : 'rgba(255, 255, 255, 0.65)';
+        } else if (campaign.activeTool === 'flare') {
+          bowArcEl.style.width = isAimingNow ? '30px' : '36px';
+          bowArcEl.style.height = isAimingNow ? '30px' : '36px';
+          bowArcEl.style.borderColor = isAimingNow ? 'rgba(255, 82, 82, 0.98)' : 'rgba(255, 82, 82, 0.72)';
+        }
       }
+    }
+    if (aimBadgeEl && isRangedAimTool(campaign.activeTool)) {
+      const cnt = getRangedAmmoCount(campaign.activeTool);
+      let badgeStr = `${cnt}`;
+      if (campaign.activeTool === 'bow') {
+        badgeStr = campaign.bowDraw.holding
+          ? (window._bowBreathSteady ? `✦ STEADY · ${cnt}` : `${Math.round(campaign.bowDraw.power * 100)}% · ${cnt}`)
+          : `🏹 ${cnt}`;
+      } else if (campaign.activeTool === 'crossbow') {
+        badgeStr = campaign.crossbowCooldown > 0
+          ? `⏳ ${campaign.crossbowCooldown.toFixed(1)}s`
+          : `🎯 ${cnt}`;
+      } else if (campaign.activeTool === 'pistol') {
+        badgeStr = `🔫 ${cnt}`;
+      } else if (campaign.activeTool === 'rifle') {
+        badgeStr = `🎯 ${cnt}`;
+      } else if (campaign.activeTool === 'flare') {
+        const caveHit = window.getCaveNavigationInfo ? window.getCaveNavigationInfo(camera.position.x, camera.position.z, player.pos.y) : null;
+        badgeStr = (caveHit && caveHit.isInside) ? `🎇 CAVE · ${cnt}` : `🎇 SKY · ${cnt}`;
+      }
+      if (aimBadgeEl.innerText !== badgeStr) aimBadgeEl.innerText = badgeStr;
     }
 
     // Stepped ballistic projectiles (swept prevPos -> nextPos against wildlife, trees, rocks, water & terrain)
